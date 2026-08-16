@@ -413,7 +413,7 @@ $i18n = [
     "create_user_automatically" => "Benutzer automatisch erstellen",
     "disable_password_login" => "Passwort-Login deaktivieren",
     "require_email_verified_linking" => "Verifizierte E-Mail für Kontoverknüpfung erforderlich",
-    "oidc_email_not_verified" => "Anmeldung fehlgeschlagen: Ihre E-Mail-Adresse wurde vom Identitätsanbieter nicht verifiziert.",
+    "oidc_email_not_verified" => "Anmeldung fehlgeschlagen: Der Identitätsanbieter meldet, dass Ihre E-Mail-Adresse nicht bestätigt ist. Bestätigen Sie sie dort oder bitten Sie Ihre Administration, unbestätigte Adressen zuzulassen.",
     "smtp_settings" => "SMTP Einstellungen",
     "smtp_usage_info" => "Wird für die Passwortwiederherstellung und andere System-E-Mails verwendet",
     "security_settings" => "Sicherheitseinstellungen",
@@ -536,6 +536,13 @@ $i18n = [
     "category_cloud_services" => "Cloud-Dienste",
     "category_charity_and_donations" => "Spenden & Wohltätigkeit",
     "oidc_diagnostics" => "Konfigurationsprüfung",
+    "oidc_session_expired" => "Die Anmeldung hat zu lange gedauert oder die Sitzung ging verloren. Bitte versuchen Sie es erneut.",
+    "oidc_state_mismatch" => "Die Anmeldung konnte nicht überprüft werden und wurde zu Ihrer Sicherheit abgebrochen. Bitte versuchen Sie es erneut.",
+    "oidc_invalid_response" => "Der Identitätsanbieter hat eine unvollständige Antwort gesendet. Bitte versuchen Sie es erneut.",
+    "oidc_user_not_found" => "Anmeldung fehlgeschlagen: Zu dieser Identität gibt es kein Wallos-Konto, und das automatische Anlegen ist deaktiviert. Bitten Sie Ihre Administration um ein Konto.",
+    "oidc_invalid_config" => "Die Single-Sign-on-Konfiguration ist fehlerhaft. Bitte wenden Sie sich an Ihre Administration.",
+    "oidc_token_exchange_failed" => "Wallos konnte die Anmeldung beim Identitätsanbieter nicht abschließen. Bitte wenden Sie sich an Ihre Administration; Einzelheiten stehen im Serverprotokoll.",
+    "oidc_userinfo_failed" => "Wallos konnte Ihr Profil nicht vom Identitätsanbieter lesen. Bitte wenden Sie sich an Ihre Administration; Einzelheiten stehen im Serverprotokoll.",
     "remove_stored_secret" => "Gespeicherten Wert entfernen",
 ];
 

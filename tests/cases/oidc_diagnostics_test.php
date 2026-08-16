@@ -215,3 +215,78 @@ wallos_test('nothing secret is logged', function () {
         }
     }
 });
+
+wallos_test('the client id is abbreviated, not printed in full', function () {
+    // The page exists to be pasted into bug reports. A client id is not secret
+    // — it travels in the address bar on every login — but a forty-character
+    // random string reads like a credential to everyone seeing the screenshot.
+    $checks = wallos_oidc_checks(diagnostics_configuration([
+        'client_id' => 'ZG8yV8m4UECN5PJM5RdbohFoyh4UqRTaktijjIZg',
+    ]));
+
+    $detail = diagnostics_find($checks, 'Client ID')['detail'];
+
+    assert_not_contains('ZG8yV8m4UECN5PJM5RdbohFoyh4UqRTaktijjIZg', $detail, 'not in full');
+    assert_contains('ZG8yV8m4', $detail, 'but recognisable');
+    assert_contains('jIZg', $detail, 'from both ends');
+});
+
+wallos_test('a short client id is left alone', function () {
+    $checks = wallos_oidc_checks(diagnostics_configuration(['client_id' => 'wallos']));
+    assert_same('wallos', diagnostics_find($checks, 'Client ID')['detail'], 'nothing to abbreviate');
+});
+
+wallos_test('required email verification stops warning once it demonstrably works', function () {
+    // With accounts already provisioned through the provider, it evidently
+    // reports verified addresses. Warning someone it has not rejected is noise.
+    $checks = wallos_oidc_checks(diagnostics_configuration(['require_email_verified' => 1]), null, null, 3);
+
+    $check = diagnostics_find($checks, 'Verified email required');
+    assert_same(WALLOS_OIDC_OK, $check['status'], 'no warning');
+    assert_contains('3 account', $check['detail'], 'and it says on what basis');
+});
+
+wallos_test('a fresh installation still gets the warning', function () {
+    $checks = wallos_oidc_checks(diagnostics_configuration(['require_email_verified' => 1]), null, null, 0);
+
+    assert_same(WALLOS_OIDC_WARNING, diagnostics_find($checks, 'Verified email required')['status'],
+        'nothing has proven it works yet');
+});
+
+wallos_test('every OIDC failure has its own message on the login page', function () {
+    // Five distinct codes rendering as one "login failed" would put the
+    // distinction in the log and nowhere the user can see it.
+    require_once WALLOS_ROOT . '/includes/i18n/languages.php';
+    $translations = wallos_translations('en');
+
+    $codes = [
+        'oidc_user_not_found', 'oidc_state_mismatch', 'oidc_session_expired',
+        'oidc_invalid_response', 'oidc_email_not_verified', 'oidc_invalid_config',
+        'oidc_token_exchange_failed', 'oidc_userinfo_failed',
+    ];
+
+    $seen = [];
+    foreach ($codes as $code) {
+        assert_true(isset($translations[$code]), $code . ' has a message');
+        assert_true(!in_array($translations[$code], $seen, true),
+            $code . ' does not repeat another message');
+        $seen[] = $translations[$code];
+    }
+
+    $login = file_get_contents(WALLOS_ROOT . '/login.php');
+    assert_contains('$oidcErrorMessages', $login, 'the login page maps codes to messages');
+    assert_contains('translate($oidcErrorKey', $login, 'and renders the specific one');
+});
+
+wallos_test('the German messages are complete too', function () {
+    require_once WALLOS_ROOT . '/includes/i18n/languages.php';
+
+    $german = wallos_translations('de');
+    $english = wallos_translations('en');
+
+    foreach (['oidc_email_not_verified', 'oidc_session_expired', 'oidc_state_mismatch',
+              'oidc_token_exchange_failed'] as $code) {
+        assert_true(isset($german[$code]), $code . ' exists in German');
+        assert_true($german[$code] !== $english[$code], $code . ' is actually translated');
+    }
+});

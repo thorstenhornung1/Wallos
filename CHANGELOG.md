@@ -1,5 +1,21 @@
 # Changelog
 
+## [5.6.3](https://github.com/thorstenhornung1/Wallos/releases/tag/v5.6.3) (2026-08-16)
+
+### Bug Fixes
+
+* **oidc:** every login failure now shows what actually went wrong. The five
+  error codes introduced in 5.6.2 all rendered as a single "login failed" — the
+  distinction existed only in the server log. A user whose address the provider
+  reports as unverified is told exactly that, and what to do about it
+* **oidc:** the configuration check abbreviates the client id. It is not a
+  secret, but this page exists to be pasted into bug reports and a
+  forty-character random string reads like a credential in a screenshot
+* **oidc:** required email verification no longer warns once accounts have
+  demonstrably been provisioned through the provider — it evidently reports
+  verified addresses, and warning about a rejection that is not happening is
+  noise. A fresh installation still gets the warning
+
 ## [5.6.2](https://github.com/thorstenhornung1/Wallos/releases/tag/v5.6.2) (2026-08-16)
 
 ### Features

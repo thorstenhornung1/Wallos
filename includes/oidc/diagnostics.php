@@ -33,6 +33,29 @@ function wallos_oidc_check($label, $status, $detail)
     return ['label' => $label, 'status' => $status, 'detail' => $detail];
 }
 
+
+/**
+ * Shortens an identifier to something recognisable but not worth re-typing.
+ *
+ * A client id is not a secret — it travels in the browser's address bar on
+ * every login — but this page exists to be pasted into bug reports, and a
+ * forty-character random string reads like a credential to everyone looking at
+ * the screenshot afterwards.
+ *
+ * @param string $value
+ * @return string
+ */
+function wallos_oidc_abbreviate($value)
+{
+    $value = (string) $value;
+
+    if (strlen($value) <= 16) {
+        return $value;
+    }
+
+    return substr($value, 0, 8) . '…' . substr($value, -4);
+}
+
 /**
  * Evaluates an OIDC configuration.
  *
@@ -43,9 +66,10 @@ function wallos_oidc_check($label, $status, $detail)
  * @param array       $configuration Result of wallos_get_effective_oidc_configuration().
  * @param array|null  $discovery     The provider's discovery document, when one was fetched.
  * @param string|null $discoveryError
+ * @param int         $provisionedAccounts Accounts that already logged in through this provider.
  * @return array<int, array{label: string, status: string, detail: string}>
  */
-function wallos_oidc_checks($configuration, $discovery = null, $discoveryError = null)
+function wallos_oidc_checks($configuration, $discovery = null, $discoveryError = null, $provisionedAccounts = 0)
 {
     $settings = $configuration['settings'];
     $managed = $configuration['managed_fields'];
@@ -68,7 +92,8 @@ function wallos_oidc_checks($configuration, $discovery = null, $discoveryError =
     $clientId = trim((string) $settings['client_id']);
     $checks[] = $clientId === ''
         ? wallos_oidc_check('Client ID', WALLOS_OIDC_ERROR, 'Not configured.')
-        : wallos_oidc_check('Client ID', WALLOS_OIDC_OK, $clientId . $source('client_id'));
+        : wallos_oidc_check('Client ID', WALLOS_OIDC_OK,
+            wallos_oidc_abbreviate($clientId) . $source('client_id'));
 
     $secret = (string) $settings['client_secret'];
     $secretNote = implode(' ', $configuration['notes']);
@@ -132,10 +157,20 @@ function wallos_oidc_checks($configuration, $discovery = null, $discoveryError =
 
     // --- email verification -------------------------------------------------
     if (!empty($settings['require_email_verified'])) {
-        $checks[] = wallos_oidc_check('Verified email required', WALLOS_OIDC_WARNING,
-            'Logins are rejected unless the provider reports email_verified: true. '
-            . 'Providers using a default scope mapping often report false. '
-            . 'Set OIDC_REQUIRE_EMAIL_VERIFIED=false to accept them.');
+        if ($provisionedAccounts > 0) {
+            // An account exists that came through this provider, so it does
+            // report verified addresses. Saying "this may reject everyone" to
+            // someone it demonstrably has not rejected is noise.
+            $checks[] = wallos_oidc_check('Verified email required', WALLOS_OIDC_OK,
+                'Yes' . $source('require_email_verified')
+                . '. The provider has already produced ' . $provisionedAccounts
+                . ' account(s), so it reports verified addresses.');
+        } else {
+            $checks[] = wallos_oidc_check('Verified email required', WALLOS_OIDC_WARNING,
+                'Logins are rejected unless the provider reports email_verified: true. '
+                . 'Providers using a default scope mapping often report false. '
+                . 'Set OIDC_REQUIRE_EMAIL_VERIFIED=false to accept them.');
+        }
     } else {
         $checks[] = wallos_oidc_check('Verified email required', WALLOS_OIDC_OK,
             'No, the provider\'s email_verified claim is not enforced.');
@@ -171,7 +206,11 @@ function wallos_oidc_diagnostics($db)
         }
     }
 
-    $checks = wallos_oidc_checks($configuration, $discovery, $discoveryError);
+    $provisioned = (int) $db->querySingle(
+        "SELECT COUNT(*) FROM user WHERE oidc_sub IS NOT NULL AND oidc_sub != ''"
+    );
+
+    $checks = wallos_oidc_checks($configuration, $discovery, $discoveryError, $provisioned);
 
     return [
         'checks' => $checks,

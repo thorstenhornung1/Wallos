@@ -163,7 +163,7 @@ if ($oidcEnabled) {
 $loginFailed = false;
 $hasSuccessMessage = (isset($_GET['validated']) && $_GET['validated'] == "true") || (isset($_GET['registered']) && $_GET['registered'] == true) ? true : false;
 $userEmailWaitingVerification = false;
-$oidcEmailNotVerified = false;
+$oidcErrorKey = null;
 if (isset($_POST['username']) && isset($_POST['password'])) {
     $username = $_POST['username'];
     $password = $_POST['password'];
@@ -299,13 +299,24 @@ if (!$password_login_disabled) {
 
 if (isset($_GET['error'])) {
     $oidcError = $_GET['error'];
-    if (in_array($oidcError, [
-        "oidc_user_not_found", "oidc_invalid_state", "oidc_email_not_verified", "oidc_invalid_config",
-        "oidc_invalid_response", "oidc_session_expired", "oidc_state_mismatch",
-        "oidc_token_exchange_failed", "oidc_userinfo_failed",
-    ], true)) {
+    // Each outcome has its own message: one of them the user can act on by
+    // retrying, one they have to take to their provider, and the rest belong to
+    // the administrator. "Login failed" for all of them tells nobody anything.
+    $oidcErrorMessages = [
+        "oidc_user_not_found" => "oidc_user_not_found",
+        "oidc_invalid_state" => "oidc_state_mismatch",
+        "oidc_state_mismatch" => "oidc_state_mismatch",
+        "oidc_session_expired" => "oidc_session_expired",
+        "oidc_invalid_response" => "oidc_invalid_response",
+        "oidc_email_not_verified" => "oidc_email_not_verified",
+        "oidc_invalid_config" => "oidc_invalid_config",
+        "oidc_token_exchange_failed" => "oidc_token_exchange_failed",
+        "oidc_userinfo_failed" => "oidc_userinfo_failed",
+    ];
+
+    if (isset($oidcErrorMessages[$oidcError])) {
         $loginFailed = true;
-        $oidcEmailNotVerified = $oidcError === "oidc_email_not_verified";
+        $oidcErrorKey = $oidcErrorMessages[$oidcError];
     }
 }
 
@@ -418,9 +429,9 @@ if (isset($_GET['error'])) {
                                     class="fa-solid fa-triangle-exclamation"></i><?= translate('user_email_waiting_verification', $i18n) ?>
                             </li>
                             <?php
-                        } elseif ($oidcEmailNotVerified) {
+                        } elseif ($oidcErrorKey !== null) {
                             ?>
-                            <li><i class="fa-solid fa-triangle-exclamation"></i><?= translate('oidc_email_not_verified', $i18n) ?></li>
+                            <li><i class="fa-solid fa-triangle-exclamation"></i><?= translate($oidcErrorKey, $i18n) ?></li>
                             <?php
                         } else {
                             ?>

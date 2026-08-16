@@ -442,7 +442,7 @@ $i18n = [
     "create_user_automatically" => "Create user automatically",
     "disable_password_login" => "Disable password login",
     "require_email_verified_linking" => "Require verified email for account linking",
-    "oidc_email_not_verified" => "Login failed: your email address has not been verified by the identity provider.",
+    "oidc_email_not_verified" => "Login failed: the identity provider reports that your email address is not verified. Verify it there, or ask your administrator to allow unverified addresses.",
     "smtp_settings" => "SMTP Settings",
     "smtp_usage_info" => "Will be used for password recovery and other system emails.",
     "security_settings" => "Security Settings",
@@ -537,6 +537,13 @@ $i18n = [
     "category_cloud_services" => "Cloud Services",
     "category_charity_and_donations" => "Charity & Donations",
     "oidc_diagnostics" => "Configuration check",
+    "oidc_session_expired" => "The login took too long or the session was lost. Please try again.",
+    "oidc_state_mismatch" => "The login could not be verified and was stopped for your safety. Please try again.",
+    "oidc_invalid_response" => "The identity provider sent an incomplete response. Please try again.",
+    "oidc_user_not_found" => "Login failed: no Wallos account matches this identity, and automatic account creation is disabled. Ask your administrator for an account.",
+    "oidc_invalid_config" => "Single sign-on is not configured correctly. Please contact your administrator.",
+    "oidc_token_exchange_failed" => "Wallos could not complete the login with the identity provider. Please contact your administrator; the server log has the details.",
+    "oidc_userinfo_failed" => "Wallos could not read your profile from the identity provider. Please contact your administrator; the server log has the details.",
     "remove_stored_secret" => "Remove the stored value",
 ];
 
