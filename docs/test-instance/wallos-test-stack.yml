@@ -1,0 +1,147 @@
+# =============================================================================
+# Wallos test instance — Docker Swarm
+#   docker stack deploy -c wallos-test-stack.yml wallos-test
+#
+# Secrets are external and created once beforehand (see docs/test-instance.md).
+# Swarm mounts them under /run/secrets/<target>, which is exactly what the
+# WALLOS_*_FILE variables expect — no secret is ever passed as an environment
+# value.
+#
+#   https://test.hornung-bn.de        the application
+#   https://mail.test.hornung-bn.de   every mail it sends
+# =============================================================================
+version: "3.8"
+
+services:
+  wallos:
+    image: ghcr.io/thorstenhornung1/wallos:latest
+    environment:
+      TZ: Europe/Berlin
+
+      # Mailpit resolves to an overlay address, so it has to be allowlisted for
+      # SMTP. Add auth.hornung-bn.de when testing OIDC.
+      SSRF_ALLOWLIST: "mailpit,mailpit:1025,tasks.mailpit,auth.hornung-bn.de"
+
+      # Shared instance SMTP, delivered to Mailpit.
+      WALLOS_SMTP_HOST: mailpit
+      WALLOS_SMTP_PORT: "1025"
+      WALLOS_SMTP_ENCRYPTION: none
+      WALLOS_SMTP_FROM: wallos@test.hornung-bn.de
+      WALLOS_SMTP_FROM_NAME: Wallos Test
+      WALLOS_SMTP_PASSWORD_FILE: /run/secrets/smtp_password
+
+      # Shared instance currency provider. The key is deliberately invalid so
+      # no test run spends a real quota.
+      WALLOS_CURRENCY_PROVIDER: apilayer
+      WALLOS_CURRENCY_API_KEY_FILE: /run/secrets/currency_api_key
+
+      # Shared instance AI provider, same reasoning.
+      WALLOS_AI_PROVIDER: chatgpt
+      WALLOS_AI_MODEL: gpt-4o-mini
+      WALLOS_AI_API_KEY_FILE: /run/secrets/ai_api_key
+    secrets:
+      - source: wallos_test_smtp_password
+        target: smtp_password
+      - source: wallos_test_currency_api_key
+        target: currency_api_key
+      - source: wallos_test_ai_api_key
+        target: ai_api_key
+    volumes:
+      - wallos_db:/var/www/html/db
+      - wallos_logos:/var/www/html/images/uploads/logos
+    networks:
+      - traefik_public
+      - wallos_internal
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1/health.php"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 40s
+    deploy:
+      mode: replicated
+      replicas: 1
+      placement:
+        constraints:
+          - node.labels.app == true
+      update_config:
+        parallelism: 1
+        # SQLite has a single writer and the volume is node-local: the old task
+        # must be gone before the new one starts.
+        order: stop-first
+        failure_action: rollback
+        monitor: 30s
+      restart_policy:
+        condition: on-failure
+      resources:
+        limits:
+          memory: 512M
+        reservations:
+          memory: 128M
+      labels:
+        traefik.enable: "true"
+        traefik.swarm.network: traefik_public
+        traefik.http.routers.wallos-test.rule: Host(`test.hornung-bn.de`)
+        traefik.http.routers.wallos-test.entrypoints: websecure
+        traefik.http.routers.wallos-test.tls: "true"
+        traefik.http.routers.wallos-test.tls.certresolver: dns
+        traefik.http.routers.wallos-test-http.rule: Host(`test.hornung-bn.de`)
+        traefik.http.routers.wallos-test-http.entrypoints: web
+        traefik.http.routers.wallos-test-http.middlewares: wallos-test-redirect
+        traefik.http.middlewares.wallos-test-redirect.redirectscheme.scheme: https
+        traefik.http.middlewares.wallos-test-redirect.redirectscheme.permanent: "true"
+        traefik.http.services.wallos-test.loadbalancer.server.port: "80"
+
+  # Mail sink: everything Wallos sends lands here instead of a real inbox.
+  mailpit:
+    image: docker.io/axllent/mailpit:latest
+    environment:
+      MP_SMTP_AUTH_ACCEPT_ANY: "1"
+      MP_SMTP_AUTH_ALLOW_INSECURE: "1"
+      MP_MAX_MESSAGES: "500"
+    networks:
+      - traefik_public
+      - wallos_internal
+    deploy:
+      mode: replicated
+      replicas: 1
+      placement:
+        constraints:
+          - node.labels.app == true
+      resources:
+        limits:
+          memory: 256M
+      labels:
+        traefik.enable: "true"
+        traefik.swarm.network: traefik_public
+        traefik.http.routers.wallos-test-mail.rule: Host(`mail.test.hornung-bn.de`)
+        traefik.http.routers.wallos-test-mail.entrypoints: websecure
+        traefik.http.routers.wallos-test-mail.tls: "true"
+        traefik.http.routers.wallos-test-mail.tls.certresolver: dns
+        traefik.http.routers.wallos-test-mail-http.rule: Host(`mail.test.hornung-bn.de`)
+        traefik.http.routers.wallos-test-mail-http.entrypoints: web
+        traefik.http.routers.wallos-test-mail-http.middlewares: wallos-test-mail-redirect
+        traefik.http.middlewares.wallos-test-mail-redirect.redirectscheme.scheme: https
+        traefik.http.middlewares.wallos-test-mail-redirect.redirectscheme.permanent: "true"
+        traefik.http.services.wallos-test-mail.loadbalancer.server.port: "8025"
+
+networks:
+  traefik_public:
+    external: true
+  wallos_internal:
+    driver: overlay
+    attachable: false
+
+volumes:
+  # Node-local on purpose: SQLite locking is not safe on a network filesystem,
+  # which is why the service is pinned to one node above.
+  wallos_db:
+  wallos_logos:
+
+secrets:
+  wallos_test_smtp_password:
+    external: true
+  wallos_test_currency_api_key:
+    external: true
+  wallos_test_ai_api_key:
+    external: true

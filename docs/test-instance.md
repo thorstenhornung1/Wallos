@@ -1,11 +1,16 @@
 # Test instance on test.hornung-bn.de
 
-A throwaway Wallos on your k3s cluster, configured the way a real multi-user
-installation would be: shared SMTP, currency and AI credentials supplied as
-files, mail captured instead of sent, and a second account to prove that
-inheritance and isolation work.
+A throwaway Wallos configured the way a real multi-user installation would be:
+shared SMTP, currency and AI credentials delivered as files, mail captured
+instead of sent, and a second account to prove that inheritance and isolation
+actually work.
 
-Everything below is copy-paste. Where a value is yours to choose it is marked.
+Everything below is copy-paste. Values you choose are marked.
+
+Two deployment paths, one test plan:
+
+* **Docker Swarm** — `docs/test-instance/wallos-test-stack.yml`
+* **Kubernetes / k3s** — `docs/test-instance/wallos-test.yaml`
 
 ## What this lets you verify
 
@@ -21,24 +26,59 @@ Everything below is copy-paste. Where a value is yours to choose it is marked.
 
 ## 1. Prerequisites
 
-DNS records pointing at your Traefik ingress:
+DNS records pointing at your ingress:
 
 ```
 test.hornung-bn.de
 mail.test.hornung-bn.de
 ```
 
-The container image is public, so no pull secret is needed:
+The image is public, so no pull credentials are needed.
+
+## 2A. Deploy on Docker Swarm
+
+Secrets first. Swarm mounts them under `/run/secrets/<target>`, which is exactly
+what the `WALLOS_*_FILE` variables read — no credential is ever passed as an
+environment value.
+
+The currency and AI keys below are deliberately **invalid**, so no test run
+spends a real quota. Replace them only to exercise a real provider call.
 
 ```sh
-podman pull ghcr.io/thorstenhornung1/wallos:latest
+printf 'test-smtp-password'   | docker secret create wallos_test_smtp_password -
+printf 'invalid-currency-key' | docker secret create wallos_test_currency_api_key -
+printf 'invalid-ai-key'       | docker secret create wallos_test_ai_api_key -
 ```
 
-## 2. Secrets
+The stack expects the `traefik_public` network and a node labelled `app=true`,
+matching your other stacks:
 
-The currency and AI keys are deliberately **invalid** below: nothing reaches a
-paid provider while you test. Replace them only when you want to exercise a
-real provider call.
+```sh
+docker network ls --filter name=traefik_public
+docker node ls --format '{{.Hostname}}' | while read -r n; do
+  printf '%s: %s\n' "$n" "$(docker node inspect "$n" --format '{{index .Spec.Labels "app"}}')"
+done
+```
+
+Deploy:
+
+```sh
+docker stack deploy -c docs/test-instance/wallos-test-stack.yml wallos-test
+docker service logs -f wallos-test_wallos 2>&1 | grep -i migration
+```
+
+`Migration migrations/000055.php completed successfully.` and `000056` confirm
+the instance configuration and the subscription indexes are in place.
+
+### Why one replica, pinned
+
+The volumes are node-local and SQLite has a single writer. The service is
+therefore constrained to one node and updates use `order: stop-first`, so the
+old task is gone before the new one starts. Do not put the database on CephFS
+or NFS to make it float — SQLite locking is not safe on a network filesystem,
+and that is the constraint the optional PostgreSQL backend exists to remove.
+
+## 2B. Deploy on Kubernetes
 
 ```sh
 kubectl create namespace wallos-test
@@ -47,69 +87,68 @@ kubectl -n wallos-test create secret generic wallos-secrets \
   --from-literal=smtp_password='test-smtp-password' \
   --from-literal=currency_api_key='invalid-currency-key' \
   --from-literal=ai_api_key='invalid-ai-key'
-```
 
-If you prefer these to come from Infisical, create the same three keys there
-and let your existing sync produce the `wallos-secrets` secret — the file names
-under `/run/secrets` are what the deployment expects, nothing else.
-
-## 3. Deploy
-
-```sh
-kubectl apply -f https://raw.githubusercontent.com/thorstenhornung1/Wallos/main/docs/test-instance/wallos-test.yaml
-```
-
-Or from a checkout:
-
-```sh
 kubectl apply -f docs/test-instance/wallos-test.yaml
-```
-
-Watch it come up:
-
-```sh
 kubectl -n wallos-test rollout status deployment/wallos
 kubectl -n wallos-test logs deployment/wallos | grep -i migration
 ```
 
-You should see `Migration migrations/000055.php completed successfully.` and
-`000056` — the instance configuration and the subscription indexes.
+## 3. A shell into the running instance
+
+The test plan runs commands inside the container. Define this once and the rest
+of the document works on either platform.
+
+**Swarm** — find the node running the task, then exec on that node:
+
+```sh
+docker service ps wallos-test_wallos --filter desired-state=running \
+  --format 'task runs on: {{.Node}}'
+
+# on that node:
+EXEC="docker exec $(docker ps -q -f name=wallos-test_wallos | head -1)"
+```
+
+**Kubernetes**:
+
+```sh
+EXEC="kubectl -n wallos-test exec deployment/wallos --"
+```
+
+Check it works:
+
+```sh
+$EXEC php -r 'include "/var/www/html/includes/version.php"; echo "Wallos $version\n";'
+```
 
 ## 4. First accounts
 
 Open https://test.hornung-bn.de. The first account you register becomes the
 admin.
 
-```
-admin / choose a password
-```
-
 Then create a second, ordinary user in **Admin → Users** — call it `user2`.
-Most of the interesting behaviour only shows up with two accounts.
+Most of the interesting behaviour only appears with two accounts.
 
-## 5. The actual tests
-
-The browser steps come first; 5.2 onwards adds a shell session.
+## 5. The tests
 
 ### 5.1 Instance SMTP serves a user who configured nothing
 
-As `admin`, go to **Settings → Notifications → Email**. It should already say
-**Use instance SMTP**, and show:
+As admin: **Settings → Notifications → Email**. It should already say **Use
+instance SMTP** and show:
 
 ```
-SMTP Address: mailpit.wallos-test.svc.cluster.local:1025
+SMTP Address: mailpit:1025
 SMTP Password: Managed externally
 ```
 
-Enable email notifications, save, press **Test**. Then open
-https://mail.test.hornung-bn.de — the mail is there, sender `Wallos Test
+Enable email notifications, save, press **Test**. Open
+https://mail.test.hornung-bn.de — the mail is there, from `Wallos Test
 <wallos@test.hornung-bn.de>`.
 
-The point: you never entered a server, a password or a sender.
+You never entered a server, a password or a sender.
 
 ### 5.2 The secret never reaches the browser
 
-First a session to work with — the rest of this section reuses it:
+A session to work with; the following steps reuse it:
 
 ```sh
 BASE=https://test.hornung-bn.de
@@ -133,16 +172,14 @@ for page in settings.php admin.php; do
 done
 ```
 
-Expected: `0` for both. The password exists, is used to send mail, and is not
-in the page.
+Expected: `0` for both. The password exists, sends mail, and is not in the page.
 
 ### 5.3 Environment-managed fields cannot be edited
 
-As admin, **Admin → SMTP Settings**: host, port, encryption and sender are
-filled in, greyed out, and labelled with the variable that owns them. The page
-also lists them under *Managed by environment variables*.
+In **Admin → SMTP Settings** the host, port, encryption and sender are filled
+in, greyed out and labelled with the variable that owns them.
 
-Try to overwrite one anyway, using the session from 5.2:
+Try to overwrite one anyway:
 
 ```sh
 curl -s -X POST "$BASE/endpoints/admin/savesmtpsettings.php" \
@@ -153,70 +190,77 @@ curl -s -X POST "$BASE/endpoints/admin/savesmtpsettings.php" \
 It answers `success` — the request was valid — and nothing changed:
 
 ```sh
-kubectl -n wallos-test exec deployment/wallos -- \
-  php -r '$d = new SQLite3("/var/www/html/db/wallos.db");
-          $r = $d->querySingle("SELECT smtp_address FROM admin", true);
-          echo "stored host: [" . $r["smtp_address"] . "]\n";'
+$EXEC php -r '$d = new SQLite3("/var/www/html/db/wallos.db");
+  $r = $d->querySingle("SELECT smtp_address FROM admin", true);
+  echo "stored host: [" . $r["smtp_address"] . "]\n";'
 ```
 
-The stored host is still empty: managed fields are skipped, never written. The
-effective host keeps coming from `WALLOS_SMTP_HOST`.
+Still empty. Managed fields are skipped, never written; the effective host keeps
+coming from `WALLOS_SMTP_HOST`.
 
 ### 5.4 A user inherits without being given anything
 
 Log in as `user2`. **Settings → Notifications → Email** shows *Use instance
-SMTP* and the same status. Enable notifications, press **Test**, check Mailpit:
-the mail arrives, and `user2` never saw a credential.
+SMTP* and the same status. Enable notifications, press **Test**, check Mailpit.
+`user2` never saw a credential.
 
-Same in **Settings → Fixer API Key** and **AI recommendations**: provider and
-model are visible, the key says *Managed externally*.
+Same under **Fixer API Key** and **AI recommendations**: provider and model are
+visible, the key says *Managed externally*.
 
 ### 5.5 A user can still run their own transport
 
-As `user2`, switch to **Use custom SMTP**, enter:
+As `user2`, switch to **Use custom SMTP**:
 
 ```
-Host: mailpit.wallos-test.svc.cluster.local
+Host: mailpit
 Port: 1025
 Encryption: none
 From: user2@test.hornung-bn.de
 ```
 
-Save and test. The mail arrives with `user2`'s sender — their transport, not
-the instance's.
+Save and test. The mail arrives with `user2`'s sender — their transport, not the
+instance's.
 
 ### 5.6 Notifications actually go out
 
-Create a subscription due tomorrow with notifications on, set the notification
-lead time to 1 day, then:
+Create a subscription due tomorrow with notifications enabled and a lead time of
+one day, then:
 
 ```sh
-kubectl -n wallos-test exec deployment/wallos -- \
-  php /var/www/html/endpoints/cronjobs/sendnotifications.php
+$EXEC php /var/www/html/endpoints/cronjobs/sendnotifications.php
 ```
 
 Mailpit receives one mail per user with a due subscription, each through the
-transport that user resolved to.
+transport that user resolves to.
 
 ### 5.7 A broken secret file does not fall back
 
-This is the behaviour that matters most in production. Point the password at a
-file that is not there:
+The behaviour that matters most in production. Point the password at a file
+that is not there:
 
 ```sh
+# Swarm
+docker service update --env-add \
+  WALLOS_SMTP_PASSWORD_FILE=/run/secrets/does-not-exist wallos-test_wallos
+
+# Kubernetes
 kubectl -n wallos-test set env deployment/wallos \
   WALLOS_SMTP_PASSWORD_FILE=/run/secrets/does-not-exist
-kubectl -n wallos-test rollout status deployment/wallos
 ```
 
-Now the admin page reports the configuration as invalid and names the
-unreadable path, and a test send refuses. It does **not** quietly use whatever
-password happens to sit in the database — a rotation that half-failed must not
-keep running on the old secret.
+The admin page now reports the configuration as invalid and names the unreadable
+path, and a test send refuses. It does **not** quietly fall back to a password
+sitting in the database — a half-failed rotation must not keep running on the
+old secret.
 
 Put it back:
 
 ```sh
+# Swarm
+docker service update --env-add \
+  WALLOS_SMTP_PASSWORD_FILE=/run/secrets/smtp_password wallos-test_wallos
+
+# Kubernetes
 kubectl -n wallos-test set env deployment/wallos \
   WALLOS_SMTP_PASSWORD_FILE=/run/secrets/smtp_password
 ```
@@ -227,44 +271,70 @@ kubectl -n wallos-test set env deployment/wallos \
 for job in sendnotifications sendcancellationnotifications updateexchange \
            sendverificationemails sendresetpasswordemails; do
   echo "--- $job"
-  kubectl -n wallos-test exec deployment/wallos -- \
-    php /var/www/html/endpoints/cronjobs/$job.php 2>&1 | tail -3
+  $EXEC php /var/www/html/endpoints/cronjobs/$job.php 2>&1 | tail -3
 done
 ```
 
-`updateexchange` will report that the provider could not be reached — expected,
-the key is deliberately invalid. What matters is that no job produces a PHP
-warning or fatal error.
+`updateexchange` reports that the provider could not be reached — expected, the
+key is intentionally invalid. What matters is that no job produces a PHP warning
+or fatal error.
 
-## 6. Load, if you want to see the performance work
+## 6. Load, to see the performance work
 
 ```sh
-kubectl -n wallos-test exec deployment/wallos -- \
-  php /var/www/html/dev/seed.php 10 1000
+$EXEC php /var/www/html/dev/seed.php 10 1000
 ```
 
-10 users, 10,000 subscriptions, prefixed `seed-` and removed on the next run.
-The subscription list stays responsive: rates come from one query instead of
-one per row, and the list query uses an index.
+10 users, 10,000 subscriptions, prefixed `seed-` and replaced on each run. The
+subscription list stays responsive: rates come from one query instead of one per
+row, and the list query uses an index.
 
 ## 7. OIDC against your Authentik
 
-Needed for the Part II work (locale-based provisioning, logout). In Authentik
-create an OAuth2/OpenID provider and an application, with redirect URI:
+Needed for the Part II work. In Authentik create an OAuth2/OpenID provider and
+an application with redirect URI:
 
 ```
 https://test.hornung-bn.de/login.php
 ```
 
-Then:
+**Swarm:**
+
+```sh
+printf '<client secret from Authentik>' \
+  | docker secret create wallos_test_oidc_client_secret -
+```
+
+Add to the `wallos` service in the stack file, then redeploy:
+
+```yaml
+    environment:
+      OIDC_ENABLED: "true"
+      OIDC_PROVIDER_NAME: Authentik
+      OIDC_CLIENT_ID: <from Authentik>
+      OIDC_CLIENT_SECRET_FILE: /run/secrets/oidc_client_secret
+      OIDC_ISSUER: https://auth.hornung-bn.de/application/o/wallos/
+      OIDC_REDIRECT_URL: https://test.hornung-bn.de/login.php
+      OIDC_AUTO_CREATE_USER: "true"
+    secrets:
+      - source: wallos_test_oidc_client_secret
+        target: oidc_client_secret
+```
+
+```yaml
+secrets:
+  wallos_test_oidc_client_secret:
+    external: true
+```
+
+**Kubernetes:**
 
 ```sh
 kubectl -n wallos-test create secret generic wallos-oidc \
   --from-literal=client_secret='<from Authentik>'
 
 kubectl -n wallos-test set env deployment/wallos \
-  OIDC_ENABLED=true \
-  OIDC_PROVIDER_NAME=Authentik \
+  OIDC_ENABLED=true OIDC_PROVIDER_NAME=Authentik \
   OIDC_CLIENT_ID='<from Authentik>' \
   OIDC_CLIENT_SECRET_FILE=/run/secrets/oidc/client_secret \
   OIDC_ISSUER=https://auth.hornung-bn.de/application/o/wallos/ \
@@ -272,50 +342,45 @@ kubectl -n wallos-test set env deployment/wallos \
   OIDC_AUTO_CREATE_USER=true
 ```
 
-Mount the second secret as well:
+`auth.hornung-bn.de` is already in the SSRF allowlist of both manifests, which
+it needs if it resolves to a private address.
 
-```sh
-kubectl -n wallos-test patch deployment wallos --type=json -p='[
-  {"op":"add","path":"/spec/template/spec/volumes/-",
-   "value":{"name":"oidc","secret":{"secretName":"wallos-oidc","defaultMode":256}}},
-  {"op":"add","path":"/spec/template/spec/containers/0/volumeMounts/-",
-   "value":{"name":"oidc","mountPath":"/run/secrets/oidc","readOnly":true}}
-]'
-```
+Limitations you will hit — these are open issues, not misconfiguration:
 
-`auth.hornung-bn.de` is already in the SSRF allowlist in the manifest, which it
-needs if it resolves to a private address.
-
-Known limitations you will run into — these are the open issues, not
-misconfiguration:
-
-* an auto-created user is always English and EUR, regardless of the `locale`
-  claim (#34, #35, #40)
-* logout redirects without `id_token_hint`, so Authentik may not end the
-  session (#36)
-* logging out in Authentik leaves the Wallos session alive (#37)
+* an auto-created user is always English and EUR, whatever the `locale` claim
+  says ([#34](https://github.com/thorstenhornung1/Wallos/issues/34),
+  [#35](https://github.com/thorstenhornung1/Wallos/issues/35),
+  [#40](https://github.com/thorstenhornung1/Wallos/issues/40))
+* logout redirects without `id_token_hint`, so Authentik may not end the session
+  ([#36](https://github.com/thorstenhornung1/Wallos/issues/36))
+* logging out in Authentik leaves the Wallos session alive
+  ([#37](https://github.com/thorstenhornung1/Wallos/issues/37))
 
 ## 8. Reset or remove
 
 Start from an empty database without redeploying:
 
 ```sh
-kubectl -n wallos-test exec deployment/wallos -- rm /var/www/html/db/wallos.db
-kubectl -n wallos-test rollout restart deployment/wallos
+$EXEC rm /var/www/html/db/wallos.db
+docker service update --force wallos-test_wallos     # Swarm
+kubectl -n wallos-test rollout restart deployment/wallos   # Kubernetes
 ```
 
 Remove everything:
 
 ```sh
+# Swarm — volumes survive the stack, remove them on the node that held them
+docker stack rm wallos-test
+docker volume rm wallos-test_wallos_db wallos-test_wallos_logos
+docker secret rm wallos_test_smtp_password wallos_test_currency_api_key wallos_test_ai_api_key
+
+# Kubernetes — the namespace takes the volumes with it
 kubectl delete namespace wallos-test
 ```
 
-The namespace takes the volumes with it — nothing survives, which is the point
-of a test instance.
+## Alternative: locally, without a cluster
 
-## Alternative: locally, without the cluster
-
-Same configuration, on your machine:
+Same configuration on your machine, with Podman or Docker:
 
 ```sh
 git clone https://github.com/thorstenhornung1/Wallos.git
