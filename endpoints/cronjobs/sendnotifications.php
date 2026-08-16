@@ -7,6 +7,7 @@ require_once 'validate.php';
 require_once __DIR__ . '/../../includes/connect_endpoint_crontabs.php';
 require_once __DIR__ . '/../../includes/ssrf_helper.php';
 require_once __DIR__ . '/../../includes/mailer.php';
+require_once __DIR__ . '/../../includes/notification_settings.php';
 
 require __DIR__ . '/../../includes/currency_formatter.php';
 require __DIR__ . '/../../includes/budget_period_calculations.php';
@@ -24,8 +25,12 @@ if (php_sapi_name() == 'cli') {
 $query = "SELECT id, username FROM user";
 $stmt = $db->prepare($query);
 $usersToNotify = $stmt->execute();
-$periodSummaryColumnCheck = $db->query("SELECT * FROM pragma_table_info('notification_settings') WHERE name='period_summary_at_period_start'");
-$hasPeriodSummaryColumn = $periodSummaryColumnCheck && $periodSummaryColumnCheck->fetchArray(SQLITE3_ASSOC);
+
+// One query per provider table for everybody, instead of one per user per
+// provider. Users with nothing enabled are skipped before any further work.
+$notificationSettings = wallos_load_notification_settings($db);
+$notificationTiming = wallos_load_notification_timing($db);
+$usersWithNotifications = wallos_users_with_notifications($notificationSettings, $db);
 
 function getDaysText($days)
 {
@@ -97,19 +102,17 @@ while ($userToNotify = $usersToNotify->fetchArray(SQLITE3_ASSOC)) {
     $ntfyNotificationsEnabled = false;
     $serverchanNotificationsEnabled = false;
 
-    // Get notification settings (how many days before the subscription ends should the notification be sent)
-    $query = $hasPeriodSummaryColumn
-        ? "SELECT days, period_summary_at_period_start FROM notification_settings WHERE user_id = :userId"
-        : "SELECT days FROM notification_settings WHERE user_id = :userId";
-    $stmt = $db->prepare($query);
-    $stmt->bindValue(':userId', $userId, SQLITE3_INTEGER);
-    $result = $stmt->execute();
-
-    if ($row = $result->fetchArray(SQLITE3_ASSOC)) {
-        $days = $row['days'];
-        if ($hasPeriodSummaryColumn) {
-            $periodSummaryAtPeriodStart = (int) ($row['period_summary_at_period_start'] ?? 0);
+    if (!isset($usersWithNotifications[$userId])) {
+        if (php_sapi_name() !== 'cli') {
+            echo "No notifications enabled for this user<br /><br />";
         }
+        continue;
+    }
+
+    // Notification timing (how many days before the subscription ends should the notification be sent)
+    if (isset($notificationTiming[$userId])) {
+        $days = $notificationTiming[$userId]['days'];
+        $periodSummaryAtPeriodStart = $notificationTiming[$userId]['period_summary_at_period_start'];
     }
 
     // Check if email notifications are enabled and resolve the effective
@@ -117,87 +120,47 @@ while ($userToNotify = $usersToNotify->fetchArray(SQLITE3_ASSOC)) {
     $emailConfig = wallos_get_effective_smtp_config($db, $userId);
     $emailNotificationsEnabled = !empty($emailConfig['values']['enabled']);
 
-    // Check if Discord notifications are enabled and get the settings
-    $query = "SELECT * FROM discord_notifications WHERE user_id = :userId";
-    $stmt = $db->prepare($query);
-    $stmt->bindValue(':userId', $userId, SQLITE3_INTEGER);
-    $result = $stmt->execute();
-
-    if ($row = $result->fetchArray(SQLITE3_ASSOC)) {
+    if ($row = $notificationSettings['discord'][$userId] ?? null) {
         $discordNotificationsEnabled = $row['enabled'];
         $discord['webhook_url'] = $row["webhook_url"];
         $discord['bot_username'] = $row["bot_username"];
         $discord['bot_avatar_url'] = $row["bot_avatar_url"];
     }
 
-    // Check if Gotify notifications are enabled and get the settings
-    $query = "SELECT * FROM gotify_notifications WHERE user_id = :userId";
-    $stmt = $db->prepare($query);
-    $stmt->bindValue(':userId', $userId, SQLITE3_INTEGER);
-    $result = $stmt->execute();
-
     $gotify = [];
 
-    if ($row = $result->fetchArray(SQLITE3_ASSOC)) {
+    if ($row = $notificationSettings['gotify'][$userId] ?? null) {
         $gotifyNotificationsEnabled = $row['enabled'];
         $gotify['serverUrl'] = $row["url"];
         $gotify['appToken'] = $row["token"];
         $gotify['ignore_ssl'] = $row["ignore_ssl"];
     }
 
-    // Check if Telegram notifications are enabled and get the settings
-    $query = "SELECT * FROM telegram_notifications WHERE user_id = :userId";
-    $stmt = $db->prepare($query);
-    $stmt->bindValue(':userId', $userId, SQLITE3_INTEGER);
-    $result = $stmt->execute();
-
-    if ($row = $result->fetchArray(SQLITE3_ASSOC)) {
+    if ($row = $notificationSettings['telegram'][$userId] ?? null) {
         $telegramNotificationsEnabled = $row['enabled'];
         $telegram['botToken'] = $row["bot_token"];
         $telegram['chatId'] = $row["chat_id"];
     }
-    // Check if PushPlus notifications are enabled and get the settings
-    $query = "SELECT * FROM pushplus_notifications WHERE user_id = :userId";
-    $stmt = $db->prepare($query);
-    $stmt->bindValue(':userId', $userId, SQLITE3_INTEGER);
-    $result = $stmt->execute();
 
-    if ($row = $result->fetchArray(SQLITE3_ASSOC)) {
+    if ($row = $notificationSettings['pushplus'][$userId] ?? null) {
         $pushplusNotificationsEnabled = $row['enabled'];
         $pushplus['token'] = $row["token"];
     }
-    // Check if Mattermost notifications are enabled and get the settings
-    $query = "SELECT * FROM mattermost_notifications WHERE user_id = :userID";
-    $stmt = $db->prepare($query);
-    $stmt->bindValue(':userID', $userId, SQLITE3_INTEGER);
-    $result = $stmt->execute();
 
-    if ($row = $result->fetchArray(SQLITE3_ASSOC)) {
+    if ($row = $notificationSettings['mattermost'][$userId] ?? null) {
         $mattermostNotificationsEnabled = $row['enabled'];
         $mattermost['webhook_url'] = $row['webhook_url'];
         $mattermost['bot_username'] = $row['bot_username'];
         $mattermost['bot_icon_emoji'] = $row['bot_icon_emoji'];
     }
 
-    // Check if Pushover notifications are enabled and get the settings
-    $query = "SELECT * FROM pushover_notifications WHERE user_id = :userId";
-    $stmt = $db->prepare($query);
-    $stmt->bindValue(':userId', $userId, SQLITE3_INTEGER);
-    $result = $stmt->execute();
-
-    if ($row = $result->fetchArray(SQLITE3_ASSOC)) {
+    if ($row = $notificationSettings['pushover'][$userId] ?? null) {
         $pushoverNotificationsEnabled = $row['enabled'];
         $pushover['user_key'] = $row["user_key"];
         $pushover['token'] = $row["token"];
     }
 
-    // Check if Ntfy notifications are enabled and get the settings
-    $query = "SELECT * FROM ntfy_notifications WHERE user_id = :userId";
-    $stmt = $db->prepare($query);
-    $stmt->bindValue(':userId', $userId, SQLITE3_INTEGER);
-    $result = $stmt->execute();
-
-    if ($row = $result->fetchArray(SQLITE3_ASSOC)) {
+    if ($row = $notificationSettings['ntfy'][$userId] ?? null) {
         $ntfyNotificationsEnabled = $row['enabled'];
         $ntfy['host'] = $row["host"];
         $ntfy['topic'] = $row["topic"];
@@ -205,13 +168,7 @@ while ($userToNotify = $usersToNotify->fetchArray(SQLITE3_ASSOC)) {
         $ntfy['ignore_ssl'] = $row["ignore_ssl"];
     }
 
-    // Check if Webhook notifications are enabled and get the settings
-    $query = "SELECT * FROM webhook_notifications WHERE user_id = :userId";
-    $stmt = $db->prepare($query);
-    $stmt->bindValue(':userId', $userId, SQLITE3_INTEGER);
-    $result = $stmt->execute();
-
-    if ($row = $result->fetchArray(SQLITE3_ASSOC)) {
+    if ($row = $notificationSettings['webhook'][$userId] ?? null) {
         $webhookNotificationsEnabled = $row['enabled'];
         $webhook['url'] = $row["url"];
         $webhook['request_method'] = $row["request_method"];
@@ -220,13 +177,7 @@ while ($userToNotify = $usersToNotify->fetchArray(SQLITE3_ASSOC)) {
         $webhook['ignore_ssl'] = $row["ignore_ssl"];
     }
 
-    // Check if Serverchan notifications are enabled and get the settings
-    $query = "SELECT * FROM serverchan_notifications WHERE user_id = :userId";
-    $stmt = $db->prepare($query);
-    $stmt->bindValue(':userId', $userId, SQLITE3_INTEGER);
-    $result = $stmt->execute();
-
-    if ($row = $result->fetchArray(SQLITE3_ASSOC)) {
+    if ($row = $notificationSettings['serverchan'][$userId] ?? null) {
         $serverchanNotificationsEnabled = $row['enabled'];
         $serverchan['sendkey'] = $row['sendkey'];
     }
@@ -388,10 +339,8 @@ while ($userToNotify = $usersToNotify->fetchArray(SQLITE3_ASSOC)) {
 
                     $mail = $transport['mailer'];
 
-                    $stmt = $db->prepare('SELECT * FROM household WHERE id = :userId');
-                    $stmt->bindValue(':userId', $userId, SQLITE3_INTEGER);
-                    $result = $stmt->execute();
-                    $user = $result->fetchArray(SQLITE3_ASSOC);
+                    // $notify is keyed by household member; they are already loaded.
+                    $user = $household[$userId] ?? [];
 
                     $emailaddress = !empty($user['email']) ? $user['email'] : $defaultEmail;
                     $name = !empty($user['name']) ? $user['name'] : $defaultName;
@@ -431,10 +380,8 @@ while ($userToNotify = $usersToNotify->fetchArray(SQLITE3_ASSOC)) {
                 } else {
                     foreach ($notify as $userId => $perUser) {
                         // Get name of user from household table
-                        $stmt = $db->prepare('SELECT * FROM household WHERE id = :userId');
-                        $stmt->bindValue(':userId', $userId, SQLITE3_INTEGER);
-                        $result = $stmt->execute();
-                        $user = $result->fetchArray(SQLITE3_ASSOC);
+                        // $notify is keyed by household member; they are already loaded.
+                        $user = $household[$userId] ?? [];
 
                         $title = translate('wallos_notification', $i18n);
 
@@ -490,10 +437,8 @@ while ($userToNotify = $usersToNotify->fetchArray(SQLITE3_ASSOC)) {
                 } else {
                     foreach ($notify as $userId => $perUser) {
                         // Get name of user from household table
-                        $stmt = $db->prepare('SELECT * FROM household WHERE id = :userId');
-                        $stmt->bindValue(':userId', $userId, SQLITE3_INTEGER);
-                        $result = $stmt->execute();
-                        $user = $result->fetchArray(SQLITE3_ASSOC);
+                        // $notify is keyed by household member; they are already loaded.
+                        $user = $household[$userId] ?? [];
 
                         $name = $user['name'] ?? "";
                         $message = buildNotificationMessage($name, $perUser, $periodSummaryLine, $sendPeriodStartSummaryOnly);
@@ -545,10 +490,8 @@ while ($userToNotify = $usersToNotify->fetchArray(SQLITE3_ASSOC)) {
             if ($telegramNotificationsEnabled) {
                 foreach ($notify as $userId => $perUser) {
                     // Get name of user from household table
-                    $stmt = $db->prepare('SELECT * FROM household WHERE id = :userId');
-                    $stmt->bindValue(':userId', $userId, SQLITE3_INTEGER);
-                    $result = $stmt->execute();
-                    $user = $result->fetchArray(SQLITE3_ASSOC);
+                    // $notify is keyed by household member; they are already loaded.
+                    $user = $household[$userId] ?? [];
 
                     if ($user['name']) {
                         $name = $user['name'];
@@ -598,10 +541,8 @@ while ($userToNotify = $usersToNotify->fetchArray(SQLITE3_ASSOC)) {
             if ($pushplusNotificationsEnabled) {
                 foreach ($notify as $userId => $perUser) {
                     // Get name of user from household table
-                    $stmt = $db->prepare('SELECT * FROM household WHERE id = :userId');
-                    $stmt->bindValue(':userId', $userId, SQLITE3_INTEGER);
-                    $result = $stmt->execute();
-                    $user = $result->fetchArray(SQLITE3_ASSOC);
+                    // $notify is keyed by household member; they are already loaded.
+                    $user = $household[$userId] ?? [];
 
                     // Build Message Content
                     $name = $user['name'] ?? "";
@@ -660,10 +601,8 @@ while ($userToNotify = $usersToNotify->fetchArray(SQLITE3_ASSOC)) {
                 } else {
                     foreach ($notify as $userId => $perUser) {
                         // Get name of user from household table
-                        $stmt = $db->prepare('SELECT * FROM household WHERE id = :userId');
-                        $stmt->bindValue(':userId', $userId, SQLITE3_INTEGER);
-                        $result = $stmt->execute();
-                        $user = $result->fetchArray(SQLITE3_ASSOC);
+                        // $notify is keyed by household member; they are already loaded.
+                        $user = $household[$userId] ?? [];
 
                         // Build Message Content
                         $name = $user['name'] ?? "";
@@ -720,10 +659,8 @@ while ($userToNotify = $usersToNotify->fetchArray(SQLITE3_ASSOC)) {
             if ($pushoverNotificationsEnabled) {
                 foreach ($notify as $userId => $perUser) {
                     // Get name of user from household table
-                    $stmt = $db->prepare('SELECT * FROM household WHERE id = :userId');
-                    $stmt->bindValue(':userId', $userId, SQLITE3_INTEGER);
-                    $result = $stmt->execute();
-                    $user = $result->fetchArray(SQLITE3_ASSOC);
+                    // $notify is keyed by household member; they are already loaded.
+                    $user = $household[$userId] ?? [];
 
                     if ($user['name']) {
                         $name = $user['name'];
@@ -767,10 +704,8 @@ while ($userToNotify = $usersToNotify->fetchArray(SQLITE3_ASSOC)) {
                 } else {
                     foreach ($notify as $userId => $perUser) {
                         // Get name of user from household table
-                        $stmt = $db->prepare('SELECT * FROM household WHERE id = :userId');
-                        $stmt->bindValue(':userId', $userId, SQLITE3_INTEGER);
-                        $result = $stmt->execute();
-                        $user = $result->fetchArray(SQLITE3_ASSOC);
+                        // $notify is keyed by household member; they are already loaded.
+                        $user = $household[$userId] ?? [];
 
                         $name = $user['name'] ?? "";
                         $message = buildNotificationMessage($name, $perUser, $periodSummaryLine, $sendPeriodStartSummaryOnly);
@@ -828,10 +763,8 @@ while ($userToNotify = $usersToNotify->fetchArray(SQLITE3_ASSOC)) {
                 } else {
                     foreach ($notify as $userId => $perUser) {
                         // Get name of user from household table
-                        $stmt = $db->prepare('SELECT * FROM household WHERE id = :userId');
-                        $stmt->bindValue(':userId', $userId, SQLITE3_INTEGER);
-                        $result = $stmt->execute();
-                        $user = $result->fetchArray(SQLITE3_ASSOC);
+                        // $notify is keyed by household member; they are already loaded.
+                        $user = $household[$userId] ?? [];
                 
                         if ($user['name']) {
                             $payer = $user['name'];
@@ -896,10 +829,8 @@ while ($userToNotify = $usersToNotify->fetchArray(SQLITE3_ASSOC)) {
             if ($serverchanNotificationsEnabled) {
                 foreach ($notify as $userId => $perUser) {
                     // Get name of user from household table
-                    $stmt = $db->prepare('SELECT * FROM household WHERE id = :userId');
-                    $stmt->bindValue(':userId', $userId, SQLITE3_INTEGER);
-                    $result = $stmt->execute();
-                    $user = $result->fetchArray(SQLITE3_ASSOC);
+                    // $notify is keyed by household member; they are already loaded.
+                    $user = $household[$userId] ?? [];
 
                     $title = 'Wallos Notification';
                     $name = $user['name'] ?? "";

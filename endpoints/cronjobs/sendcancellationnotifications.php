@@ -7,6 +7,7 @@ require_once 'validate.php';
 require_once __DIR__ . '/../../includes/connect_endpoint_crontabs.php';
 require_once __DIR__ . '/../../includes/ssrf_helper.php';
 require_once __DIR__ . '/../../includes/mailer.php';
+require_once __DIR__ . '/../../includes/notification_settings.php';
 
 require 'settimezone.php';
 
@@ -14,6 +15,11 @@ require 'settimezone.php';
 $query = "SELECT id, username FROM user";
 $stmt = $db->prepare($query);
 $usersToNotify = $stmt->execute();
+
+// One query per provider table for everybody, instead of one per user per
+// provider.
+$notificationSettings = wallos_load_notification_settings($db);
+$usersWithNotifications = wallos_users_with_notifications($notificationSettings, $db);
 
 while ($userToNotify = $usersToNotify->fetchArray(SQLITE3_ASSOC)) {
     $userId = $userToNotify['id'];
@@ -29,70 +35,44 @@ while ($userToNotify = $usersToNotify->fetchArray(SQLITE3_ASSOC)) {
     $ntfyNotificationsEnabled = false;
     $webhookNotificationsEnabled = false;
 
+    if (!isset($usersWithNotifications[$userId])) {
+        continue;
+    }
+
     // Check if email notifications are enabled and resolve the effective
     // transport (instance SMTP or the user's own, depending on their choice)
     $emailConfig = wallos_get_effective_smtp_config($db, $userId);
     $emailNotificationsEnabled = !empty($emailConfig['values']['enabled']);
 
-    // Check if Discord notifications are enabled and get the settings
-    $query = "SELECT * FROM discord_notifications WHERE user_id = :userId";
-    $stmt = $db->prepare($query);
-    $stmt->bindValue(':userId', $userId, SQLITE3_INTEGER);
-    $result = $stmt->execute();
-
-    if ($row = $result->fetchArray(SQLITE3_ASSOC)) {
+    if ($row = $notificationSettings['discord'][$userId] ?? null) {
         $discordNotificationsEnabled = $row['enabled'];
         $discord['webhook_url'] = $row["webhook_url"];
         $discord['bot_username'] = $row["bot_username"];
         $discord['bot_avatar_url'] = $row["bot_avatar_url"];
     }
 
-    // Check if Gotify notifications are enabled and get the settings
-    $query = "SELECT * FROM gotify_notifications WHERE user_id = :userId";
-    $stmt = $db->prepare($query);
-    $stmt->bindValue(':userId', $userId, SQLITE3_INTEGER);
-    $result = $stmt->execute();
-
     $gotify = [];
 
-    if ($row = $result->fetchArray(SQLITE3_ASSOC)) {
+    if ($row = $notificationSettings['gotify'][$userId] ?? null) {
         $gotifyNotificationsEnabled = $row['enabled'];
         $gotify['serverUrl'] = $row["url"];
         $gotify['appToken'] = $row["token"];
         $gotify['ignore_ssl'] = $row["ignore_ssl"];
     }
 
-    // Check if Telegram notifications are enabled and get the settings
-    $query = "SELECT * FROM telegram_notifications WHERE user_id = :userId";
-    $stmt = $db->prepare($query);
-    $stmt->bindValue(':userId', $userId, SQLITE3_INTEGER);
-    $result = $stmt->execute();
-
-    if ($row = $result->fetchArray(SQLITE3_ASSOC)) {
+    if ($row = $notificationSettings['telegram'][$userId] ?? null) {
         $telegramNotificationsEnabled = $row['enabled'];
         $telegram['botToken'] = $row["bot_token"];
         $telegram['chatId'] = $row["chat_id"];
     }
 
-    // Check if Pushover notifications are enabled and get the settings
-    $query = "SELECT * FROM pushover_notifications WHERE user_id = :userId";
-    $stmt = $db->prepare($query);
-    $stmt->bindValue(':userId', $userId, SQLITE3_INTEGER);
-    $result = $stmt->execute();
-
-    if ($row = $result->fetchArray(SQLITE3_ASSOC)) {
+    if ($row = $notificationSettings['pushover'][$userId] ?? null) {
         $pushoverNotificationsEnabled = $row['enabled'];
         $pushover['user_key'] = $row["user_key"];
         $pushover['token'] = $row["token"];
     }
 
-    // Check if Ntfy notifications are enabled and get the settings
-    $query = "SELECT * FROM ntfy_notifications WHERE user_id = :userId";
-    $stmt = $db->prepare($query);
-    $stmt->bindValue(':userId', $userId, SQLITE3_INTEGER);
-    $result = $stmt->execute();
-
-    if ($row = $result->fetchArray(SQLITE3_ASSOC)) {
+    if ($row = $notificationSettings['ntfy'][$userId] ?? null) {
         $ntfyNotificationsEnabled = $row['enabled'];
         $ntfy['host'] = $row["host"];
         $ntfy['topic'] = $row["topic"];
@@ -100,14 +80,9 @@ while ($userToNotify = $usersToNotify->fetchArray(SQLITE3_ASSOC)) {
         $ntfy['ignore_ssl'] = $row["ignore_ssl"];
     }
 
-    // Check if webhook notifications are enabled and have cancelation payload set and get the settings
-    $query = "SELECT * FROM webhook_notifications WHERE user_id = :userId";
-    $stmt = $db->prepare($query);
-    $stmt->bindValue(':userId', $userId, SQLITE3_INTEGER);
-    $result = $stmt->execute();
-
     $webhook = [];
-    if ($row = $result->fetchArray(SQLITE3_ASSOC)) {
+
+    if ($row = $notificationSettings['webhook'][$userId] ?? null) {
         $webhook['url'] = $row["url"];
         $webhook['headers'] = $row["headers"];
         $webhook['cancelation_payload'] = $row["cancelation_payload"];
@@ -215,10 +190,8 @@ while ($userToNotify = $usersToNotify->fetchArray(SQLITE3_ASSOC)) {
 
                     $mail = $transport['mailer'];
 
-                    $stmt = $db->prepare('SELECT * FROM household WHERE id = :userId');
-                    $stmt->bindValue(':userId', $userId, SQLITE3_INTEGER);
-                    $result = $stmt->execute();
-                    $user = $result->fetchArray(SQLITE3_ASSOC);
+                    // $notify is keyed by household member; they are already loaded.
+                    $user = $household[$userId] ?? [];
 
                     $emailaddress = !empty($user['email']) ? $user['email'] : $defaultEmail;
                     $name = !empty($user['name']) ? $user['name'] : $defaultName;
@@ -258,10 +231,8 @@ while ($userToNotify = $usersToNotify->fetchArray(SQLITE3_ASSOC)) {
                 } else {
                     foreach ($notify as $userId => $perUser) {
                         // Get name of user from household table
-                        $stmt = $db->prepare('SELECT * FROM household WHERE id = :userId');
-                        $stmt->bindValue(':userId', $userId, SQLITE3_INTEGER);
-                        $result = $stmt->execute();
-                        $user = $result->fetchArray(SQLITE3_ASSOC);
+                        // $notify is keyed by household member; they are already loaded.
+                        $user = $household[$userId] ?? [];
 
                         $title = translate('wallos_notification', $i18n);
 
@@ -321,10 +292,8 @@ while ($userToNotify = $usersToNotify->fetchArray(SQLITE3_ASSOC)) {
                 } else {
                     foreach ($notify as $userId => $perUser) {
                         // Get name of user from household table
-                        $stmt = $db->prepare('SELECT * FROM household WHERE id = :userId');
-                        $stmt->bindValue(':userId', $userId, SQLITE3_INTEGER);
-                        $result = $stmt->execute();
-                        $user = $result->fetchArray(SQLITE3_ASSOC);
+                        // $notify is keyed by household member; they are already loaded.
+                        $user = $household[$userId] ?? [];
 
                         if ($user['name']) {
                             $message = $user['name'] . ", the following subscriptions are up for cancellation:\n";
@@ -378,10 +347,8 @@ while ($userToNotify = $usersToNotify->fetchArray(SQLITE3_ASSOC)) {
             if ($telegramNotificationsEnabled) {
                 foreach ($notify as $userId => $perUser) {
                     // Get name of user from household table
-                    $stmt = $db->prepare('SELECT * FROM household WHERE id = :userId');
-                    $stmt->bindValue(':userId', $userId, SQLITE3_INTEGER);
-                    $result = $stmt->execute();
-                    $user = $result->fetchArray(SQLITE3_ASSOC);
+                    // $notify is keyed by household member; they are already loaded.
+                    $user = $household[$userId] ?? [];
 
                     if ($user['name']) {
                         $message = $user['name'] . ", the following subscriptions are up for cancellation:\n";
@@ -428,10 +395,8 @@ while ($userToNotify = $usersToNotify->fetchArray(SQLITE3_ASSOC)) {
             if ($pushoverNotificationsEnabled) {
                 foreach ($notify as $userId => $perUser) {
                     // Get name of user from household table
-                    $stmt = $db->prepare('SELECT * FROM household WHERE id = :userId');
-                    $stmt->bindValue(':userId', $userId, SQLITE3_INTEGER);
-                    $result = $stmt->execute();
-                    $user = $result->fetchArray(SQLITE3_ASSOC);
+                    // $notify is keyed by household member; they are already loaded.
+                    $user = $household[$userId] ?? [];
 
                     if ($user['name']) {
                         $message = $user['name'] . ", the following subscriptions are up for cancellation:\n";
@@ -475,10 +440,8 @@ while ($userToNotify = $usersToNotify->fetchArray(SQLITE3_ASSOC)) {
                 } else {
                     foreach ($notify as $userId => $perUser) {
                         // Get name of user from household table
-                        $stmt = $db->prepare('SELECT * FROM household WHERE id = :userId');
-                        $stmt->bindValue(':userId', $userId, SQLITE3_INTEGER);
-                        $result = $stmt->execute();
-                        $user = $result->fetchArray(SQLITE3_ASSOC);
+                        // $notify is keyed by household member; they are already loaded.
+                        $user = $household[$userId] ?? [];
 
                         if ($user['name']) {
                             $message = $user['name'] . ", the following subscriptions are up for cancellation:\n";
@@ -535,10 +498,8 @@ while ($userToNotify = $usersToNotify->fetchArray(SQLITE3_ASSOC)) {
                 } else {
                     foreach ($notify as $userId => $perUser) {
                         // Get name of user from household table
-                        $stmt = $db->prepare('SELECT * FROM household WHERE id = :userId');
-                        $stmt->bindValue(':userId', $userId, SQLITE3_INTEGER);
-                        $result = $stmt->execute();
-                        $user = $result->fetchArray(SQLITE3_ASSOC);
+                        // $notify is keyed by household member; they are already loaded.
+                        $user = $household[$userId] ?? [];
                 
                         if ($user['name']) {
                             $payer = $user['name'];

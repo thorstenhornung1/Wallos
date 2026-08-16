@@ -123,19 +123,69 @@ wallos_test('one shared credential is fetched once per refresh', function () {
     assert_true(!$first['success'], 'an unconfigured provider is rejected before any network call');
 });
 
-wallos_test_pending(
-    'notification cron does not query per user per provider',
-    'specification 45.5 / acceptance 29 — sendnotifications.php still queries each provider table per user',
-    function () {
-        $source = file_get_contents(WALLOS_ROOT . '/endpoints/cronjobs/sendnotifications.php');
+wallos_test('notification settings load in one query per provider', function () {
+    require_once WALLOS_ROOT . '/includes/notification_settings.php';
 
-        // The user loop currently contains one SELECT per provider table.
-        $perProviderQueries = preg_match_all('/SELECT \* FROM \w+_notifications WHERE user_id/', $source);
+    $db = wallos_test_open_counting_database();
+    for ($userId = 1; $userId <= 20; $userId++) {
+        wallos_test_create_user($db, $userId, 'user' . $userId);
 
-        assert_true($perProviderQueries <= 1,
-            'notification settings should be loaded in bulk (found ' . $perProviderQueries . ' per-user queries)');
+        $stmt = $db->prepare('INSERT INTO telegram_notifications (enabled, bot_token, chat_id, user_id) VALUES (1, :token, :chat, :userId)');
+        $stmt->bindValue(':token', 'token-' . $userId, SQLITE3_TEXT);
+        $stmt->bindValue(':chat', 'chat-' . $userId, SQLITE3_TEXT);
+        $stmt->bindValue(':userId', $userId, SQLITE3_INTEGER);
+        $stmt->execute();
     }
-);
+
+    $db->resetQueryCount();
+    $settings = wallos_load_notification_settings($db);
+
+    assert_same(count(WALLOS_NOTIFICATION_TABLES), $db->queryCount,
+        'one query per provider table regardless of user count (got ' . $db->queryCount . ')');
+    assert_same('token-7', $settings['telegram'][7]['bot_token'], 'rows are indexed by user id');
+    assert_same(20, count($settings['telegram']), 'every user is loaded');
+
+    $db->close();
+});
+
+wallos_test('users without any notification are identified up front', function () {
+    require_once WALLOS_ROOT . '/includes/notification_settings.php';
+
+    $db = wallos_test_open_database();
+    wallos_test_create_user($db, 1, 'enabled-telegram');
+    wallos_test_create_user($db, 2, 'enabled-email');
+    wallos_test_create_user($db, 3, 'nothing');
+    wallos_test_create_user($db, 4, 'disabled-telegram');
+
+    $stmt = $db->prepare("INSERT INTO telegram_notifications (enabled, bot_token, chat_id, user_id) VALUES (1, 't', 'c', 1)");
+    $stmt->execute();
+    $stmt = $db->prepare("INSERT INTO telegram_notifications (enabled, bot_token, chat_id, user_id) VALUES (0, 't', 'c', 4)");
+    $stmt->execute();
+    $stmt = $db->prepare("INSERT INTO email_notifications (enabled, smtp_mode, user_id) VALUES (1, 'instance', 2)");
+    $stmt->execute();
+
+    $users = wallos_users_with_notifications(wallos_load_notification_settings($db), $db);
+
+    assert_true(isset($users[1]), 'a user with telegram enabled is included');
+    assert_true(isset($users[2]), 'a user with email enabled is included');
+    assert_true(!isset($users[3]), 'a user with nothing configured is skipped');
+    assert_true(!isset($users[4]), 'a user with a disabled provider is skipped');
+
+    $db->close();
+});
+
+wallos_test('the notification cron no longer queries per user per provider', function () {
+    $source = file_get_contents(WALLOS_ROOT . '/endpoints/cronjobs/sendnotifications.php');
+    $perProvider = preg_match_all('/SELECT \* FROM \w+_notifications WHERE user_id/', $source);
+    assert_same(0, $perProvider, 'settings are loaded in bulk');
+
+    $perMember = preg_match_all('/FROM household WHERE id = :userId/', $source);
+    assert_same(0, $perMember, 'household members come from the already loaded map');
+
+    $source = file_get_contents(WALLOS_ROOT . '/endpoints/cronjobs/sendcancellationnotifications.php');
+    assert_same(0, preg_match_all('/SELECT \* FROM \w+_notifications WHERE user_id/', $source),
+        'the cancellation cron loads in bulk too');
+});
 
 wallos_test_pending(
     'one row per user is enforced where intended',
