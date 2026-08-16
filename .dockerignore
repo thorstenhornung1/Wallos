@@ -11,3 +11,7 @@
 
 # README screenshots and capture script; not used at runtime
 /screenshots/
+
+# Example credentials for the local dev environment; not for the image
+/dev/secrets.example/
+/dev/secrets/

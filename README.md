@@ -264,7 +264,9 @@ docker pull ghcr.io/thorstenhornung1/wallos:latest
 ```
 
 Switching an existing installation over is described in
-[docs/switching-to-this-fork.md](docs/switching-to-this-fork.md). Your data is
+[docs/switching-to-this-fork.md](docs/switching-to-this-fork.md), and
+[docs/test-instance.md](docs/test-instance.md) sets up a throwaway instance on
+Kubernetes with a mail sink, for trying it before touching anything real. Your data is
 unaffected: the schema only gains columns, and every user who configured their
 own SMTP server, currency key or AI provider keeps it.
 

@@ -1,0 +1,234 @@
+# Wallos test instance for test.hornung-bn.de
+#
+#   kubectl apply -f wallos-test.yaml
+#
+# Secrets are created separately, see docs/test-instance.md — they are not in
+# this file so it can live in git.
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: wallos-test
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: wallos-db
+  namespace: wallos-test
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: local-path
+  resources:
+    requests:
+      storage: 1Gi
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: wallos-logos
+  namespace: wallos-test
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: local-path
+  resources:
+    requests:
+      storage: 2Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: wallos
+  namespace: wallos-test
+spec:
+  replicas: 1
+  strategy:
+    # SQLite is single-writer and the volume is ReadWriteOnce: the old pod must
+    # be gone before the new one starts.
+    type: Recreate
+  selector:
+    matchLabels:
+      app: wallos
+  template:
+    metadata:
+      labels:
+        app: wallos
+    spec:
+      containers:
+        - name: wallos
+          image: ghcr.io/thorstenhornung1/wallos:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 80
+          env:
+            - name: TZ
+              value: Europe/Berlin
+
+            # Mailpit and Authentik resolve to private addresses, so they need
+            # to be allowlisted for SMTP and OIDC.
+            - name: SSRF_ALLOWLIST
+              value: "mailpit.wallos-test.svc.cluster.local,mailpit.wallos-test.svc.cluster.local:1025,auth.hornung-bn.de"
+
+            # Shared instance SMTP, delivered to Mailpit.
+            - name: WALLOS_SMTP_HOST
+              value: mailpit.wallos-test.svc.cluster.local
+            - name: WALLOS_SMTP_PORT
+              value: "1025"
+            - name: WALLOS_SMTP_ENCRYPTION
+              value: none
+            - name: WALLOS_SMTP_FROM
+              value: wallos@test.hornung-bn.de
+            - name: WALLOS_SMTP_FROM_NAME
+              value: Wallos Test
+            - name: WALLOS_SMTP_PASSWORD_FILE
+              value: /run/secrets/smtp_password
+
+            # Shared instance currency provider.
+            - name: WALLOS_CURRENCY_PROVIDER
+              value: apilayer
+            - name: WALLOS_CURRENCY_API_KEY_FILE
+              value: /run/secrets/currency_api_key
+
+            # Shared instance AI provider.
+            - name: WALLOS_AI_PROVIDER
+              value: chatgpt
+            - name: WALLOS_AI_MODEL
+              value: gpt-4o-mini
+            - name: WALLOS_AI_API_KEY_FILE
+              value: /run/secrets/ai_api_key
+          volumeMounts:
+            - name: db
+              mountPath: /var/www/html/db
+            - name: logos
+              mountPath: /var/www/html/images/uploads/logos
+            - name: secrets
+              mountPath: /run/secrets
+              readOnly: true
+          readinessProbe:
+            httpGet:
+              path: /health.php
+              port: 80
+            initialDelaySeconds: 15
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health.php
+              port: 80
+            initialDelaySeconds: 60
+            periodSeconds: 30
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              memory: 512Mi
+      volumes:
+        - name: db
+          persistentVolumeClaim:
+            claimName: wallos-db
+        - name: logos
+          persistentVolumeClaim:
+            claimName: wallos-logos
+        - name: secrets
+          secret:
+            secretName: wallos-secrets
+            defaultMode: 0400
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: wallos
+  namespace: wallos-test
+spec:
+  selector:
+    app: wallos
+  ports:
+    - port: 80
+      targetPort: 80
+---
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: wallos
+  namespace: wallos-test
+spec:
+  entryPoints:
+    - web
+    - websecure
+  routes:
+    - match: Host(`test.hornung-bn.de`)
+      kind: Rule
+      services:
+        - name: wallos
+          port: 80
+  tls:
+    certResolver: letsencrypt
+---
+# Mail sink: every mail Wallos sends lands here instead of a real inbox.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mailpit
+  namespace: wallos-test
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mailpit
+  template:
+    metadata:
+      labels:
+        app: mailpit
+    spec:
+      containers:
+        - name: mailpit
+          image: docker.io/axllent/mailpit:latest
+          ports:
+            - containerPort: 1025
+            - containerPort: 8025
+          env:
+            - name: MP_SMTP_AUTH_ACCEPT_ANY
+              value: "1"
+            - name: MP_SMTP_AUTH_ALLOW_INSECURE
+              value: "1"
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              memory: 256Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mailpit
+  namespace: wallos-test
+spec:
+  selector:
+    app: mailpit
+  ports:
+    - name: smtp
+      port: 1025
+      targetPort: 1025
+    - name: http
+      port: 8025
+      targetPort: 8025
+---
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: mailpit
+  namespace: wallos-test
+spec:
+  entryPoints:
+    - web
+    - websecure
+  routes:
+    - match: Host(`mail.test.hornung-bn.de`)
+      kind: Rule
+      services:
+        - name: mailpit
+          port: 8025
+  tls:
+    certResolver: letsencrypt
