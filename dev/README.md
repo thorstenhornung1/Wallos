@@ -21,6 +21,24 @@ specification requires but the code does not implement yet. They are reported
 as `open` and do not fail the run; when one starts passing, the runner says so
 and the case can be promoted.
 
+## SQLite boundary audit
+
+```sh
+dev/db-audit.sh              # the gate, exactly as CI runs it
+dev/db-audit.sh --report     # inventory: every file, worst first
+dev/db-audit.sh --update     # record the current tree as the new baseline
+```
+
+Needs neither a container nor PHP; it uses `rg` when installed and `grep -E`
+otherwise. SQLite-specific APIs must stay inside the database adapter boundary,
+but that boundary is still being built (issue #20), so the audit ratchets
+against `dev/db-audit-baseline.txt`: a file's count may fall, never rise, and a
+file that is not in the baseline may not start matching. Improvements pass and
+ask you to commit the smaller baseline.
+
+`docs/sqlite-boundary.md` explains the design, and says which of the three
+gates from issue #41 are active.
+
 ## Full application
 
 ```sh

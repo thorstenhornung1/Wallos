@@ -1,0 +1,90 @@
+# Gate 2 of issue #41 — SQLite APIs must not leak outside the adapter boundary.
+#
+# These rules are NOT wired into CI. They cannot pass yet: the adapter boundary
+# does not exist (issue #20) and the repository currently has ~1500 findings.
+# Semgrep has no per-file baseline of the kind dev/db-audit.sh keeps, only
+# --baseline-commit, which needs full git history and only makes sense on pull
+# requests — a second, weaker ratchet with a different shape. A permanently red
+# CI step gets ignored and then deleted, so gate 1 does the gating and these
+# rules are here to be run by hand, and to be switched on the moment the
+# boundary is real.
+#
+#   podman run --rm -v "$PWD:/src:ro" -w /src docker.io/semgrep/semgrep \
+#       semgrep --config dev/semgrep/sqlite-boundary.yml --error
+#
+# What Semgrep adds over gate 1: it knows the difference between a method call
+# and the same word in a comment, so once the count is low it can be made to
+# demand zero without the false positives a text search would produce.
+
+rules:
+  - id: wallos-sqlite3-class-outside-boundary
+    languages: [php]
+    severity: ERROR
+    message: >-
+      The SQLite3 extension classes belong to the SQLite adapter. Application
+      code must depend on the Wallos database API instead, so that a second
+      backend cannot be broken silently (issue #41).
+    paths:
+      exclude:
+        - libs/
+        - includes/database/sqlite/
+        - migrations/sqlite/
+    patterns:
+      - pattern-either:
+          - pattern: new SQLite3(...)
+          - pattern: new SQLite3Stmt(...)
+          - pattern: new SQLite3Result(...)
+          - pattern: SQLite3::$METHOD(...)
+
+  - id: wallos-sqlite3-method-outside-boundary
+    languages: [php]
+    severity: ERROR
+    message: >-
+      querySingle(), lastInsertRowID() and busyTimeout() exist only on SQLite3.
+      Use the Wallos database API so the call survives a change of backend
+      (issue #41).
+    paths:
+      exclude:
+        - libs/
+        - includes/database/sqlite/
+        - migrations/sqlite/
+    patterns:
+      - pattern-either:
+          - pattern: $DB->querySingle(...)
+          - pattern: $DB->lastInsertRowID(...)
+          - pattern: $DB->busyTimeout(...)
+          - pattern: $DB->createFunction(...)
+          - pattern: $DB->enableExceptions(...)
+
+  - id: wallos-sqlite3-constant-outside-boundary
+    languages: [php]
+    severity: ERROR
+    message: >-
+      SQLITE3_* constants describe SQLite's own type and mode system. Outside
+      the adapter they pin application code to one backend (issue #41).
+    paths:
+      exclude:
+        - libs/
+        - includes/database/sqlite/
+        - migrations/sqlite/
+    patterns:
+      - pattern: $CONSTANT
+      - metavariable-regex:
+          metavariable: $CONSTANT
+          regex: ^SQLITE3_[A-Z_]+$
+
+  # SQL lives in strings, so this one is deliberately textual: an AST rule can
+  # find the string but not parse the dialect inside it.
+  - id: wallos-sqlite-only-sql-outside-boundary
+    languages: [php]
+    severity: ERROR
+    message: >-
+      This SQL is SQLite-only. PRAGMA, sqlite_master, pragma_table_info,
+      INSERT OR REPLACE and AUTOINCREMENT have no portable meaning; they belong
+      in a SQLite-only migration under migrations/sqlite/ (issue #41).
+    paths:
+      exclude:
+        - libs/
+        - includes/database/sqlite/
+        - migrations/sqlite/
+    pattern-regex: (?i)\b(PRAGMA\s+\w|sqlite_master|pragma_table_info|INSERT\s+OR\s+REPLACE|AUTOINCREMENT)\b

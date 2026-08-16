@@ -38,6 +38,20 @@ We welcome contributions from the community and look forward to working with you
     Use `CONTAINER_ENGINE=docker dev/test.sh` if you prefer Docker over Podman.
     Tests build the real schema by running `createdatabase.php` and the
     migration chain, so they exercise the schema the application produces.
+
+    If your change touches the database, also run the SQLite boundary audit,
+    which CI runs as its own job. It needs no container and no PHP:
+
+    ```bash
+    dev/db-audit.sh
+    ```
+
+    SQLite-specific APIs must stay inside the database adapter boundary. That
+    boundary is still being built, so the audit ratchets against a checked-in
+    baseline instead of demanding zero: a file's count may fall, never rise,
+    and a file absent from the baseline may not start matching. If you removed
+    SQLite calls, the audit says so and asks you to commit the smaller baseline
+    with `dev/db-audit.sh --update`. See `docs/sqlite-boundary.md`.
 6.  **Commit your changes:** Commit your changes with a clear and concise message:
 
     ```bash
