@@ -24,6 +24,11 @@ if (session_status() === PHP_SESSION_NONE) {
     ]);
     session_start();
 }
+// A provider configured with login.php as its redirect URI lands here rather
+// than on the document root. Consumed before anything else, because a callback
+// arrives unauthenticated and would otherwise fall through to the login form.
+require_once 'includes/oidc/consume_oidc_callback.php';
+
 if (isset($_SESSION['loggedin']) && $_SESSION['loggedin'] === true) {
     $db->close();
     header("Location: .");

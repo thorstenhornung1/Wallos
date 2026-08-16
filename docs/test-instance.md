@@ -337,6 +337,18 @@ an application with redirect URI:
 https://test.hornung-bn.de/login.php
 ```
 
+Both `https://test.hornung-bn.de/login.php` and `https://test.hornung-bn.de/`
+work as redirect targets, and `OIDC_REDIRECT_URL` must name the same one you
+configured in Authentik.
+
+This is the one value in the whole setup that cannot be derived from anything
+else, and until v5.5.2 only the document root actually consumed the response:
+a callback arriving at `login.php` was discarded without a trace — Authentik
+logged a successful authorization, Wallos rendered the login form again, and
+neither side reported a problem
+([#42](https://github.com/thorstenhornung1/Wallos/issues/42)). If you see that
+symptom, the instance is older than 5.5.2.
+
 **Swarm:**
 
 ```sh
