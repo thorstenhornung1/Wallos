@@ -1,5 +1,26 @@
 # Changelog
 
+## [5.6.0](https://github.com/thorstenhornung1/Wallos/releases/tag/v5.6.0) (2026-08-16)
+
+### Features
+
+* **i18n:** language identifiers are canonical BCP-47 tags — `pt-BR`,
+  `sr-Latn`, `zh-CN`, `zh-TW` — resolved through one function that still
+  accepts the legacy spellings, so existing cookies and stored preferences keep
+  working while only canonical values are written ([#33](https://github.com/thorstenhornung1/Wallos/issues/33))
+* **i18n:** `WALLOS_DEFAULT_LANGUAGE`, or an admin field, decides the language
+  of accounts created without a language choice. A value Wallos has no
+  translation for is reported rather than silently becoming English ([#34](https://github.com/thorstenhornung1/Wallos/issues/34))
+* **oidc:** a newly provisioned account takes its language from the provider's
+  `locale` claim, falling back to the instance default. The claim is read once,
+  at creation; afterwards the language belongs to the Wallos user ([#35](https://github.com/thorstenhornung1/Wallos/issues/35))
+
+### Upgrading
+
+Migration `000057` rewrites stored language values to their canonical form.
+Downgrading afterwards is possible but not clean: an older version does not
+know `pt-BR` and would fall back to English for accounts migrated from `pt_br`.
+
 ## [5.5.2](https://github.com/thorstenhornung1/Wallos/releases/tag/v5.5.2) (2026-08-16)
 
 ### Bug Fixes
