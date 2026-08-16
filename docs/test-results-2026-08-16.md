@@ -47,6 +47,7 @@ than at one byte too many.
 | 5.7 a broken secret file does not fall back | **pass** | send refused, path named, no mail |
 | 5.8 cron jobs run clean | **pass** | five jobs, no warning, no fatal |
 | 7 OIDC against authentik | **pass**, after five separate fixes | account auto-provisioned, `oidc_sub` set |
+| — locale handling (v5.6.0) | **pass**, both paths | instance default *and* `locale` claim, verified separately |
 
 ## Details
 
@@ -196,6 +197,46 @@ id  username          email                   language  main_currency  oidc
 from [#34](https://github.com/thorstenhornung1/Wallos/issues/34) /
 [#35](https://github.com/thorstenhornung1/Wallos/issues/35) /
 [#40](https://github.com/thorstenhornung1/Wallos/issues/40), reproduced.
+
+**Fixed in v5.6.0 and verified here — both paths, separately.**
+
+The two paths produce the same visible outcome, so they were separated by
+making them disagree: the instance default was set to a language nobody
+involved uses.
+
+*Instance default.* With `WALLOS_DEFAULT_LANGUAGE=de` and the stock `profile`
+scope mapping, a freshly provisioned account got `de` instead of `en`. That
+this proves the *default* and not the claim is only certain because
+authentik's stock mapping was checked first — it emits `name`, `given_name`,
+`preferred_username`, `nickname` and `groups`, and **no `locale`**. There was
+no claim to act on.
+
+*Claim.* A custom `profile` scope mapping was then assigned to the test
+provider, extending the stock expression by one line:
+
+```python
+"locale": request.user.attributes.get("settings", {}).get("locale"),
+```
+
+authentik keeps the value as `settings.locale` — its own UI preference, not
+something the stock mapping exposes. With `WALLOS_DEFAULT_LANGUAGE=ja` and
+`settings.locale = "de-DE"` on the authentik account, the provisioned user
+came out as:
+
+```
+id  username          language  oidc
+ 5  thorsten.hornung  de        1
+```
+
+`de`, not `ja`. Three things at once: the claim arrives, it is evaluated, and
+`de-DE` is normalised to `de` — authentik sends the regional form, Wallos
+ships its translations as `de`. The precedence is right as well: the claim
+wins over the instance default, which is what a default should be.
+
+Worth recording for anyone wiring this up against authentik: **the stock
+`profile` mapping carries no locale.** Without a custom mapping the claim path
+cannot work, no matter how the application behaves. Noted in
+[#43](https://github.com/thorstenhornung1/Wallos/issues/43).
 
 The differing `main_currency` values are **not** a finding: all three resolve
 to EUR. Wallos stores currencies per user, so each account gets its own row.
