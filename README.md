@@ -253,6 +253,21 @@ Wallos blocks webhook, SMTP, and OIDC endpoint URLs that resolve to private/link
 
 Setting the `SSRF_ALLOWLIST` environment variable overrides the database value entirely (same full-override semantics as the `OIDC_*` variables above), so the allowlist can be provisioned on first boot with no manual UI step. It accepts a comma-separated list of hosts/IPs, optionally with a port (e.g. `SSRF_ALLOWLIST=auth.example.com,192.168.1.100:8123`). While set, the Security Settings field in the Admin UI is shown but disabled.
 
+## About this fork
+
+This is a fork of [ellite/Wallos](https://github.com/ellite/Wallos) that adds
+instance-wide configuration for shared infrastructure, plus correctness and
+performance fixes.
+
+```sh
+docker pull ghcr.io/thorstenhornung1/wallos:latest
+```
+
+Switching an existing installation over is described in
+[docs/switching-to-this-fork.md](docs/switching-to-this-fork.md). Your data is
+unaffected: the schema only gains columns, and every user who configured their
+own SMTP server, currency key or AI provider keeps it.
+
 ## Shared instance integrations
 
 In a multi-user installation, SMTP, the currency exchange provider and the AI provider are usually infrastructure that belongs to the installation, not to each individual user. Wallos can therefore configure them once for the whole instance, and every user inherits them by default.
