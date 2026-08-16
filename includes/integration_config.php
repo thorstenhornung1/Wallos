@@ -23,6 +23,7 @@
 */
 
 require_once __DIR__ . '/config_helper.php';
+require_once __DIR__ . '/i18n/languages.php';
 
 const WALLOS_SMTP_ENCRYPTIONS = ['none', 'tls', 'ssl'];
 const WALLOS_AI_PROVIDERS = ['chatgpt', 'gemini', 'openrouter', 'ollama', 'openai-compatible'];
@@ -731,4 +732,67 @@ function wallos_get_effective_ai_config($db, $userId)
 {
     return wallos_config_cached($db, 'ai:' . (int) $userId,
         fn() => wallos_build_effective_ai_config($db, $userId));
+}
+
+/* -------------------------------------------------------------------------
+   Instance default language
+   ------------------------------------------------------------------------- */
+
+/**
+ * The language an account is created with when nothing more specific applies.
+ *
+ * A provisioning default, not a policy: it decides what a new account starts
+ * with and never touches a language a user has chosen.
+ *
+ * @param SQLite3 $db
+ * @return array Result structure with a "language" value.
+ */
+function wallos_get_instance_language_config($db)
+{
+    return wallos_config_cached($db, 'language:instance', function () use ($db) {
+        $config = wallos_config_result();
+        $config['mode'] = 'instance';
+
+        if (wallos_env_has('WALLOS_DEFAULT_LANGUAGE')) {
+            $requested = trim((string) wallos_env('WALLOS_DEFAULT_LANGUAGE'));
+            $resolved = wallos_resolve_language($requested);
+
+            // Saying "the language is de" and silently getting English would be
+            // worse than saying nothing at all.
+            if ($requested !== '' && $resolved !== $requested
+                && $resolved !== wallos_normalize_language_tag($requested)) {
+                wallos_config_add_note($config,
+                    'WALLOS_DEFAULT_LANGUAGE is set to "' . $requested
+                    . '", which Wallos does not support; using "' . $resolved . '".');
+            }
+
+            wallos_config_set($config, 'language', $resolved, 'environment', 'WALLOS_DEFAULT_LANGUAGE');
+
+            return $config;
+        }
+
+        $instance = wallos_get_instance_settings($db, 'instance');
+
+        if (!empty($instance['default_language'])) {
+            wallos_config_set($config, 'language',
+                wallos_resolve_language($instance['default_language']), 'admin');
+
+            return $config;
+        }
+
+        wallos_config_set($config, 'language', 'en', 'default');
+
+        return $config;
+    });
+}
+
+/**
+ * Convenience accessor for the places that only need the value.
+ *
+ * @param SQLite3 $db
+ * @return string
+ */
+function wallos_instance_default_language($db)
+{
+    return wallos_get_instance_language_config($db)['values']['language'];
 }

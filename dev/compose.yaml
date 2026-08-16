@@ -23,6 +23,9 @@ services:
     environment:
       TZ: Europe/Berlin
 
+      # Accounts created without a language choice, e.g. through OIDC.
+      WALLOS_DEFAULT_LANGUAGE: de
+
       # Private addresses need to be allowlisted for SMTP and self-hosted AI.
       SSRF_ALLOWLIST: mailpit,mailpit:1025
 

@@ -516,6 +516,8 @@ $i18n = [
     "managed_by_environment" => "Verwaltet durch Umgebungsvariablen:",
     "leave_empty_to_keep" => "leer lassen, um den gespeicherten Wert zu behalten",
     "notifications_not_enabled_yet" => "E-Mail-Benachrichtigungen sind noch nicht aktiviert. Geplante Benachrichtigungen werden erst versendet, wenn Sie sie aktivieren und speichern.",
+    "default_language" => "Standardsprache für neue Konten",
+    "default_language_info" => "Gilt für Konten, die ohne Sprachauswahl angelegt werden, etwa über OIDC bereitgestellte Benutzer. Eine bereits gewählte Sprache wird nie geändert.",
     "remove_stored_secret" => "Gespeicherten Wert entfernen",
 ];
 

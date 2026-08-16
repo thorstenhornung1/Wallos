@@ -2,6 +2,7 @@
 
 require_once '../../includes/connect_endpoint.php';
 require_once '../../includes/validate_endpoint_admin.php';
+require_once '../../includes/integration_config.php';
 
 $postData = file_get_contents("php://input");
 $data = json_decode($postData, true);
@@ -11,6 +12,16 @@ $maxUsers = $data['max_users'];
 $requireEmailVerification = $data['require_email_validation'];
 $serverUrl = $data['server_url'];
 $disableLogin = $data['disable_login'];
+
+// The default language for accounts created without an explicit choice. An
+// environment-managed value is not written back.
+$languageConfiguration = wallos_get_instance_language_config($db);
+
+if (isset($data['default_language']) && empty($languageConfiguration['managed']['language'])) {
+    wallos_set_instance_setting($db, 'instance', 'default_language',
+        wallos_resolve_language($data['default_language']));
+    wallos_reset_config_cache($db);
+}
 
 if ($disableLogin == 1) {
     if ($openRegistrations == 1) {

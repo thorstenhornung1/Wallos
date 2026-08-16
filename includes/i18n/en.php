@@ -517,6 +517,8 @@ $i18n = [
     "managed_by_environment" => "Managed by environment variables:",
     "leave_empty_to_keep" => "leave empty to keep the stored value",
     "notifications_not_enabled_yet" => "Email notifications are not enabled yet, so scheduled notifications will not be sent until you enable and save them.",
+    "default_language" => "Default language for new accounts",
+    "default_language_info" => "Applies to accounts created without a language choice, such as users provisioned through OIDC. It never changes a language a user has already chosen.",
     "remove_stored_secret" => "Remove the stored value",
 ];
 

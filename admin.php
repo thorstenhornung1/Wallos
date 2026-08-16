@@ -31,6 +31,7 @@ $currencyConfiguration = wallos_get_instance_currency_config($db);
 $currencyKeyStatus = wallos_secret_status($currencyConfiguration, 'api_key');
 $aiConfiguration = wallos_get_instance_ai_config($db);
 $aiKeyStatus = wallos_secret_status($aiConfiguration, 'api_key');
+$languageConfiguration = wallos_get_instance_language_config($db);
 
 function oidc_input_attrs($field, $managedFields)
 {
@@ -94,6 +95,23 @@ $loginDisabledAllowed = $userCount == 1 && $settings['registrations_open'] == 0;
                 <?php
             }
             ?>
+            <div class="form-group">
+                <label for="defaultLanguage"><?= translate('default_language', $i18n) ?></label>
+                <select id="defaultLanguage" <?= wallos_managed_input_attrs($languageConfiguration, 'language') ?>>
+                    <?php foreach (wallos_languages() as $code => $language): ?>
+                        <option value="<?= $code ?>" <?= $languageConfiguration['values']['language'] === $code ? 'selected' : '' ?>>
+                            <?= htmlspecialchars($language['name']) ?>
+                        </option>
+                    <?php endforeach; ?>
+                </select>
+            </div>
+            <div class="settings-notes">
+                <p>
+                    <i class="fa-solid fa-circle-info"></i>
+                    <?= translate('default_language_info', $i18n) ?>
+                </p>
+                <?= wallos_render_managed_notes($languageConfiguration, $i18n) ?>
+            </div>
             <div class="form-group">
                 <label for="serverUrl"><?= translate('server_url', $i18n) ?></label>
                 <input type="text" id="serverUrl" autocomplete="off" value="<?= htmlspecialchars($settings['server_url']) ?>" />

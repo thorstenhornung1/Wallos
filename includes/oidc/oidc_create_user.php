@@ -7,7 +7,15 @@ $firstname = $parts[0] ?? '';
 $lastname = $parts[1] ?? '';
 
 // Defaults
-$language = 'en';
+//
+// The provider's locale is used once, when the account is created. From then on
+// the language belongs to the Wallos user and later logins never overwrite it.
+require_once __DIR__ . '/../integration_config.php';
+
+$language = wallos_resolve_language(
+    $userInfo['locale'] ?? null,
+    wallos_instance_default_language($db)
+);
 $avatar = "images/avatars/0.svg";
 $budget = 0;
 $main_currency_id = 1; // Euro

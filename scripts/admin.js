@@ -221,6 +221,7 @@ function saveAccountRegistrationsButton() {
     require_email_validation: require_email_validation,
     server_url: server_url,
     disable_login: disable_login
+    default_language: readFieldValue("defaultLanguage"),
   };
 
   fetch('endpoints/admin/saveopenregistrations.php', {

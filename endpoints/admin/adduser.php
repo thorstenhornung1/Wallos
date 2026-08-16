@@ -1,6 +1,7 @@
 <?php
 require_once '../../includes/connect_endpoint.php';
 require_once '../../includes/validate_endpoint_admin.php';
+require_once '../../includes/integration_config.php';
 
 $currencies = [
     ['id' => 1, 'name' => 'Euro', 'symbol' => '€', 'code' => 'EUR'],
@@ -137,7 +138,10 @@ $stmt->bindValue(':id', $loggedInUserId, SQLITE3_TEXT);
 $result = $stmt->execute();
 $row = $result->fetchArray();
 $currency = $row['main_currency'] ?? 1;
-$language = wallos_resolve_language($row['language'] ?? null);
+$instanceLanguage = wallos_get_instance_language_config($db);
+$language = ($instanceLanguage['source']['language'] ?? 'default') === 'default'
+    ? wallos_resolve_language($row['language'] ?? null)   // inherit from the admin, as before
+    : $instanceLanguage['values']['language'];
 $avatar = "images/avatars/0.svg";
 
 // Get code for main currency
