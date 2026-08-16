@@ -1,5 +1,28 @@
 # Changelog
 
+## [5.6.2](https://github.com/thorstenhornung1/Wallos/releases/tag/v5.6.2) (2026-08-16)
+
+### Features
+
+* **oidc:** a configuration check in the admin area reports what Wallos already
+  knows before anyone attempts a login — an unreadable secret file, a failed
+  discovery with the provider's error, missing endpoints, a relative redirect
+  URL, and that required email verification will reject providers whose default
+  scope mapping reports `email_verified: false` ([#43](https://github.com/thorstenhornung1/Wallos/issues/43))
+
+### Bug Fixes
+
+* **oidc:** `oidc_invalid_state` covered three problems with three different
+  fixes; a malformed response, an expired session and a genuine state mismatch
+  are now distinct
+* **oidc:** a failed token exchange no longer dies with a bare string and
+  discards the provider's explanation. The response body — `invalid_client`,
+  `invalid_grant`, a redirect_uri mismatch — is logged, as are the claims a
+  userinfo response actually returned when the identifier field is missing
+
+No secret reaches the diagnostics or the log: the client secret is reported as
+a state, and authorization codes and tokens never appear.
+
 ## [5.6.1](https://github.com/thorstenhornung1/Wallos/releases/tag/v5.6.1) (2026-08-16)
 
 ### Features
