@@ -536,6 +536,7 @@ $i18n = [
     "category_technology" => "Technology",
     "category_cloud_services" => "Cloud Services",
     "category_charity_and_donations" => "Charity & Donations",
+    "oidc_diagnostics" => "Configuration check",
     "remove_stored_secret" => "Remove the stored value",
 ];
 

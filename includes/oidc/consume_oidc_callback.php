@@ -18,19 +18,33 @@ if (!isset($_GET['code']) || !isset($_GET['state'])) {
     return;
 }
 
+require_once __DIR__ . '/diagnostics.php';
+
 $code = $_GET['code'];
 $state = $_GET['state'];
 $expectedState = $_SESSION['oidc_state'] ?? null;
 
-if (
-    !is_string($code) || $code === '' ||
-    !is_string($state) || $state === '' ||
-    !is_string($expectedState) || $expectedState === '' ||
-    !hash_equals($expectedState, $state)
-) {
+// Three different problems with three different fixes, so they get three
+// different answers rather than one shared "invalid state".
+$failure = null;
+
+if (!is_string($code) || $code === '' || !is_string($state) || $state === '') {
+    $failure = 'oidc_invalid_response';
+} elseif (!is_string($expectedState) || $expectedState === '') {
+    // No state to compare against: the session is gone. Typically a cookie
+    // dropped between starting and finishing the login, or a different browser.
+    $failure = 'oidc_session_expired';
+} elseif (!hash_equals($expectedState, $state)) {
+    $failure = 'oidc_state_mismatch';
+}
+
+if ($failure !== null) {
+    wallos_oidc_log_failure($failure, [
+        'had_session_state' => is_string($expectedState) && $expectedState !== '' ? 'yes' : 'no',
+    ]);
     unset($_SESSION['oidc_state']);
     $db->close();
-    header("Location: login.php?error=oidc_invalid_state");
+    header("Location: login.php?error=" . $failure);
     exit();
 }
 

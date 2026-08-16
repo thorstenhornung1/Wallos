@@ -299,7 +299,11 @@ if (!$password_login_disabled) {
 
 if (isset($_GET['error'])) {
     $oidcError = $_GET['error'];
-    if (in_array($oidcError, ["oidc_user_not_found", "oidc_invalid_state", "oidc_email_not_verified", "oidc_invalid_config"], true)) {
+    if (in_array($oidcError, [
+        "oidc_user_not_found", "oidc_invalid_state", "oidc_email_not_verified", "oidc_invalid_config",
+        "oidc_invalid_response", "oidc_session_expired", "oidc_state_mismatch",
+        "oidc_token_exchange_failed", "oidc_userinfo_failed",
+    ], true)) {
         $loginFailed = true;
         $oidcEmailNotVerified = $oidcError === "oidc_email_not_verified";
     }

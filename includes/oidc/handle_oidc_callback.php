@@ -46,11 +46,26 @@ curl_setopt($ch, CURLOPT_POST, true);
 curl_setopt($ch, CURLOPT_HTTPHEADER, ['Content-Type: application/x-www-form-urlencoded']);
 curl_setopt($ch, CURLOPT_RESOLVE, ["{$tokenUrlInfo['host']}:{$tokenUrlInfo['port']}:{$tokenUrlInfo['ip']}"]);
 $response = curl_exec($ch);
+$curlError = curl_errno($ch) ? curl_error($ch) : null;
+$httpCode = (int) curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
 unset($ch);
 
 $tokenData = json_decode($response, true);
 if (!$tokenData || !isset($tokenData['access_token'])) {
-    die("OIDC token exchange failed.");
+    // The provider's own error body says why — invalid_client, invalid_grant,
+    // redirect_uri mismatch — and discarding it is what turns a five-minute
+    // fix into an afternoon.
+    require_once __DIR__ . '/diagnostics.php';
+    wallos_oidc_log_failure('token_exchange_failed', [
+        'http_status' => $httpCode ?: null,
+        'curl_error' => $curlError,
+        'provider_error' => is_array($tokenData) ? ($tokenData['error'] ?? null) : null,
+        'provider_error_description' => is_array($tokenData) ? ($tokenData['error_description'] ?? null) : null,
+    ]);
+
+    $db->close();
+    header("Location: login.php?error=oidc_token_exchange_failed");
+    exit();
 }
 
 $userInfoUrl = $oidcSettings['user_info_url'];
@@ -72,7 +87,16 @@ unset($ch);
 
 $userInfo = json_decode($response, true);
 if (!$userInfo || !isset($userInfo[$oidcSettings['user_identifier_field']])) {
-    die("Failed to fetch OIDC user info.");
+    require_once __DIR__ . '/diagnostics.php';
+    wallos_oidc_log_failure('userinfo_failed', [
+        'identifier_field' => $oidcSettings['user_identifier_field'],
+        'claims_returned' => is_array($userInfo) ? implode(',', array_keys($userInfo)) : null,
+        'provider_error' => is_array($userInfo) ? ($userInfo['error'] ?? null) : null,
+    ]);
+
+    $db->close();
+    header("Location: login.php?error=oidc_userinfo_failed");
+    exit();
 }
 
 $oidcSub = $userInfo[$oidcSettings['user_identifier_field']];

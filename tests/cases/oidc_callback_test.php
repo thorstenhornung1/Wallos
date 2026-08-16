@@ -40,6 +40,6 @@ wallos_test('the state is compared in constant time and consumed once', function
         'the state comparison is not vulnerable to timing');
     assert_contains("unset(\$_SESSION['oidc_state'])", $source,
         'the state is cleared so it cannot be replayed');
-    assert_contains('oidc_invalid_state', $source,
+    assert_contains('oidc_state_mismatch', $source,
         'a mismatch is reported rather than ignored');
 });

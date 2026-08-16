@@ -1,6 +1,7 @@
 <?php
 require_once 'includes/header.php';
 require_once 'includes/oidc_settings.php';
+require_once 'includes/oidc/diagnostics.php';
 require_once 'includes/ssrf_helper.php';
 require_once 'includes/integration_config.php';
 
@@ -18,6 +19,8 @@ $oidcConfiguration = wallos_get_effective_oidc_configuration($db);
 $oidcSettings = $oidcConfiguration['settings'];
 $oidcManagedFields = $oidcConfiguration['managed_fields'];
 $oidcNotes = $oidcConfiguration['notes'];
+
+$oidcDiagnostics = wallos_oidc_diagnostics($db);
 
 $ssrfConfiguration = wallos_get_effective_ssrf_allowlist($db);
 $ssrfManagedFields = $ssrfConfiguration['is_managed'] ? ['allowlist' => 'SSRF_ALLOWLIST'] : [];
@@ -316,6 +319,24 @@ $loginDisabledAllowed = $userCount == 1 && $settings['registrations_open'] == 0;
                     <?php endforeach; ?>
                 </div>
             <?php endif; ?>
+            <div class="settings-notes">
+                <p><strong><?= translate('oidc_diagnostics', $i18n) ?></strong></p>
+                <?php foreach ($oidcDiagnostics['checks'] as $check): ?>
+                    <?php
+                    $icon = [
+                        'ok' => 'fa-circle-check',
+                        'warning' => 'fa-triangle-exclamation',
+                        'error' => 'fa-circle-xmark',
+                        'unknown' => 'fa-circle-question',
+                    ][$check['status']] ?? 'fa-circle-info';
+                    ?>
+                    <p>
+                        <i class="fa-solid <?= $icon ?>" aria-hidden="true"></i>
+                        <strong><?= htmlspecialchars($check['label']) ?>:</strong>
+                        <?= htmlspecialchars($check['detail']) ?>
+                    </p>
+                <?php endforeach; ?>
+            </div>
             <div class="buttons">
                 <input type="submit" class="thin mobile-grow" value="<?= translate('save', $i18n) ?>"
                     id="saveOidcSettingsButton" onClick="saveOidcSettingsButton()" />
