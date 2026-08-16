@@ -86,122 +86,30 @@ if (isset($_POST['oidc_enabled'])) {
 }
 
 // 2. Handle OIDC detailed configurations
+//
+// The API names fields as the database does, so no mapping is needed here. The
+// normalisation, the SSRF checks and the write itself are shared with the admin
+// interface's endpoint, which is what keeps the two from drifting apart the way
+// they had: this path used to store values untrimmed, so a client id pasted
+// with a trailing space failed every later handshake as "invalid client".
 $oidcConfiguration = wallos_get_effective_oidc_configuration($db);
-$managedFields = $oidcConfiguration['managed_fields'];
-$dbSettings = wallos_get_db_oidc_settings($db);
 
-$incomingMapping = [
-    'name' => $_POST['name'] ?? null,
-    'client_id' => $_POST['client_id'] ?? null,
-    'client_secret' => $_POST['client_secret'] ?? null,
-    'authorization_url' => $_POST['authorization_url'] ?? null,
-    'token_url' => $_POST['token_url'] ?? null,
-    'user_info_url' => $_POST['user_info_url'] ?? null,
-    'redirect_url' => $_POST['redirect_url'] ?? null,
-    'logout_url' => $_POST['logout_url'] ?? null,
-    'user_identifier_field' => $_POST['user_identifier_field'] ?? null,
-    'scopes' => $_POST['scopes'] ?? null,
-    'auth_style' => $_POST['auth_style'] ?? null,
-    'auto_create_user' => isset($_POST['auto_create_user']) ? intval($_POST['auto_create_user']) : null,
-    'password_login_disabled' => isset($_POST['password_login_disabled']) ? intval($_POST['password_login_disabled']) : null,
-    'require_email_verified' => isset($_POST['require_email_verified']) ? intval($_POST['require_email_verified']) : null,
-    'admin_claim' => $_POST['admin_claim'] ?? null,
-    'admin_value' => $_POST['admin_value'] ?? null,
-];
-
-// Merge if not managed by environment
-$hasConfigChange = false;
-foreach ($incomingMapping as $field => $value) {
-    if ($value !== null) {
-        if (isset($managedFields[$field])) {
-            // Cannot modify field overridden by environment variables
-            continue;
-        }
-        $dbSettings[$field] = $value;
-        $hasConfigChange = true;
+$submitted = [];
+foreach (array_keys(wallos_oidc_writable_fields()) as $field) {
+    if (isset($_POST[$field])) {
+        $submitted[$field] = $_POST[$field];
     }
 }
 
-if ($hasConfigChange) {
-    // SSRF validations
-    if ($dbSettings['token_url'] && validate_oidc_endpoint_url($dbSettings['token_url'], $db) === false) {
-        echo json_encode([
-            "success" => false,
-            "title" => "Security Error",
-            "message" => "Security Error: Token URL must not target link-local or loopback addresses."
-        ]);
-        exit;
-    }
+$result = wallos_save_oidc_settings($db, $submitted, $oidcConfiguration['managed_fields']);
 
-    if ($dbSettings['user_info_url'] && validate_oidc_endpoint_url($dbSettings['user_info_url'], $db) === false) {
-        echo json_encode([
-            "success" => false,
-            "title" => "Security Error",
-            "message" => "Security Error: User Info URL must not target link-local or loopback addresses."
-        ]);
-        exit;
-    }
-
-    // Save to oauth_settings table
-    $checkStmt = $db->prepare('SELECT COUNT(*) as count FROM oauth_settings WHERE id = 1');
-    $resultCheck = $checkStmt->execute();
-    $rowCheck = $resultCheck->fetchArray(SQLITE3_ASSOC);
-
-    if ($rowCheck['count'] > 0) {
-        $stmtSave = $db->prepare('UPDATE oauth_settings SET 
-                name = :oidcName, 
-                client_id = :oidcClientId, 
-                client_secret = :oidcClientSecret, 
-                authorization_url = :oidcAuthUrl, 
-                token_url = :oidcTokenUrl, 
-                user_info_url = :oidcUserInfoUrl, 
-                redirect_url = :oidcRedirectUrl, 
-                logout_url = :oidcLogoutUrl, 
-                user_identifier_field = :oidcUserIdentifierField, 
-                scopes = :oidcScopes, 
-                auth_style = :oidcAuthStyle,
-                auto_create_user = :oidcAutoCreateUser,
-                password_login_disabled = :oidcPasswordLoginDisabled,
-                require_email_verified = :oidcRequireEmailVerified,
-                admin_claim = :oidcAdminClaim,
-                admin_value = :oidcAdminValue
-                WHERE id = 1');
-    } else {
-        $stmtSave = $db->prepare('INSERT INTO oauth_settings (
-                id, name, client_id, client_secret, authorization_url, token_url, user_info_url, redirect_url, logout_url, user_identifier_field, scopes, auth_style, auto_create_user, password_login_disabled, require_email_verified, admin_claim, admin_value
-            ) VALUES (
-                1, :oidcName, :oidcClientId, :oidcClientSecret, :oidcAuthUrl, :oidcTokenUrl, :oidcUserInfoUrl, :oidcRedirectUrl, :oidcLogoutUrl, :oidcUserIdentifierField, :oidcScopes, :oidcAuthStyle, :oidcAutoCreateUser, :oidcPasswordLoginDisabled, :oidcRequireEmailVerified, :oidcAdminClaim, :oidcAdminValue
-            )');
-    }
-
-    $stmtSave->bindValue(':oidcName', $dbSettings['name'], SQLITE3_TEXT);
-    $stmtSave->bindValue(':oidcClientId', $dbSettings['client_id'], SQLITE3_TEXT);
-    $stmtSave->bindValue(':oidcClientSecret', $dbSettings['client_secret'], SQLITE3_TEXT);
-    $stmtSave->bindValue(':oidcAuthUrl', $dbSettings['authorization_url'], SQLITE3_TEXT);
-    $stmtSave->bindValue(':oidcTokenUrl', $dbSettings['token_url'], SQLITE3_TEXT);
-    $stmtSave->bindValue(':oidcUserInfoUrl', $dbSettings['user_info_url'], SQLITE3_TEXT);
-    $stmtSave->bindValue(':oidcRedirectUrl', $dbSettings['redirect_url'], SQLITE3_TEXT);
-    $stmtSave->bindValue(':oidcLogoutUrl', $dbSettings['logout_url'], SQLITE3_TEXT);
-    $stmtSave->bindValue(':oidcUserIdentifierField', $dbSettings['user_identifier_field'], SQLITE3_TEXT);
-    $stmtSave->bindValue(':oidcScopes', $dbSettings['scopes'], SQLITE3_TEXT);
-    $stmtSave->bindValue(':oidcAuthStyle', $dbSettings['auth_style'], SQLITE3_TEXT);
-    $stmtSave->bindValue(':oidcAutoCreateUser', $dbSettings['auto_create_user'], SQLITE3_INTEGER);
-    $stmtSave->bindValue(':oidcPasswordLoginDisabled', $dbSettings['password_login_disabled'], SQLITE3_INTEGER);
-    $stmtSave->bindValue(':oidcRequireEmailVerified', $dbSettings['require_email_verified'], SQLITE3_INTEGER);
-    // Trimmed: a trailing space in a claim name is invisible in the form and
-    // would silently stop every match, since comparison is exact.
-    $stmtSave->bindValue(':oidcAdminClaim', trim((string) ($dbSettings['admin_claim'] ?? '')), SQLITE3_TEXT);
-    $stmtSave->bindValue(':oidcAdminValue', trim((string) ($dbSettings['admin_value'] ?? '')), SQLITE3_TEXT);
-    
-    $resultSave = $stmtSave->execute();
-    if (!$resultSave) {
-        echo json_encode([
-            'success' => false,
-            'title' => 'Database error',
-            'message' => 'Failed to save OIDC configurations.'
-        ]);
-        exit;
-    }
+if (!$result['success']) {
+    echo json_encode([
+        'success' => false,
+        'title' => strpos((string) $result['error'], 'Security Error') === 0 ? 'Security Error' : 'Database error',
+        'message' => $result['error']
+    ]);
+    exit;
 }
 
 echo json_encode([

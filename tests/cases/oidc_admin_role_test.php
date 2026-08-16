@@ -325,15 +325,29 @@ wallos_test('the role migration is idempotent for the columns', function () {
     $db->close();
 });
 
-wallos_test('both save paths write the claim mapping', function () {
+wallos_test('both save paths go through one writer', function () {
     // Two endpoints save OIDC settings — the admin interface posts to
-    // endpoints/, the API to api/. A field added to one and forgotten in the
-    // other is silently unsaveable from whichever was missed.
+    // endpoints/, the API to api/. They had drifted: one trimmed every text
+    // field, the other trimmed none. Sharing the writer is what stops a field
+    // added to one from being silently unsaveable through the other.
     foreach (['endpoints/admin/saveoidcsettings.php', 'api/admin/set_oidc_settings.php'] as $path) {
         $source = file_get_contents(WALLOS_ROOT . '/' . $path);
 
-        assert_true(strpos($source, 'admin_claim') !== false, $path . ' saves admin_claim');
-        assert_true(strpos($source, 'admin_value') !== false, $path . ' saves admin_value');
+        assert_true(strpos($source, 'wallos_save_oidc_settings') !== false,
+            $path . ' should write through the shared function');
+        assert_true(strpos($source, 'INSERT INTO oauth_settings') === false,
+            $path . ' should not carry its own copy of the write');
+    }
+});
+
+wallos_test('every writable field is saveable through both paths', function () {
+    // The interface maps camelCase names; the API uses database names. A field
+    // in the shared list that neither path passes through is unreachable.
+    $ui = file_get_contents(WALLOS_ROOT . '/endpoints/admin/saveoidcsettings.php');
+
+    foreach (array_keys(wallos_oidc_writable_fields()) as $field) {
+        assert_true(strpos($ui, "'" . $field . "' =>") !== false,
+            $field . ' is missing from the interface field map');
     }
 });
 
@@ -365,4 +379,80 @@ wallos_test('the login path synchronises the role', function () {
         strpos($source, 'wallos_sync_oidc_admin_role') !== false,
         'every OIDC sign-in path passes through oidc_login.php, so the sync belongs there'
     );
+});
+
+// ------------------------------------------------------------- shared writer
+
+wallos_test('saving trims text on both paths', function () {
+    // The API used to store values untrimmed. A client id pasted with a
+    // trailing space then failed every handshake as 'invalid client', with
+    // nothing in the message pointing at a space nobody can see.
+    $db = wallos_test_open_database();
+
+    wallos_save_oidc_settings($db, ['client_id' => '  abc  ', 'name' => " Authentik\n"], []);
+    $settings = wallos_get_db_oidc_settings($db);
+
+    assert_same('abc', $settings['client_id'], 'client id trimmed');
+    assert_same('Authentik', $settings['name'], 'and so is everything else');
+
+    $db->close();
+});
+
+wallos_test('an absent field keeps its stored value', function () {
+    $db = wallos_test_open_database();
+    wallos_save_oidc_settings($db, ['client_id' => 'abc', 'scopes' => 'openid email'], []);
+
+    wallos_save_oidc_settings($db, ['client_id' => 'def'], []);
+    $settings = wallos_get_db_oidc_settings($db);
+
+    assert_same('def', $settings['client_id'], 'the submitted field changed');
+    assert_same('openid email', $settings['scopes'], 'the absent one did not');
+
+    $db->close();
+});
+
+wallos_test('a field submitted empty is cleared', function () {
+    // Distinct from absent: clearing a value has to stay possible.
+    $db = wallos_test_open_database();
+    wallos_save_oidc_settings($db, ['logout_url' => 'https://auth.example.com/end'], []);
+
+    wallos_save_oidc_settings($db, ['logout_url' => ''], []);
+
+    assert_same('', wallos_get_db_oidc_settings($db)['logout_url'], 'cleared');
+
+    $db->close();
+});
+
+wallos_test('an environment-managed field is not writable', function () {
+    // Accepting an edit the next page load discards would be worse than
+    // refusing it.
+    $db = wallos_test_open_database();
+    wallos_save_oidc_settings($db, ['client_id' => 'from-ui'], ['client_id' => 'OIDC_CLIENT_ID']);
+
+    assert_same('', wallos_get_db_oidc_settings($db)['client_id'], 'the write was skipped');
+
+    $db->close();
+});
+
+wallos_test('integers stay integers', function () {
+    $db = wallos_test_open_database();
+
+    wallos_save_oidc_settings($db, ['auto_create_user' => '1', 'require_email_verified' => '0'], []);
+    $settings = wallos_get_db_oidc_settings($db);
+
+    assert_same(1, (int) $settings['auto_create_user'], 'checkbox on');
+    assert_same(0, (int) $settings['require_email_verified'], 'checkbox off');
+
+    $db->close();
+});
+
+wallos_test('submitting nothing is not an error', function () {
+    $db = wallos_test_open_database();
+
+    $result = wallos_save_oidc_settings($db, [], []);
+
+    assert_true($result['success'], 'no failure');
+    assert_true(!$result['changed'], 'and nothing was written');
+
+    $db->close();
 });

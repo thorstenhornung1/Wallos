@@ -264,3 +264,125 @@ function wallos_get_effective_oidc_configuration($db)
         'is_configured' => $isConfigured,
     ];
 }
+
+/**
+ * The OIDC settings that can be written, and how each is normalised.
+ *
+ * One list, because there are two save paths — the admin interface posts to
+ * endpoints/admin/saveoidcsettings.php and the API to
+ * api/admin/set_oidc_settings.php. They had drifted: the interface trimmed
+ * every text field, the API trimmed none, so a client id pasted with a trailing
+ * space through the API was stored with it and every later handshake failed as
+ * "invalid client" with nothing pointing at the cause.
+ *
+ * @return array<string, string> field => 'text' | 'int'
+ */
+function wallos_oidc_writable_fields()
+{
+    return [
+        'name' => 'text',
+        'client_id' => 'text',
+        'client_secret' => 'text',
+        'authorization_url' => 'text',
+        'token_url' => 'text',
+        'user_info_url' => 'text',
+        'redirect_url' => 'text',
+        'logout_url' => 'text',
+        'user_identifier_field' => 'text',
+        'scopes' => 'text',
+        'auth_style' => 'text',
+        'auto_create_user' => 'int',
+        'password_login_disabled' => 'int',
+        'require_email_verified' => 'int',
+        'admin_claim' => 'text',
+        'admin_value' => 'text',
+    ];
+}
+
+/**
+ * Write OIDC settings, whatever asked for the write.
+ *
+ * A field absent from $submitted keeps its stored value. Present means write,
+ * including writing an empty string — clearing a field has to stay possible.
+ * The interface always submits every field, so this only changes what a partial
+ * API request does, and leaving values alone is the safer reading of silence.
+ *
+ * Fields managed by an environment variable are skipped: the environment is
+ * the authority for them, and accepting an edit that the next page load
+ * discards would be worse than refusing it.
+ *
+ * @param SQLite3 $db
+ * @param array   $submitted     field => value, already keyed by database field
+ * @param array   $managedFields field => environment variable name
+ * @return array{success: bool, error: string|null, changed: bool}
+ */
+function wallos_save_oidc_settings($db, $submitted, $managedFields)
+{
+    $writable = wallos_oidc_writable_fields();
+    $settings = wallos_get_db_oidc_settings($db);
+    $changed = false;
+
+    foreach ($writable as $field => $type) {
+        if (!array_key_exists($field, $submitted) || $submitted[$field] === null) {
+            continue;
+        }
+        if (isset($managedFields[$field])) {
+            continue;
+        }
+
+        $settings[$field] = $type === 'int'
+            ? (int) $submitted[$field]
+            : trim((string) $submitted[$field]);
+        $changed = true;
+    }
+
+    if (!$changed) {
+        return ['success' => true, 'error' => null, 'changed' => false];
+    }
+
+    foreach (['token_url' => 'Token URL', 'user_info_url' => 'User Info URL'] as $field => $label) {
+        if ($settings[$field] && validate_oidc_endpoint_url($settings[$field], $db) === false) {
+            return [
+                'success' => false,
+                'error' => 'Security Error: ' . $label . ' must not target link-local or loopback addresses.',
+                'changed' => false,
+            ];
+        }
+    }
+
+    $columns = array_keys($writable);
+    $exists = (int) $db->querySingle('SELECT COUNT(*) FROM oauth_settings WHERE id = 1') > 0;
+
+    if ($exists) {
+        $assignments = [];
+        foreach ($columns as $column) {
+            $assignments[] = $column . ' = :' . $column;
+        }
+        $stmt = $db->prepare('UPDATE oauth_settings SET ' . implode(', ', $assignments) . ' WHERE id = 1');
+    } else {
+        $placeholders = [];
+        foreach ($columns as $column) {
+            $placeholders[] = ':' . $column;
+        }
+        $stmt = $db->prepare('INSERT INTO oauth_settings (id, ' . implode(', ', $columns) . ')
+                              VALUES (1, ' . implode(', ', $placeholders) . ')');
+    }
+
+    if ($stmt === false) {
+        return ['success' => false, 'error' => 'Failed to save OIDC configurations.', 'changed' => false];
+    }
+
+    foreach ($writable as $field => $type) {
+        $stmt->bindValue(
+            ':' . $field,
+            $type === 'int' ? (int) ($settings[$field] ?? 0) : (string) ($settings[$field] ?? ''),
+            $type === 'int' ? SQLITE3_INTEGER : SQLITE3_TEXT
+        );
+    }
+
+    if ($stmt->execute() === false) {
+        return ['success' => false, 'error' => 'Failed to save OIDC configurations.', 'changed' => false];
+    }
+
+    return ['success' => true, 'error' => null, 'changed' => true];
+}

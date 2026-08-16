@@ -11,12 +11,12 @@
 #
 # Do not edit by hand — run dev/db-audit.sh --update and commit the diff.
 #
-# total: 1528 matches in 213 file(s)
+# total: 1497 matches in 212 file(s)
 admin.php	5
 api/admin/get_admin_settings.php	1
 api/admin/set_admin_settings.php	20
 api/admin/set_disable_password_login.php	1
-api/admin/set_oidc_settings.php	18
+api/admin/set_oidc_settings.php	1
 api/categories/get_categories.php	3
 api/categories/set_categories.php	21
 api/currencies/get_currencies.php	3
@@ -45,7 +45,6 @@ endpoints/admin/adduser.php	31
 endpoints/admin/deleteunusedlogos.php	2
 endpoints/admin/deleteuser.php	21
 endpoints/admin/enableoidc.php	1
-endpoints/admin/saveoidcsettings.php	17
 endpoints/admin/saveopenregistrations.php	6
 endpoints/admin/savesecuritysettings.php	1
 endpoints/admin/savesmtpsettings.php	1
@@ -144,7 +143,7 @@ includes/oidc/diagnostics.php	2
 includes/oidc/handle_oidc_callback.php	8
 includes/oidc/oidc_create_user.php	29
 includes/oidc/oidc_login.php	4
-includes/oidc_settings.php	2
+includes/oidc_settings.php	5
 includes/remember_me.php	7
 includes/run_migrations.php	4
 includes/session_tokens.php	2
