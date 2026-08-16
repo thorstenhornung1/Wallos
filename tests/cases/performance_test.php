@@ -6,6 +6,9 @@
   number of rows, and shared credentials must not multiply outbound calls.
   Cases marked pending describe behaviour that is specified but not implemented
   yet — they report without failing the suite.
+
+  Conversion query counts live in currency_rates_test.php and index coverage in
+  subscription_index_test.php, now that both are implemented.
 */
 
 require_once WALLOS_ROOT . '/includes/integration_config.php';
@@ -44,29 +47,6 @@ wallos_test('subscription seeding produces the expected fixture', function () {
 
     $db->close();
 });
-
-wallos_test_pending(
-    'currency conversion does not query once per subscription',
-    'specification 45.3 / acceptance 16 — conversion still issues one SELECT per subscription',
-    function () {
-        // list_subscriptions.php runs page code at include time, so the shape is
-        // asserted on the source until conversion moves behind a callable that
-        // takes an already loaded rate map.
-        $paths = [
-            'includes/list_subscriptions.php',
-            'api/subscriptions/get_subscriptions.php',
-            'includes/stats_calculations.php',
-        ];
-
-        foreach ($paths as $path) {
-            $source = file_get_contents(WALLOS_ROOT . '/' . $path);
-            $perRowLookups = preg_match_all('/SELECT rate FROM currencies/', $source);
-
-            assert_same(0, $perRowLookups,
-                $path . ' should convert from a loaded rate map, not query per row');
-        }
-    }
-);
 
 wallos_test_pending(
     'effective configuration is resolved once per request',
@@ -118,25 +98,6 @@ wallos_test_pending(
 
         assert_true($perProviderQueries <= 1,
             'notification settings should be loaded in bulk (found ' . $perProviderQueries . ' per-user queries)');
-    }
-);
-
-wallos_test_pending(
-    'subscription queries have supporting indexes',
-    'specification 45.6 / acceptance 44 — no indexes are created by any migration yet',
-    function () {
-        $db = wallos_test_open_database();
-
-        $indexes = [];
-        $result = $db->query("SELECT name FROM sqlite_master WHERE type='index' AND tbl_name='subscriptions'");
-        while ($row = $result->fetchArray(SQLITE3_ASSOC)) {
-            $indexes[] = $row['name'];
-        }
-
-        assert_true($indexes !== [],
-            'the subscriptions table should have at least one deliberate index');
-
-        $db->close();
     }
 );
 

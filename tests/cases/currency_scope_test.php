@@ -79,8 +79,7 @@ wallos_test('every currency rate update in the code base is user scoped', functi
     // The regression guard: any future rate write that forgets the user filter
     // fails here rather than silently corrupting other accounts in production.
     $paths = [
-        'endpoints/cronjobs/updateexchange.php',
-        'endpoints/currency/update_exchange.php',
+        'includes/currency_provider.php',
     ];
 
     foreach ($paths as $path) {

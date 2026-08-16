@@ -91,20 +91,19 @@ wallos_test('one prepared statement serves the whole rate loop', function () {
     $db->close();
 });
 
-wallos_test('both refresh paths wrap their writes in a transaction', function () {
+wallos_test('the shared refresh helper wraps its writes in a transaction', function () {
     // Structural guard: a future refresh path that autocommits per currency
     // fails here rather than shipping a half-converted rate set.
-    foreach (['endpoints/cronjobs/updateexchange.php', 'endpoints/currency/update_exchange.php'] as $path) {
-        $source = file_get_contents(WALLOS_ROOT . '/' . $path);
+    $path = 'includes/currency_provider.php';
+    $source = file_get_contents(WALLOS_ROOT . '/' . $path);
 
-        assert_contains("BEGIN", $source, $path . ' opens a transaction');
-        assert_contains("COMMIT", $source, $path . ' commits it');
-        assert_contains("ROLLBACK", $source, $path . ' rolls back on failure');
+    assert_contains("BEGIN", $source, $path . ' opens a transaction');
+    assert_contains("COMMIT", $source, $path . ' commits it');
+    assert_contains("ROLLBACK", $source, $path . ' rolls back on failure');
 
-        // The prepare must sit outside the loop over the provider rates.
-        $preparePosition = strpos($source, 'UPDATE currencies SET rate');
-        $loopPosition = strpos($source, "foreach (\$apiData['rates']");
-        assert_true($preparePosition !== false && $loopPosition !== false && $preparePosition < $loopPosition,
-            $path . ' prepares the rate update once, before the loop');
-    }
+    // The prepare must sit outside the loop over the provider rates.
+    $preparePosition = strpos($source, 'UPDATE currencies SET rate');
+    $loopPosition = strpos($source, "foreach (\$rates['rates']");
+    assert_true($preparePosition !== false && $loopPosition !== false && $preparePosition < $loopPosition,
+        $path . ' prepares the rate update once, before the loop');
 });

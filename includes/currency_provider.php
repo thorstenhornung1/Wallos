@@ -156,14 +156,27 @@ function wallos_update_exchange_rates_for_user($db, $userId)
 
     $mainCurrencyToEUR = $rates['rates'][$mainCurrencyCode];
 
+    // One user's rates and their refresh date are one unit of work. Rates are
+    // only comparable when they share a conversion base, so a refresh that
+    // stops halfway would leave a set that looks plausible and is wrong.
+    $db->exec('BEGIN');
+
+    $updateStmt = $db->prepare('UPDATE currencies SET rate = :rate WHERE code = :code AND user_id = :userId');
+
     foreach ($rates['rates'] as $currencyCode => $rate) {
         $exchangeRate = $currencyCode === $mainCurrencyCode ? 1.0 : $rate / $mainCurrencyToEUR;
 
-        $updateStmt = $db->prepare('UPDATE currencies SET rate = :rate WHERE code = :code AND user_id = :userId');
         $updateStmt->bindValue(':rate', $exchangeRate, SQLITE3_TEXT);
         $updateStmt->bindValue(':code', $currencyCode, SQLITE3_TEXT);
         $updateStmt->bindValue(':userId', $userId, SQLITE3_INTEGER);
-        $updateStmt->execute();
+
+        if (!$updateStmt->execute()) {
+            $db->exec('ROLLBACK');
+
+            return ['success' => false, 'message' => 'Rate update failed for ' . $currencyCode . '; the previous rates were kept.'];
+        }
+
+        $updateStmt->reset();
     }
 
     $formattedDate = (new DateTime())->format('Y-m-d');
@@ -176,6 +189,8 @@ function wallos_update_exchange_rates_for_user($db, $userId)
     $insertStmt->bindValue(':date', $formattedDate, SQLITE3_TEXT);
     $insertStmt->bindValue(':userId', $userId, SQLITE3_INTEGER);
     $insertStmt->execute();
+
+    $db->exec('COMMIT');
 
     return ['success' => true, 'message' => 'Rates updated successfully!'];
 }
