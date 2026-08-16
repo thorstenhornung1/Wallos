@@ -1,5 +1,19 @@
 # Changelog
 
+## [5.6.1](https://github.com/thorstenhornung1/Wallos/releases/tag/v5.6.1) (2026-08-16)
+
+### Features
+
+* **i18n:** default categories are seeded in the language of the account being
+  created, rather than always in English. The list is no longer duplicated
+  across registration, the admin form and OIDC provisioning ([#38](https://github.com/thorstenhornung1/Wallos/issues/38))
+
+German is translated; other languages fall back to English per key, which is
+what they showed before. Adding a language is sixteen entries in one file.
+
+Existing accounts are untouched: seeded categories are user-owned data from the
+moment they are created, and changing a language never renames them.
+
 ## [5.6.0](https://github.com/thorstenhornung1/Wallos/releases/tag/v5.6.0) (2026-08-16)
 
 ### Features
