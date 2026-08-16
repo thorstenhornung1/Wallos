@@ -1,0 +1,57 @@
+# Local development and test environment for Wallos.
+#
+#   podman compose -f dev/compose.yaml up -d --build
+#
+# The working copy is mounted into the container, so PHP changes take effect on
+# the next request without rebuilding. Mailpit accepts every mail Wallos sends
+# and shows it at http://localhost:8025.
+
+services:
+  wallos:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    container_name: wallos-dev
+    ports:
+      - "8383:80"
+    volumes:
+      # Live source. startup.sh is invoked through sh so the mount does not need
+      # the executable bit the image sets during build.
+      - ..:/var/www/html:Z
+      - ./secrets:/run/secrets:ro,Z
+    command: ["sh", "/var/www/html/startup.sh"]
+    environment:
+      TZ: Europe/Berlin
+
+      # Private addresses need to be allowlisted for SMTP and self-hosted AI.
+      SSRF_ALLOWLIST: mailpit,mailpit:1025
+
+      # Shared instance SMTP, delivered to Mailpit.
+      WALLOS_SMTP_HOST: mailpit
+      WALLOS_SMTP_PORT: "1025"
+      WALLOS_SMTP_ENCRYPTION: none
+      WALLOS_SMTP_FROM: wallos@example.com
+      WALLOS_SMTP_FROM_NAME: Wallos Instance
+      # Demonstrates *_FILE handling; see dev/secrets/.
+      WALLOS_SMTP_PASSWORD_FILE: /run/secrets/smtp_password
+
+      # Shared instance currency provider (the key is deliberately invalid, so
+      # refreshes fail in a controlled way instead of spending a real quota).
+      WALLOS_CURRENCY_PROVIDER: apilayer
+      WALLOS_CURRENCY_API_KEY_FILE: /run/secrets/currency_api_key
+
+      # Shared instance AI provider.
+      WALLOS_AI_PROVIDER: chatgpt
+      WALLOS_AI_MODEL: gpt-4o-mini
+      WALLOS_AI_API_KEY_FILE: /run/secrets/ai_api_key
+    depends_on:
+      - mailpit
+
+  mailpit:
+    image: docker.io/axllent/mailpit:latest
+    container_name: wallos-dev-mailpit
+    ports:
+      - "8025:8025"
+    environment:
+      MP_SMTP_AUTH_ACCEPT_ANY: "1"
+      MP_SMTP_AUTH_ALLOW_INSECURE: "1"

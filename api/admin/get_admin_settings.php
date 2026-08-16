@@ -36,6 +36,7 @@ Example response:
 */
 
 require_once '../../includes/connect_endpoint.php';
+require_once '../../includes/integration_config.php';
 
 header('Content-Type: application/json; charset=UTF-8');
 
@@ -96,11 +97,36 @@ if ($_SERVER["REQUEST_METHOD"] === "POST" || $_SERVER["REQUEST_METHOD"] === "GET
         }
     }
 
+    // Effective instance integrations, reported with their source instead of
+    // their secrets. The legacy fields above stay for compatibility.
+    $smtpConfiguration = wallos_get_instance_smtp_config($db);
+    $currencyConfiguration = wallos_get_instance_currency_config($db);
+    $aiConfiguration = wallos_get_instance_ai_config($db);
+
+    $admin_settings['smtp'] = wallos_smtp_public_payload($smtpConfiguration)
+        + ['username' => $smtpConfiguration['values']['username'], 'source' => $smtpConfiguration['source']];
+
+    $admin_settings['currency_provider'] = [
+        'provider' => (int) $currencyConfiguration['values']['provider'] === 1 ? 'apilayer' : 'fixer',
+        'api_key' => wallos_secret_status($currencyConfiguration, 'api_key'),
+        'source' => $currencyConfiguration['source'],
+        'valid' => $currencyConfiguration['valid'],
+    ];
+
+    $admin_settings['ai_provider'] = [
+        'provider' => $aiConfiguration['values']['type'],
+        'base_url' => $aiConfiguration['values']['url'],
+        'model' => $aiConfiguration['values']['model'],
+        'api_key' => wallos_secret_status($aiConfiguration, 'api_key'),
+        'source' => $aiConfiguration['source'],
+        'valid' => $aiConfiguration['valid'],
+    ];
+
     $response = [
         "success" => true,
         "title" => "admin_settings",
         "admin_settings" => $admin_settings,
-        "notes" => []
+        "notes" => array_merge($smtpConfiguration['notes'], $currencyConfiguration['notes'], $aiConfiguration['notes'])
     ];
 
     echo json_encode($response);

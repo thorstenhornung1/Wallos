@@ -2,6 +2,7 @@
 require_once 'includes/connect.php';
 require_once 'includes/checkuser.php';
 require_once 'includes/oidc_settings.php';
+require_once 'includes/integration_config.php';
 
 require_once 'includes/i18n/languages.php';
 require_once 'includes/i18n/getlang.php';
@@ -265,7 +266,7 @@ if (isset($_POST['username']) && isset($_POST['password'])) {
 $registrations = false;
 $resetPasswordEnabled = false;
 if (!$password_login_disabled) {
-    $adminQuery = "SELECT registrations_open, max_users, server_url, smtp_address FROM admin";
+    $adminQuery = "SELECT registrations_open, max_users, server_url FROM admin";
     $adminResult = $db->query($adminQuery);
     $adminRow = $adminResult->fetchArray(SQLITE3_ASSOC);
     $registrationsOpen = $adminRow['registrations_open'];
@@ -283,7 +284,9 @@ if (!$password_login_disabled) {
         }
     }
 
-    if ($adminRow['smtp_address'] != "" && $adminRow['server_url'] != "") {
+    // Password resets need a usable instance transport, which may come from the
+    // environment rather than the database.
+    if (wallos_get_instance_smtp_config($db)['valid'] && $adminRow['server_url'] != "") {
         $resetPasswordEnabled = true;
     }
 }

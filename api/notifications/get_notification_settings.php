@@ -72,6 +72,7 @@ Example response:
 */
 
 require_once '../../includes/connect_endpoint.php';
+require_once '../../includes/integration_config.php';
 
 header('Content-Type: application/json; charset=UTF-8');
 
@@ -133,6 +134,12 @@ if ($_SERVER["REQUEST_METHOD"] === "POST" || $_SERVER["REQUEST_METHOD"] === "GET
         }
         $notification_settings['email_notifications'] = $email_notifications;
     }
+
+    // Structured view of the transport that is actually effective. Instance
+    // credentials are reported as a status, never as a value.
+    $notification_settings['smtp'] = wallos_smtp_public_payload(
+        wallos_get_effective_smtp_config($db, $userId)
+    );
 
     $query = "SELECT * FROM discord_notifications WHERE user_id = :userId";
     $stmt = $db->prepare($query);

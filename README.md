@@ -253,6 +253,80 @@ Wallos blocks webhook, SMTP, and OIDC endpoint URLs that resolve to private/link
 
 Setting the `SSRF_ALLOWLIST` environment variable overrides the database value entirely (same full-override semantics as the `OIDC_*` variables above), so the allowlist can be provisioned on first boot with no manual UI step. It accepts a comma-separated list of hosts/IPs, optionally with a port (e.g. `SSRF_ALLOWLIST=auth.example.com,192.168.1.100:8123`). While set, the Security Settings field in the Admin UI is shown but disabled.
 
+## Shared instance integrations
+
+In a multi-user installation, SMTP, the currency exchange provider and the AI provider are usually infrastructure that belongs to the installation, not to each individual user. Wallos can therefore configure them once for the whole instance, and every user inherits them by default.
+
+Each of those integrations offers an explicit choice in the user settings:
+
+* **Use instance …** — the credentials configured for the installation are used. They are resolved at runtime and never sent to the browser.
+* **Use custom …** — the user's own credentials are used, exactly as before.
+
+Existing installations keep working after an upgrade: a user who already had their own SMTP server, currency API key or AI provider is migrated to `custom`, so nothing changes for them until they deliberately switch.
+
+Personal settings stay personal. Notification recipients, chat IDs, topics, webhook destinations, the main currency, whether AI recommendations are enabled and their schedule remain per user.
+
+Instance values can be set in **Admin → SMTP Settings** and **Admin → Instance Integrations**, or declaratively through environment variables. When a variable is set, it takes precedence over the database, the corresponding admin field is shown read-only, and the value is never written to SQLite.
+
+| Environment Variable | Purpose |
+| --- | --- |
+| `WALLOS_SMTP_HOST` | SMTP server address |
+| `WALLOS_SMTP_PORT` | SMTP port |
+| `WALLOS_SMTP_ENCRYPTION` | `none`, `tls` or `ssl` |
+| `WALLOS_SMTP_USERNAME` | SMTP username |
+| `WALLOS_SMTP_PASSWORD` | SMTP password |
+| `WALLOS_SMTP_PASSWORD_FILE` | Path to a file containing the SMTP password |
+| `WALLOS_SMTP_FROM` | Sender address |
+| `WALLOS_SMTP_FROM_NAME` | Sender name (optional) |
+| `WALLOS_CURRENCY_PROVIDER` | `fixer` or `apilayer` |
+| `WALLOS_CURRENCY_API_KEY` | Exchange rate provider API key |
+| `WALLOS_CURRENCY_API_KEY_FILE` | Path to a file containing that API key |
+| `WALLOS_AI_PROVIDER` | `chatgpt`, `gemini`, `openrouter`, `ollama` or `openai-compatible` |
+| `WALLOS_AI_API_KEY` | AI provider API key |
+| `WALLOS_AI_API_KEY_FILE` | Path to a file containing that API key |
+| `WALLOS_AI_BASE_URL` | Base URL for `ollama` and `openai-compatible` |
+| `WALLOS_AI_MODEL` | Model used by default |
+
+### Secret files
+
+Every secret variable has a `*_FILE` companion that reads the value from a file, which fits Docker Secrets, Kubernetes Secrets, Podman Secrets and any other mounted secret. Trailing newlines are stripped; the rest of the file is used verbatim.
+
+The `*_FILE` variant takes precedence over the plain variable. If a configured secret file cannot be read, the integration is reported as misconfigured rather than falling back to a previously stored credential, so a failed rotation never silently keeps using the old secret.
+
+```yaml
+services:
+  wallos:
+    image: bellamy/wallos:latest
+    environment:
+      WALLOS_SMTP_HOST: smtp.example.internal
+      WALLOS_SMTP_PORT: "587"
+      WALLOS_SMTP_ENCRYPTION: tls
+      WALLOS_SMTP_USERNAME: wallos
+      WALLOS_SMTP_PASSWORD_FILE: /run/secrets/smtp_password
+      WALLOS_SMTP_FROM: wallos@example.com
+      WALLOS_CURRENCY_PROVIDER: apilayer
+      WALLOS_CURRENCY_API_KEY_FILE: /run/secrets/currency_api_key
+      WALLOS_AI_PROVIDER: openai-compatible
+      WALLOS_AI_BASE_URL: https://llm.example.internal/v1
+      WALLOS_AI_MODEL: example-model
+      WALLOS_AI_API_KEY_FILE: /run/secrets/ai_api_key
+      SSRF_ALLOWLIST: smtp.example.internal,llm.example.internal
+    secrets:
+      - smtp_password
+      - currency_api_key
+      - ai_api_key
+
+secrets:
+  smtp_password:
+    file: ./secrets/smtp_password
+  currency_api_key:
+    file: ./secrets/currency_api_key
+  ai_api_key:
+    file: ./secrets/ai_api_key
+```
+
+Host based integrations keep their SSRF validation: self-hosted SMTP servers, Ollama and OpenAI-compatible endpoints on private addresses still need to be present in the allowlist described below.
+
 ## API Documentation
 
 Wallos provides a comprehensive API that allows you to interact with the application programmatically. The API documentation is available at [https://api.wallosapp.com/](https://api.wallosapp.com/).

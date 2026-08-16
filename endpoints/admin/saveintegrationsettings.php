@@ -1,0 +1,91 @@
+<?php
+
+require_once '../../includes/connect_endpoint.php';
+require_once '../../includes/validate_endpoint_admin.php';
+require_once '../../includes/ssrf_helper.php';
+require_once '../../includes/integration_config.php';
+
+$postData = file_get_contents("php://input");
+$data = json_decode($postData, true);
+
+$currencyConfiguration = wallos_get_instance_currency_config($db);
+$aiConfiguration = wallos_get_instance_ai_config($db);
+
+$currencyProvider = trim((string) ($data['currency_provider'] ?? ''));
+$currencyApiKey = trim((string) ($data['currency_api_key'] ?? ''));
+$aiProvider = strtolower(trim((string) ($data['ai_provider'] ?? '')));
+$aiBaseUrl = trim((string) ($data['ai_base_url'] ?? ''));
+$aiModel = trim((string) ($data['ai_model'] ?? ''));
+$aiApiKey = trim((string) ($data['ai_api_key'] ?? ''));
+
+if ($currencyProvider !== '' && wallos_parse_currency_provider($currencyProvider) === null) {
+    die(json_encode([
+        "success" => false,
+        "message" => translate('error', $i18n)
+    ]));
+}
+
+if ($aiProvider !== '' && !in_array($aiProvider, WALLOS_AI_PROVIDERS, true)) {
+    die(json_encode([
+        "success" => false,
+        "message" => translate('error', $i18n)
+    ]));
+}
+
+// Self-hosted AI endpoints stay subject to the same SSRF validation as every
+// other host based integration.
+if ($aiBaseUrl !== '' && empty($aiConfiguration['managed']['url'])) {
+    $parsedUrl = parse_url($aiBaseUrl);
+    if (
+        !isset($parsedUrl['scheme']) ||
+        !in_array(strtolower($parsedUrl['scheme']), ['http', 'https']) ||
+        !filter_var($aiBaseUrl, FILTER_VALIDATE_URL)
+    ) {
+        die(json_encode([
+            "success" => false,
+            "message" => translate('invalid_host', $i18n)
+        ]));
+    }
+
+    validate_webhook_url_for_ssrf($aiBaseUrl, $db, $i18n, $userId);
+}
+
+// Environment managed values are never persisted.
+if (empty($currencyConfiguration['managed']['provider'])) {
+    wallos_set_instance_setting($db, 'currency', 'provider', $currencyProvider);
+}
+
+// An empty secret field means "keep the stored value"; removing a secret is an
+// explicit action, so an unchanged form never destroys a credential.
+if (empty($currencyConfiguration['managed']['api_key'])) {
+    if (!empty($data['currency_api_key_remove'])) {
+        wallos_set_instance_setting($db, 'currency', 'api_key', '', true);
+    } elseif ($currencyApiKey !== '') {
+        wallos_set_instance_setting($db, 'currency', 'api_key', $currencyApiKey, true);
+    }
+}
+
+if (empty($aiConfiguration['managed']['type'])) {
+    wallos_set_instance_setting($db, 'ai', 'provider', $aiProvider);
+}
+
+if (empty($aiConfiguration['managed']['url'])) {
+    wallos_set_instance_setting($db, 'ai', 'base_url', $aiBaseUrl);
+}
+
+if (empty($aiConfiguration['managed']['model'])) {
+    wallos_set_instance_setting($db, 'ai', 'model', $aiModel);
+}
+
+if (empty($aiConfiguration['managed']['api_key'])) {
+    if (!empty($data['ai_api_key_remove'])) {
+        wallos_set_instance_setting($db, 'ai', 'api_key', '', true);
+    } elseif ($aiApiKey !== '') {
+        wallos_set_instance_setting($db, 'ai', 'api_key', $aiApiKey, true);
+    }
+}
+
+echo json_encode([
+    "success" => true,
+    "message" => translate('success', $i18n)
+]);

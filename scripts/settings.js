@@ -966,12 +966,31 @@ document.addEventListener('DOMContentLoaded', function () {
 
 });
 
+function getCurrencyMode() {
+  const selected = document.querySelector('input[name="currencymode"]:checked');
+  return selected ? selected.value : "custom";
+}
+
+function toggleCurrencyMode() {
+  const usesInstance = getCurrencyMode() === "instance";
+  const instanceInfo = document.getElementById("instanceCurrencyInfo");
+  const customFields = document.getElementById("customCurrencyFields");
+
+  if (instanceInfo) {
+    instanceInfo.style.display = usesInstance ? "" : "none";
+  }
+  if (customFields) {
+    customFields.style.display = usesInstance ? "none" : "";
+  }
+}
+
 function addFixerKeyButton() {
   const addButton = document.getElementById("addFixerKey");
   addButton.disabled = true;
 
+  const mode = getCurrencyMode();
   const apiKeyInput = document.querySelector("#fixerKey");
-  const apiKey = apiKeyInput.value.trim();
+  const apiKey = mode === "instance" ? "" : apiKeyInput.value.trim();
   const provider = document.querySelector("#fixerProvider").value;
   const convertCurrencyCheckbox = document.querySelector("#convertcurrency");
 
@@ -982,6 +1001,7 @@ function addFixerKeyButton() {
       'X-CSRF-Token': window.csrfToken,
     },
     body: new URLSearchParams({
+      mode: mode,
       api_key: apiKey,
       provider: provider,
     }),
@@ -1210,8 +1230,35 @@ var sortable = Sortable.create(el, {
   },
 });
 
+function getAiMode() {
+  const selected = document.querySelector('input[name="aimode"]:checked');
+  return selected ? selected.value : "custom";
+}
+
+function toggleAiMode() {
+  const usesInstance = getAiMode() === "instance";
+  const instanceInfo = document.getElementById("instanceAiInfo");
+  const customFields = document.getElementById("customAiFields");
+  const instanceModelButton = document.getElementById("fetchInstanceModelsButton");
+  const instanceModelHint = document.getElementById("instanceAiModelHint");
+
+  if (instanceInfo) {
+    instanceInfo.style.display = usesInstance ? "" : "none";
+  }
+  if (customFields) {
+    customFields.style.display = usesInstance ? "none" : "";
+  }
+  if (instanceModelButton) {
+    instanceModelButton.classList.toggle("hidden", !usesInstance);
+  }
+  if (instanceModelHint) {
+    instanceModelHint.style.display = usesInstance ? "" : "none";
+  }
+}
+
 function fetch_ai_models() {
   const endpoint = 'endpoints/ai/fetch_models.php';
+  const provider_mode = getAiMode();
   const type = document.querySelector("#ai_type").value;
   const api_key = document.querySelector("#ai_api_key").value.trim();
   const ollama_host = document.querySelector("#ai_ollama_host").value.trim();
@@ -1223,7 +1270,7 @@ function fetch_ai_models() {
       'Content-Type': 'application/json',
       'X-CSRF-Token': window.csrfToken,
     },
-    body: JSON.stringify({ type, api_key, ollama_host })
+    body: JSON.stringify({ provider_mode, type, api_key, ollama_host })
   })
     .then(response => response.json())
     .then(data => {
@@ -1278,6 +1325,7 @@ function toggleAiInputs() {
 }
 
 function saveAiSettingsButton() {
+  const providerMode = getAiMode();
   const aiEnabled = document.querySelector("#ai_enabled").checked;
   const aiType = document.querySelector("#ai_type").value;
   const aiApiKey = document.querySelector("#ai_api_key").value.trim();
@@ -1285,13 +1333,17 @@ function saveAiSettingsButton() {
   const aiModel = document.querySelector("#ai_model").value;
   const aiRunSchedule = document.querySelector("#ai_run_schedule").value;
 
+  const payload = providerMode === "instance"
+    ? { provider_mode: providerMode, ai_enabled: aiEnabled, model: aiModel, ai_run_schedule: aiRunSchedule }
+    : { provider_mode: providerMode, ai_enabled: aiEnabled, ai_type: aiType, api_key: aiApiKey, ollama_host: aiOllamaHost, model: aiModel, ai_run_schedule: aiRunSchedule };
+
   fetch('endpoints/ai/save_settings.php', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       'X-CSRF-Token': window.csrfToken,
     },
-    body: JSON.stringify({ ai_enabled: aiEnabled, ai_type: aiType, api_key: aiApiKey, ollama_host: aiOllamaHost, model: aiModel, ai_run_schedule: aiRunSchedule })
+    body: JSON.stringify(payload)
   })
     .then(response => response.json())
     .then(data => {

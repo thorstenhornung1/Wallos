@@ -59,54 +59,60 @@ function saveNotifications() {
     makeFetchCall(url, data, button);
 }
 
+function getSmtpMode() {
+    const selected = document.querySelector('input[name="smtpmode"]:checked');
+    return selected ? selected.value : "custom";
+}
+
+// The instance transport is resolved server side, so nothing but the mode is
+// sent when it is selected.
+function collectSmtpFormData() {
+    const smtpMode = getSmtpMode();
+
+    if (smtpMode === "instance") {
+      return { smtpmode: smtpMode };
+    }
+
+    return {
+      smtpmode: smtpMode,
+      smtpaddress: document.getElementById("smtpaddress").value,
+      smtpport: document.getElementById("smtpport").value,
+      encryption: document.querySelector('input[name="encryption"]:checked').value,
+      smtpusername: document.getElementById("smtpusername").value,
+      smtppassword: document.getElementById("smtppassword").value,
+      fromemail: document.getElementById("fromemail").value
+    };
+}
+
+function toggleSmtpMode() {
+    const usesInstance = getSmtpMode() === "instance";
+    const instanceInfo = document.getElementById("instanceSmtpInfo");
+    const customFields = document.getElementById("customSmtpFields");
+
+    if (instanceInfo) {
+      instanceInfo.style.display = usesInstance ? "" : "none";
+    }
+    if (customFields) {
+      customFields.style.display = usesInstance ? "none" : "";
+    }
+}
+
 function saveNotificationsEmailButton() {
     const button = document.getElementById("saveNotificationsEmail");
     button.disabled = true;
-  
-    const enabled = document.getElementById("emailenabled").checked ? 1 : 0;
-    const smtpAddress = document.getElementById("smtpaddress").value;
-    const smtpPort = document.getElementById("smtpport").value;
-    const encryption = document.querySelector('input[name="encryption"]:checked').value;
-    const smtpUsername = document.getElementById("smtpusername").value;
-    const smtpPassword = document.getElementById("smtppassword").value;
-    const fromEmail = document.getElementById("fromemail").value;
-    const otherEmails = document.getElementById("otheremails").value;
-  
-    const data = {
-      enabled: enabled,
-      smtpaddress: smtpAddress,
-      smtpport: smtpPort,
-      encryption: encryption,
-      smtpusername: smtpUsername,
-      smtppassword: smtpPassword,
-      fromemail: fromEmail,
-      otheremails: otherEmails
-    };
+
+    const data = collectSmtpFormData();
+    data.enabled = document.getElementById("emailenabled").checked ? 1 : 0;
+    data.otheremails = document.getElementById("otheremails").value;
 
     makeFetchCall('endpoints/notifications/saveemailnotifications.php', data, button);
 }
-  
+
 function testNotificationEmailButton()  {
     const button = document.getElementById("testNotificationsEmail");
     button.disabled = true;
-  
-    const smtpAddress = document.getElementById("smtpaddress").value;
-    const smtpPort = document.getElementById("smtpport").value;
-    const encryption = document.querySelector('input[name="encryption"]:checked').value;
-    const smtpUsername = document.getElementById("smtpusername").value;
-    const smtpPassword = document.getElementById("smtppassword").value;
-    const fromEmail = document.getElementById("fromemail").value;
-  
-    const data = {
-      smtpaddress: smtpAddress,
-      smtpport: smtpPort,
-      encryption: encryption,
-      smtpusername: smtpUsername,
-      smtppassword: smtpPassword,
-      fromemail: fromEmail
-    };
 
-    makeFetchCall('endpoints/notifications/testemailnotifications.php', data, button);
+    makeFetchCall('endpoints/notifications/testemailnotifications.php', collectSmtpFormData(), button);
 }
 
 function saveNotificationsWebhookButton() {

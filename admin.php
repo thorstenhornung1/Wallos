@@ -2,6 +2,7 @@
 require_once 'includes/header.php';
 require_once 'includes/oidc_settings.php';
 require_once 'includes/ssrf_helper.php';
+require_once 'includes/integration_config.php';
 
 if ($isAdmin != 1) {
     header('Location: index.php');
@@ -20,6 +21,16 @@ $oidcNotes = $oidcConfiguration['notes'];
 
 $ssrfConfiguration = wallos_get_effective_ssrf_allowlist($db);
 $ssrfManagedFields = $ssrfConfiguration['is_managed'] ? ['allowlist' => 'SSRF_ALLOWLIST'] : [];
+
+// Instance integrations: SMTP lives in the admin table, the currency and AI
+// provider in integration_settings. Environment managed fields are shown with
+// their effective value but cannot be edited here.
+$smtpConfiguration = wallos_get_instance_smtp_config($db);
+$smtpPasswordStatus = wallos_secret_status($smtpConfiguration, 'password');
+$currencyConfiguration = wallos_get_instance_currency_config($db);
+$currencyKeyStatus = wallos_secret_status($currencyConfiguration, 'api_key');
+$aiConfiguration = wallos_get_instance_ai_config($db);
+$aiKeyStatus = wallos_secret_status($aiConfiguration, 'api_key');
 
 function oidc_input_attrs($field, $managedFields)
 {
@@ -66,13 +77,13 @@ $loginDisabledAllowed = $userCount == 1 && $settings['registrations_open'] == 0;
             </div>
             <div class="form-group-inline">
                 <input type="checkbox" id="requireEmail" <?= $settings['require_email_verification'] ? 'checked' : '' ?>
-                    <?= empty($settings['smtp_address']) ? 'disabled' : '' ?> />
+                    <?= $smtpConfiguration['valid'] ? '' : 'disabled' ?> />
                 <label for="requireEmail">
                     <?= translate('require_email_verification', $i18n) ?>
                 </label>
             </div>
             <?php
-            if (empty($settings['smtp_address'])) {
+            if (!$smtpConfiguration['valid']) {
                 ?>
                 <div class="settings-notes">
                     <p>
@@ -302,38 +313,73 @@ $loginDisabledAllowed = $userCount == 1 && $settings['registrations_open'] == 0;
         <div class="admin-form">
             <div class="form-group-inline">
                 <input type="text" name="smtpaddress" id="smtpaddress" autocomplete="off"
-                    placeholder="<?= translate('smtp_address', $i18n) ?>" value="<?= htmlspecialchars($settings['smtp_address']) ?>" />
+                    placeholder="<?= translate('smtp_address', $i18n) ?>"
+                    value="<?= htmlspecialchars($smtpConfiguration['values']['host']) ?>"
+                    <?= wallos_managed_input_attrs($smtpConfiguration, 'host') ?> />
                 <input type="text" name="smtpport" id="smtpport" autocomplete="off"
-                    placeholder="<?= translate('port', $i18n) ?>" class="one-third" value="<?= htmlspecialchars($settings['smtp_port']) ?>" />
+                    placeholder="<?= translate('port', $i18n) ?>" class="one-third"
+                    value="<?= htmlspecialchars($smtpConfiguration['values']['port']) ?>"
+                    <?= wallos_managed_input_attrs($smtpConfiguration, 'port') ?> />
             </div>
             <div class="form-group-inline">
                 <div>
                     <input type="radio" name="encryption" id="encryptionnone" value="none"
-                        <?= empty($settings['encryption']) || $settings['encryption'] == "none" ? "checked" : "" ?> />
+                        <?= $smtpConfiguration['values']['encryption'] == "none" ? "checked" : "" ?>
+                        <?= wallos_managed_input_attrs($smtpConfiguration, 'encryption') ?> />
                     <label for="encryptionnone"><?= translate('none', $i18n) ?></label>
                 </div>
                 <div>
                     <input type="radio" name="encryption" id="encryptiontls" value="tls"
-                        <?= $settings['encryption'] == "tls" ? "checked" : "" ?> />
+                        <?= $smtpConfiguration['values']['encryption'] == "tls" ? "checked" : "" ?>
+                        <?= wallos_managed_input_attrs($smtpConfiguration, 'encryption') ?> />
                     <label for="encryptiontls"><?= translate('tls', $i18n) ?></label>
                 </div>
                 <div>
                     <input type="radio" name="encryption" id="encryptionssl" value="ssl"
-                        <?= $settings['encryption'] == "ssl" ? "checked" : "" ?> />
+                        <?= $smtpConfiguration['values']['encryption'] == "ssl" ? "checked" : "" ?>
+                        <?= wallos_managed_input_attrs($smtpConfiguration, 'encryption') ?> />
                     <label for="encryptionssl"><?= translate('ssl', $i18n) ?></label>
                 </div>
             </div>
             <div class="form-group-inline">
                 <input type="text" name="smtpusername" id="smtpusername" autocomplete="off"
-                    placeholder="<?= translate('smtp_username', $i18n) ?>" value="<?= htmlspecialchars($settings['smtp_username']) ?>" />
+                    placeholder="<?= translate('smtp_username', $i18n) ?>"
+                    value="<?= htmlspecialchars($smtpConfiguration['values']['username']) ?>"
+                    <?= wallos_managed_input_attrs($smtpConfiguration, 'username') ?> />
             </div>
+            <?php
+            // Secrets are never rendered into the page. An empty field leaves the
+            // stored value untouched; removing it is an explicit action.
+            ?>
             <div class="form-group-inline">
-                <input type="password" name="smtppassword" id="smtppassword" autocomplete="off"
-                    placeholder="<?= translate('smtp_password', $i18n) ?>" value="<?= htmlspecialchars($settings['smtp_password']) ?>" />
+                <?php if ($smtpPasswordStatus['managed']): ?>
+                    <input type="text" id="smtppasswordstatus" disabled
+                        data-managed-by="<?= htmlspecialchars($smtpConfiguration['managed_by']['password'] ?? '') ?>"
+                        value="<?= $smtpPasswordStatus['configured'] ? translate('configured', $i18n) : translate('not_configured', $i18n) ?>" />
+                <?php else: ?>
+                    <input type="password" name="smtppassword" id="smtppassword" autocomplete="off"
+                        placeholder="<?= $smtpPasswordStatus['configured']
+                            ? translate('smtp_password', $i18n) . ' — ' . translate('leave_empty_to_keep', $i18n)
+                            : translate('smtp_password', $i18n) ?>" value="" />
+                <?php endif; ?>
             </div>
+            <?php if (!$smtpPasswordStatus['managed'] && $smtpPasswordStatus['configured']): ?>
+                <div class="form-group-inline">
+                    <input type="checkbox" id="smtppasswordremove" />
+                    <label for="smtppasswordremove"><?= translate('remove_stored_secret', $i18n) ?></label>
+                </div>
+            <?php endif; ?>
             <div class="form-group-inline">
                 <input type="text" name="fromemail" id="fromemail" autocomplete="off"
-                    placeholder="<?= translate('from_email', $i18n) ?>" value="<?= htmlspecialchars($settings['from_email']) ?>" />
+                    placeholder="<?= translate('from_email', $i18n) ?>"
+                    value="<?= htmlspecialchars($smtpConfiguration['values']['from_email']) ?>"
+                    <?= wallos_managed_input_attrs($smtpConfiguration, 'from_email') ?> />
+            </div>
+            <div class="form-group-inline">
+                <input type="text" name="smtpfromname" id="smtpfromname" autocomplete="off"
+                    placeholder="<?= translate('smtp_from_name', $i18n) ?>"
+                    value="<?= htmlspecialchars($smtpConfiguration['values']['from_name']) ?>"
+                    <?= wallos_managed_input_attrs($smtpConfiguration, 'from_name') ?> />
             </div>
             <div class="buttons">
                 <input type="button" class="secondary-button thin mobile-grow" value="<?= translate('test', $i18n) ?>"
@@ -349,6 +395,94 @@ $loginDisabledAllowed = $userCount == 1 && $settings['registrations_open'] == 0;
                     <i class="fa-solid fa-circle-info"></i>
                     <?= translate('smtp_usage_info', $i18n) ?>
                 </p>
+                <?= wallos_render_managed_notes($smtpConfiguration, $i18n) ?>
+            </div>
+        </div>
+    </section>
+
+    <section class="account-section">
+        <header>
+            <h2><?= translate('instance_integrations', $i18n) ?></h2>
+        </header>
+        <div class="admin-form">
+            <h3><?= translate('currency_provider', $i18n) ?></h3>
+            <div class="form-group">
+                <label for="instanceCurrencyProvider"><?= translate('provider', $i18n) ?>:</label>
+                <select id="instanceCurrencyProvider" <?= wallos_managed_input_attrs($currencyConfiguration, 'provider') ?>>
+                    <option value="fixer" <?= (int) $currencyConfiguration['values']['provider'] === 0 ? 'selected' : '' ?>>fixer.io</option>
+                    <option value="apilayer" <?= (int) $currencyConfiguration['values']['provider'] === 1 ? 'selected' : '' ?>>apilayer.com</option>
+                </select>
+            </div>
+            <div class="form-group-inline">
+                <?php if ($currencyKeyStatus['managed']): ?>
+                    <input type="text" id="instanceCurrencyApiKeyStatus" disabled
+                        data-managed-by="<?= htmlspecialchars($currencyConfiguration['managed_by']['api_key'] ?? '') ?>"
+                        value="<?= $currencyKeyStatus['configured'] ? translate('configured', $i18n) : translate('not_configured', $i18n) ?>" />
+                <?php else: ?>
+                    <input type="password" id="instanceCurrencyApiKey" autocomplete="off"
+                        placeholder="<?= $currencyKeyStatus['configured']
+                            ? translate('api_key', $i18n) . ' — ' . translate('leave_empty_to_keep', $i18n)
+                            : translate('api_key', $i18n) ?>" value="" />
+                <?php endif; ?>
+            </div>
+            <?php if (!$currencyKeyStatus['managed'] && $currencyKeyStatus['configured']): ?>
+                <div class="form-group-inline">
+                    <input type="checkbox" id="instanceCurrencyApiKeyRemove" />
+                    <label for="instanceCurrencyApiKeyRemove"><?= translate('remove_stored_secret', $i18n) ?></label>
+                </div>
+            <?php endif; ?>
+
+            <h3><?= translate('ai_provider', $i18n) ?></h3>
+            <div class="form-group">
+                <label for="instanceAiProvider"><?= translate('provider', $i18n) ?>:</label>
+                <select id="instanceAiProvider" <?= wallos_managed_input_attrs($aiConfiguration, 'type') ?>>
+                    <option value=""><?= translate('not_configured', $i18n) ?></option>
+                    <?php foreach (WALLOS_AI_PROVIDERS as $providerOption): ?>
+                        <option value="<?= $providerOption ?>" <?= $aiConfiguration['values']['type'] === $providerOption ? 'selected' : '' ?>>
+                            <?= $providerOption ?>
+                        </option>
+                    <?php endforeach; ?>
+                </select>
+            </div>
+            <div class="form-group-inline">
+                <input type="text" id="instanceAiBaseUrl" autocomplete="off" placeholder="<?= translate('url', $i18n) ?>"
+                    value="<?= htmlspecialchars($aiConfiguration['values']['url']) ?>"
+                    <?= wallos_managed_input_attrs($aiConfiguration, 'url') ?> />
+            </div>
+            <div class="form-group-inline">
+                <input type="text" id="instanceAiModel" autocomplete="off" placeholder="<?= translate('ai_model', $i18n) ?>"
+                    value="<?= htmlspecialchars($aiConfiguration['values']['model']) ?>"
+                    <?= wallos_managed_input_attrs($aiConfiguration, 'model') ?> />
+            </div>
+            <div class="form-group-inline">
+                <?php if ($aiKeyStatus['managed']): ?>
+                    <input type="text" id="instanceAiApiKeyStatus" disabled
+                        data-managed-by="<?= htmlspecialchars($aiConfiguration['managed_by']['api_key'] ?? '') ?>"
+                        value="<?= $aiKeyStatus['configured'] ? translate('configured', $i18n) : translate('not_configured', $i18n) ?>" />
+                <?php else: ?>
+                    <input type="password" id="instanceAiApiKey" autocomplete="off"
+                        placeholder="<?= $aiKeyStatus['configured']
+                            ? translate('api_key', $i18n) . ' — ' . translate('leave_empty_to_keep', $i18n)
+                            : translate('api_key', $i18n) ?>" value="" />
+                <?php endif; ?>
+            </div>
+            <?php if (!$aiKeyStatus['managed'] && $aiKeyStatus['configured']): ?>
+                <div class="form-group-inline">
+                    <input type="checkbox" id="instanceAiApiKeyRemove" />
+                    <label for="instanceAiApiKeyRemove"><?= translate('remove_stored_secret', $i18n) ?></label>
+                </div>
+            <?php endif; ?>
+            <div class="buttons">
+                <input type="submit" class="thin mobile-grow" value="<?= translate('save', $i18n) ?>"
+                    id="saveInstanceIntegrations" onClick="saveInstanceIntegrationsButton()" />
+            </div>
+            <div class="settings-notes">
+                <p>
+                    <i class="fa-solid fa-circle-info"></i>
+                    <?= translate('instance_integrations_info', $i18n) ?>
+                </p>
+                <?= wallos_render_managed_notes($currencyConfiguration, $i18n) ?>
+                <?= wallos_render_managed_notes($aiConfiguration, $i18n) ?>
             </div>
         </div>
     </section>

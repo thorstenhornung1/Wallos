@@ -6,10 +6,7 @@ use PHPMailer\PHPMailer\Exception;
 require_once 'validate.php';
 require_once __DIR__ . '/../../includes/connect_endpoint_crontabs.php';
 require_once __DIR__ . '/../../includes/ssrf_helper.php';
-
-require __DIR__ . '/../../libs/PHPMailer/PHPMailer.php';
-require __DIR__ . '/../../libs/PHPMailer/SMTP.php';
-require __DIR__ . '/../../libs/PHPMailer/Exception.php';
+require_once __DIR__ . '/../../includes/mailer.php';
 
 require 'settimezone.php';
 
@@ -32,22 +29,10 @@ while ($userToNotify = $usersToNotify->fetchArray(SQLITE3_ASSOC)) {
     $ntfyNotificationsEnabled = false;
     $webhookNotificationsEnabled = false;
 
-    // Check if email notifications are enabled and get the settings
-    $query = "SELECT * FROM email_notifications WHERE user_id = :userId";
-    $stmt = $db->prepare($query);
-    $stmt->bindValue(':userId', $userId, SQLITE3_INTEGER);
-    $result = $stmt->execute();
-
-    if ($row = $result->fetchArray(SQLITE3_ASSOC)) {
-        $emailNotificationsEnabled = $row['enabled'];
-        $email['smtpAddress'] = $row["smtp_address"];
-        $email['smtpPort'] = $row["smtp_port"];
-        $email['encryption'] = $row["encryption"];
-        $email['smtpUsername'] = $row["smtp_username"];
-        $email['smtpPassword'] = $row["smtp_password"];
-        $email['fromEmail'] = $row["from_email"] ? $row["from_email"] : "wallos@wallosapp.com";
-        $email['otherEmails'] = $row["other_emails"];
-    }
+    // Check if email notifications are enabled and resolve the effective
+    // transport (instance SMTP or the user's own, depending on their choice)
+    $emailConfig = wallos_get_effective_smtp_config($db, $userId);
+    $emailNotificationsEnabled = !empty($emailConfig['values']['enabled']);
 
     // Check if Discord notifications are enabled and get the settings
     $query = "SELECT * FROM discord_notifications WHERE user_id = :userId";
@@ -204,76 +189,63 @@ while ($userToNotify = $usersToNotify->fetchArray(SQLITE3_ASSOC)) {
 
             // Email notifications if enabled
             if ($emailNotificationsEnabled) {
-                // Re-validate at send time: a save-time check alone is bypassable via
-                // DNS rebinding between when the host was saved and when the cron fires.
-                if (!validate_smtp_host($email['smtpAddress'], (int) $email['smtpPort'], $db)) {
-                    echo "SSRF attempt detected for SMTP host. Email notifications not sent.<br />";
-                } else {
-                    $stmt = $db->prepare('SELECT * FROM user WHERE id = :user_id');
-                    $stmt->bindValue(':user_id', $userId, SQLITE3_INTEGER);
+                $stmt = $db->prepare('SELECT * FROM user WHERE id = :user_id');
+                $stmt->bindValue(':user_id', $userId, SQLITE3_INTEGER);
+                $result = $stmt->execute();
+                $defaultUser = $result->fetchArray(SQLITE3_ASSOC);
+                $defaultEmail = $defaultUser['email'];
+                $defaultName = $defaultUser['username'];
+
+                foreach ($notify as $userId => $perUser) {
+                    $message = "The following subscriptions are up for cancellation:\n";
+
+                    foreach ($perUser as $subscription) {
+                        $message .= $subscription['name'] . " for " . $subscription['price'] ."\n";
+                    }
+
+                    // Built per message and re-validated at send time: a save-time
+                    // check alone is bypassable via DNS rebinding between when the
+                    // host was saved and when the cron fires.
+                    $transport = wallos_build_mailer($emailConfig, $db);
+
+                    if (!$transport['success']) {
+                        echo "Email notifications not sent: " . $transport['message'] . "<br />";
+                        break;
+                    }
+
+                    $mail = $transport['mailer'];
+
+                    $stmt = $db->prepare('SELECT * FROM household WHERE id = :userId');
+                    $stmt->bindValue(':userId', $userId, SQLITE3_INTEGER);
                     $result = $stmt->execute();
-                    $defaultUser = $result->fetchArray(SQLITE3_ASSOC);
-                    $defaultEmail = $defaultUser['email'];
-                    $defaultName = $defaultUser['username'];
+                    $user = $result->fetchArray(SQLITE3_ASSOC);
 
-                    foreach ($notify as $userId => $perUser) {
-                        $message = "The following subscriptions are up for cancellation:\n";
+                    $emailaddress = !empty($user['email']) ? $user['email'] : $defaultEmail;
+                    $name = !empty($user['name']) ? $user['name'] : $defaultName;
 
-                        foreach ($perUser as $subscription) {
-                            $message .= $subscription['name'] . " for " . $subscription['price'] ."\n";
+                    $mail->addAddress($emailaddress, $name);
+
+                    if (!empty($emailConfig['values']['other_emails'])) {
+                        $list = explode(';', $emailConfig['values']['other_emails']);
+
+                        // Avoid duplicate emails
+                        $list = array_unique($list);
+                        $list = array_filter($list, function ($value) use ($emailaddress) {
+                            return $value !== $emailaddress;
+                        });
+
+                        foreach($list as $value) {
+                            $mail->addCC(trim($value));
                         }
+                    }
 
-                        $smtpAuth = (isset($email["smtpUsername"]) && $email["smtpUsername"] != "") || (isset($email["smtpPassword"]) && $email["smtpPassword"] != "");
+                    $mail->Subject = 'Wallos Cancellation Notification';
+                    $mail->Body = $message;
 
-                        $mail = new PHPMailer(true);
-                        $mail->CharSet = "UTF-8";
-                        $mail->isSMTP();
-                        $mail->Timeout = 15;
-
-                        $mail->Host = $email['smtpAddress'];
-                        $mail->SMTPAuth = $smtpAuth;
-                        if ($smtpAuth) {
-                            $mail->Username = $email['smtpUsername'];
-                            $mail->Password = $email['smtpPassword'];
-                        }
-                        if ($email['encryption'] != "none") {
-                            $mail->SMTPSecure = $email['encryption'];
-                        }
-                        $mail->Port = $email['smtpPort'];
-
-                        $stmt = $db->prepare('SELECT * FROM household WHERE id = :userId');
-                        $stmt->bindValue(':userId', $userId, SQLITE3_INTEGER);
-                        $result = $stmt->execute();
-                        $user = $result->fetchArray(SQLITE3_ASSOC);
-
-                        $emailaddress = !empty($user['email']) ? $user['email'] : $defaultEmail;
-                        $name = !empty($user['name']) ? $user['name'] : $defaultName;
-
-                        $mail->setFrom($email['fromEmail'], 'Wallos App');
-                        $mail->addAddress($emailaddress, $name);
-
-                        if (!empty($email['otherEmails'])) {
-                            $list = explode(';', $email['otherEmails']);
-
-                            // Avoid duplicate emails
-                            $list = array_unique($list);
-                            $list = array_filter($list, function ($value) use ($emailaddress) {
-                                return $value !== $emailaddress;
-                            });
-
-                            foreach($list as $value) {
-                                $mail->addCC(trim($value));
-                            }
-                        }
-
-                        $mail->Subject = 'Wallos Cancellation Notification';
-                        $mail->Body = $message;
-
-                        if ($mail->send()) {
-                            echo "Email Notifications sent<br />";
-                        } else {
-                            echo "Error sending notifications: " . $mail->ErrorInfo . "<br />";
-                        }
+                    if ($mail->send()) {
+                        echo "Email Notifications sent<br />";
+                    } else {
+                        echo "Error sending notifications: " . $mail->ErrorInfo . "<br />";
                     }
                 }
             }

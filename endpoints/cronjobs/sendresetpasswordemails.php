@@ -5,6 +5,7 @@ use PHPMailer\PHPMailer\Exception;
 
 require_once 'validate.php';
 require_once __DIR__ . '/../../includes/connect_endpoint_crontabs.php';
+require_once __DIR__ . '/../../includes/mailer.php';
 
 require 'settimezone.php';
 
@@ -23,35 +24,11 @@ while ($row = $result->fetchArray(SQLITE3_ASSOC)) {
 }
 
 if ($rows) {
-    if ($admin['smtp_address'] && $admin['smtp_port'] && $admin['smtp_username'] && $admin['smtp_password'] && $admin['encryption']) {
-        // There are SMTP settings
-        $smtpAddress = $admin['smtp_address'];
-        $smtpPort = $admin['smtp_port'];
-        $smtpUsername = $admin['smtp_username'];
-        $smtpPassword = $admin['smtp_password'];
-        $fromEmail = empty($admin['from_email']) ? 'wallos@wallosapp.com' : $admin['from_email'];
-        $encryption = $admin['encryption'];
+    $transport = wallos_build_instance_mailer($db);
+
+    if ($transport['success']) {
         $server_url = $admin['server_url'];
-        $smtpAuth = (isset($admin["smtp_username"]) && $admin["smtp_username"] != "") || (isset($admin["smtp_password"]) && $admin["smtp_password"] != "");
-
-        require __DIR__ . '/../../libs/PHPMailer/PHPMailer.php';
-        require __DIR__ . '/../../libs/PHPMailer/SMTP.php';
-        require __DIR__ . '/../../libs/PHPMailer/Exception.php';
-
-        $mail = new PHPMailer(true);
-        $mail->isSMTP();
-        $mail->Timeout = 15;
-        $mail->Host = $smtpAddress;
-        $mail->SMTPAuth = $smtpAuth;
-        if ($smtpAuth) {
-            $mail->Username = $smtpUsername;
-            $mail->Password = $smtpPassword;
-        }
-        if ($encryption != "none") {
-            $mail->SMTPSecure = $encryption;
-        }
-        $mail->Port = $smtpPort;
-        $mail->setFrom($fromEmail);
+        $mail = $transport['mailer'];
 
         try {
             foreach ($rows as $user) {
@@ -80,10 +57,8 @@ if ($rows) {
             echo "Message could not be sent. Mailer Error: {$mail->ErrorInfo} <br>";
         }
     } else {
-        // There are no SMTP settings
-        if (php_sapi_name() !== 'cli') {
-            echo "SMTP settings are not configured. Please configure SMTP settings in the admin page.";
-        }
+        // The instance SMTP transport is unusable
+        echo "Password reset emails not sent: " . $transport['message'] . "\n";
         exit();
     }
 } else {

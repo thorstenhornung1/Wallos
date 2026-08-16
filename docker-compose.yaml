@@ -25,6 +25,23 @@ services:
       # OIDC_REQUIRE_EMAIL_VERIFIED: "true"
       # Optional SSRF allowlist (overrides the Security Settings allowlist in the Admin UI)
       # SSRF_ALLOWLIST: "auth.example.com,192.168.1.100:8123"
+      # Optional shared instance integrations. Every user inherits these unless
+      # they configure their own. Secrets also accept a *_FILE variant that
+      # reads the value from a mounted secret file.
+      # WALLOS_SMTP_HOST: "smtp.example.com"
+      # WALLOS_SMTP_PORT: "587"
+      # WALLOS_SMTP_ENCRYPTION: "tls"
+      # WALLOS_SMTP_USERNAME: "wallos"
+      # WALLOS_SMTP_PASSWORD: "replace-me"
+      # WALLOS_SMTP_PASSWORD_FILE: "/run/secrets/wallos_smtp_password"
+      # WALLOS_SMTP_FROM: "wallos@example.com"
+      # WALLOS_SMTP_FROM_NAME: "Wallos"
+      # WALLOS_CURRENCY_PROVIDER: "apilayer"
+      # WALLOS_CURRENCY_API_KEY_FILE: "/run/secrets/wallos_currency_api_key"
+      # WALLOS_AI_PROVIDER: "openai-compatible"
+      # WALLOS_AI_BASE_URL: "http://ollama:11434/v1"
+      # WALLOS_AI_MODEL: "example-model"
+      # WALLOS_AI_API_KEY_FILE: "/run/secrets/wallos_ai_api_key"
     # Volumes store your data between container upgrades
     volumes:
       - './db:/var/www/html/db'

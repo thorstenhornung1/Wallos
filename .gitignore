@@ -7,3 +7,6 @@
 .vscode/
 AGENTS.md
 .antigravitycli
+
+# Local development environment: real secret files, never the examples
+dev/secrets/
