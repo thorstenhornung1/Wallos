@@ -1,5 +1,7 @@
 <?php
 
+require_once __DIR__ . '/config_helper.php';
+
 function wallos_get_oidc_defaults()
 {
     return [
@@ -22,43 +24,17 @@ function wallos_get_oidc_defaults()
 
 function wallos_get_oidc_env_value($name)
 {
-    $value = getenv($name);
-    if ($value !== false) {
-        return $value;
-    }
-
-    if (array_key_exists($name, $_ENV)) {
-        return $_ENV[$name];
-    }
-
-    if (array_key_exists($name, $_SERVER)) {
-        return $_SERVER[$name];
-    }
-
-    return null;
+    return wallos_env($name);
 }
 
 function wallos_has_oidc_env_value($name)
 {
-    return wallos_get_oidc_env_value($name) !== null;
+    return wallos_env_has($name);
 }
 
 function wallos_parse_oidc_boolean($value)
 {
-    if (is_bool($value)) {
-        return $value ? 1 : 0;
-    }
-
-    $normalized = strtolower(trim((string) $value));
-    if (in_array($normalized, ['1', 'true', 'yes', 'on'], true)) {
-        return 1;
-    }
-
-    if (in_array($normalized, ['0', 'false', 'no', 'off'], true)) {
-        return 0;
-    }
-
-    return null;
+    return wallos_parse_boolean($value);
 }
 
 function wallos_get_db_oidc_settings($db)
@@ -147,10 +123,13 @@ function wallos_get_effective_oidc_configuration($db)
 
         if ($secretFile === '') {
             $notes[] = 'OIDC_CLIENT_SECRET_FILE is empty.';
-        } elseif (is_readable($secretFile)) {
-            $settings['client_secret'] = rtrim((string) file_get_contents($secretFile), "\r\n");
         } else {
-            $notes[] = 'OIDC client secret file is not readable: ' . $secretFile;
+            $secret = wallos_read_secret_file($secretFile);
+            if ($secret['error'] === null) {
+                $settings['client_secret'] = $secret['value'];
+            } else {
+                $notes[] = 'OIDC client secret file is not readable: ' . $secretFile;
+            }
         }
     } elseif (wallos_has_oidc_env_value('OIDC_CLIENT_SECRET')) {
         $settings['client_secret'] = (string) wallos_get_oidc_env_value('OIDC_CLIENT_SECRET');

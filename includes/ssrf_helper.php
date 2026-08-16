@@ -1,21 +1,10 @@
 <?php
 
+require_once __DIR__ . '/config_helper.php';
+
 function wallos_get_ssrf_allowlist_env_value()
 {
-    $value = getenv('SSRF_ALLOWLIST');
-    if ($value !== false) {
-        return $value;
-    }
-
-    if (array_key_exists('SSRF_ALLOWLIST', $_ENV)) {
-        return $_ENV['SSRF_ALLOWLIST'];
-    }
-
-    if (array_key_exists('SSRF_ALLOWLIST', $_SERVER)) {
-        return $_SERVER['SSRF_ALLOWLIST'];
-    }
-
-    return null;
+    return wallos_env('SSRF_ALLOWLIST');
 }
 
 /**
