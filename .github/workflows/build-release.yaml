@@ -31,6 +31,24 @@ jobs:
       - name: Run the test suite
         run: php tests/run.php
 
+  # Issue #41: SQLite-specific APIs must stay inside the database adapter
+  # boundary. That boundary is still being built (issue #20), so the audit
+  # ratchets against dev/db-audit-baseline.txt instead of demanding zero: the
+  # leakage may shrink, never grow.
+  #
+  # This is a job of its own rather than a step in `test` because it answers a
+  # different question — an architecture question, not "does the code work" —
+  # and it needs no PHP, so it reports in seconds and in parallel. A failure
+  # still turns the whole workflow red, which is the enforcement; `build` does
+  # not depend on it, because refusing to produce an image over a boundary
+  # regression only creates pressure to switch the gate off.
+  db-boundary:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Audit the SQLite boundary
+        run: dev/db-audit.sh
+
   build:
     runs-on: ubuntu-latest
     needs: test
