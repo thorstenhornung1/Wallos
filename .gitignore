@@ -10,3 +10,6 @@ AGENTS.md
 
 # Local development environment: real secret files, never the examples
 dev/secrets/
+
+# Agent worktrees and local tooling state
+.claude/
