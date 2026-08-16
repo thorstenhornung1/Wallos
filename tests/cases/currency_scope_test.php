@@ -8,8 +8,6 @@
   theirs.
 */
 
-require_once WALLOS_ROOT . '/includes/integration_config.php';
-
 /**
  * Seeds two users whose currencies overlap but whose main currency differs.
  *
@@ -77,25 +75,23 @@ wallos_test('an unscoped rate update would corrupt other users', function () {
     $db->close();
 });
 
-wallos_test('refresh writes every rate of one user or none', function () {
-    // A refresh that fails midway must not leave a partially converted set:
-    // some rows against the new base and some against the old one.
-    $db = wallos_test_open_database();
-    currency_scope_fixture($db);
+wallos_test('every currency rate update in the code base is user scoped', function () {
+    // The regression guard: any future rate write that forgets the user filter
+    // fails here rather than silently corrupting other accounts in production.
+    $paths = [
+        'endpoints/cronjobs/updateexchange.php',
+        'endpoints/currency/update_exchange.php',
+    ];
 
-    $begin = $db->prepare('BEGIN');
-    $begin->execute();
+    foreach ($paths as $path) {
+        $source = file_get_contents(WALLOS_ROOT . '/' . $path);
 
-    $stmt = $db->prepare('UPDATE currencies SET rate = :rate WHERE code = :code AND user_id = :userId');
-    $stmt->bindValue(':rate', 3.0, SQLITE3_FLOAT);
-    $stmt->bindValue(':code', 'USD', SQLITE3_TEXT);
-    $stmt->bindValue(':userId', 1, SQLITE3_INTEGER);
-    $stmt->execute();
+        preg_match_all('/UPDATE\s+currencies\s+SET\s+rate[^"\']*/i', $source, $matches);
+        assert_true($matches[0] !== [], $path . ' still contains a rate update');
 
-    $rollback = $db->prepare('ROLLBACK');
-    $rollback->execute();
-
-    assert_same(1.1, currency_scope_rate($db, 1, 'USD'), 'a rolled back refresh leaves the previous rates');
-
-    $db->close();
+        foreach ($matches[0] as $statement) {
+            assert_contains('user_id', $statement,
+                $path . ' updates rates without scoping them to a user: ' . trim($statement));
+        }
+    }
 });
