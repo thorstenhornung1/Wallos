@@ -1,5 +1,33 @@
 # Changelog
 
+## [5.5.1](https://github.com/thorstenhornung1/Wallos/releases/tag/v5.5.1) (2026-08-16)
+
+### Bug Fixes
+
+* **notifications:** a successful test mail now says when scheduled
+  notifications will still not be sent. The test button resolves the transport
+  directly and delivers even when the user never enabled or saved
+  notifications, at which point the scheduled job sends nothing — found during
+  the Swarm test run documented in `docs/test-results-2026-08-16.md`
+
+### Performance
+
+* **config:** effective configuration is resolved once per request instead of
+  on every call; the settings and admin pages together drop from 48 queries to
+  11, and each secret file is read once
+* **notifications:** provider settings load once per table instead of once per
+  user per provider, users with nothing enabled are skipped before any
+  expensive work, and seventeen redundant household lookups are gone — 110
+  queries become 12 with 11 users
+
+### Documentation
+
+* a copy-paste test instance for Docker Swarm and Kubernetes, with Mailpit as
+  the mail sink and a test plan that checks properties rather than uptime
+  (`docs/test-instance.md`)
+* the results of running that plan against a live Swarm cluster
+  (`docs/test-results-2026-08-16.md`)
+
 ## [5.5.0](https://github.com/thorstenhornung1/Wallos/releases/tag/v5.5.0) (2026-08-16)
 
 First release of this fork. Based on upstream 5.4.4, with instance-wide
