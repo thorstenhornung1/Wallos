@@ -46,11 +46,15 @@ DETAIL_LINES=15
 PATTERN='SQLite3|SQLITE3_|querySingle|lastInsertRowID|busyTimeout|PRAGMA|sqlite_master|pragma_table_info|INSERT[[:space:]]+OR[[:space:]]+REPLACE|AUTOINCREMENT'
 
 # Directories the audit does not look at.  The first is vendored third-party
-# code that Wallos does not own; the rest are the permitted SQLite
+# code that Wallos does not own; the next two are the permitted SQLite
 # implementation boundary from issue #41.  They do not exist yet — issue #20
 # creates them — and listing them now means the baseline shrinks by itself as
 # code moves in.
-EXCLUDED_PATHS='libs includes/database/sqlite migrations/sqlite'
+#
+# .claude holds agent worktrees, which are full checkouts nested inside the
+# repository.  Scanning them counts the whole tree a second time and reports
+# every file as new, because the baseline stores root-relative paths.
+EXCLUDED_PATHS='libs includes/database/sqlite migrations/sqlite .claude'
 
 # The comment block at the top of this file is the documentation, so print that
 # rather than keeping a second copy in sync with it.
