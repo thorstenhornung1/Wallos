@@ -2,6 +2,7 @@
 
 require_once 'includes/connect.php';
 require_once 'includes/checkuser.php';
+require_once 'includes/integration_config.php';
 
 require_once 'includes/i18n/languages.php';
 require_once 'includes/i18n/getlang.php';
@@ -38,7 +39,7 @@ if (isset($_COOKIE['colorTheme'])) {
 }
 
 $settings = $db->querySingle("SELECT * FROM admin", true);
-if ($settings['smtp_address'] == "" || $settings['server_url'] == "") {
+if (!wallos_get_instance_smtp_config($db)['valid'] || $settings['server_url'] == "") {
     header("Location: .");
     exit();
 } else {
