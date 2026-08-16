@@ -1,5 +1,6 @@
 <?php
 require_once 'includes/header.php';
+require_once 'includes/integration_config.php';
 
 $currencies = array();
 $query = "SELECT * FROM currencies WHERE user_id = :userId";
@@ -230,6 +231,7 @@ if ($budgetPeriodAnchorDate === '1970-01-01' || !preg_match('/^\d{4}-\d{2}-\d{2}
     $result = $stmt->execute();
 
     $rowCount = 0;
+    $notificationsEmail['smtp_mode'] = 'instance';
     while ($row = $result->fetchArray(SQLITE3_ASSOC)) {
         $notificationsEmail['enabled'] = $row['enabled'];
         $notificationsEmail['smtp_address'] = $row['smtp_address'];
@@ -239,6 +241,9 @@ if ($budgetPeriodAnchorDate === '1970-01-01' || !preg_match('/^\d{4}-\d{2}-\d{2}
         $notificationsEmail['smtp_password'] = $row['smtp_password'];
         $notificationsEmail['from_email'] = $row['from_email'];
         $notificationsEmail['other_emails'] = $row['other_emails'];
+        $notificationsEmail['smtp_mode'] = wallos_normalize_mode(
+            $row['smtp_mode'] ?? (trim((string) $row['smtp_address']) !== '' ? 'custom' : 'instance')
+        );
         $rowCount++;
     }
 
@@ -252,6 +257,12 @@ if ($budgetPeriodAnchorDate === '1970-01-01' || !preg_match('/^\d{4}-\d{2}-\d{2}
         $notificationsEmail['from_email'] = "";
         $notificationsEmail['other_emails'] = "";
     }
+
+    // Instance transport: only its non-secret connection details are shown, and
+    // the password only as a status.
+    $instanceSmtp = wallos_get_instance_smtp_config($db);
+    $instanceSmtpPassword = wallos_secret_status($instanceSmtp, 'password');
+    $usesInstanceSmtp = $notificationsEmail['smtp_mode'] === 'instance';
 
     // Discord notifications
     $sql = "SELECT * FROM discord_notifications WHERE user_id = :userId LIMIT 1";
@@ -509,6 +520,47 @@ if ($budgetPeriodAnchorDate === '1970-01-01' || !preg_match('/^\d{4}-\d{2}-\d{2}
                         <input type="checkbox" id="emailenabled" name="emailenabled" <?= $notificationsEmail['enabled'] ? "checked" : "" ?>>
                         <label for="emailenabled" class="capitalize"><?= translate('enabled', $i18n) ?></label>
                     </div>
+                    <label for="smtpmodeinstance"><?= translate('smtp_transport', $i18n) ?></label>
+                    <div class="form-group-inline">
+                        <div>
+                            <input type="radio" name="smtpmode" id="smtpmodeinstance" value="instance"
+                                onchange="toggleSmtpMode()" <?= $usesInstanceSmtp ? "checked" : "" ?> />
+                            <label for="smtpmodeinstance"><?= translate('use_instance_smtp', $i18n) ?></label>
+                        </div>
+                        <div>
+                            <input type="radio" name="smtpmode" id="smtpmodecustom" value="custom"
+                                onchange="toggleSmtpMode()" <?= $usesInstanceSmtp ? "" : "checked" ?> />
+                            <label for="smtpmodecustom"><?= translate('use_custom_smtp', $i18n) ?></label>
+                        </div>
+                    </div>
+                    <div class="settings-notes" id="instanceSmtpInfo" <?= $usesInstanceSmtp ? "" : 'style="display:none"' ?>>
+                        <?php if ($instanceSmtp['valid']): ?>
+                            <p>
+                                <i class="fa-solid fa-circle-info"></i>
+                                <?= translate('smtp_address', $i18n) ?>:
+                                <span><?= htmlspecialchars($instanceSmtp['values']['host']) ?>:<?= (int) $instanceSmtp['values']['port'] ?></span>
+                            </p>
+                            <p>
+                                <i class="fa-solid fa-circle-info"></i>
+                                <?= translate('smtp_password', $i18n) ?>:
+                                <span>
+                                    <?php if ($instanceSmtpPassword['managed']): ?>
+                                        <?= translate('managed_externally', $i18n) ?>
+                                    <?php elseif ($instanceSmtpPassword['configured']): ?>
+                                        <?= translate('configured', $i18n) ?>
+                                    <?php else: ?>
+                                        <?= translate('not_configured', $i18n) ?>
+                                    <?php endif; ?>
+                                </span>
+                            </p>
+                        <?php else: ?>
+                            <p>
+                                <i class="fa-solid fa-triangle-exclamation"></i>
+                                <?= translate('instance_smtp_not_configured', $i18n) ?>
+                            </p>
+                        <?php endif; ?>
+                    </div>
+                    <div id="customSmtpFields" <?= $usesInstanceSmtp ? 'style="display:none"' : "" ?>>
                     <div class="form-group-inline">
                         <input type="text" name="smtpaddress" id="smtpaddress" autocomplete="off"
                             placeholder="<?= translate('smtp_address', $i18n) ?>"
@@ -550,6 +602,7 @@ if ($budgetPeriodAnchorDate === '1970-01-01' || !preg_match('/^\d{4}-\d{2}-\d{2}
                         <input type="text" name="fromemail" id="fromemail" autocomplete="off"
                             placeholder="<?= translate('from_email', $i18n) ?>"
                             value="<?= htmlspecialchars($notificationsEmail['from_email']) ?>" />
+                    </div>
                     </div>
                     <label for="otheremails"><?= translate('send_to_other_emails', $i18n) ?></label>
                     <div class="form-group-inline">
@@ -934,7 +987,12 @@ if ($budgetPeriodAnchorDate === '1970-01-01' || !preg_match('/^\d{4}-\d{2}-\d{2}
         $aiSettings = $row;
     }
 
-    $canTranslateCategories = !empty($aiSettings['enabled']) && !empty($aiSettings['model']) && $lang != 'en';
+    $aiConfig = wallos_get_effective_ai_config($db, $userId);
+    $instanceAi = wallos_get_instance_ai_config($db);
+    $instanceAiKey = wallos_secret_status($instanceAi, 'api_key');
+    $usesInstanceAi = $aiConfig['mode'] === 'instance';
+
+    $canTranslateCategories = $aiConfig['valid'] && !empty($aiConfig['values']['enabled']) && $lang != 'en';
     ?>
 
     <section class="account-section">
@@ -1126,6 +1184,7 @@ if ($budgetPeriodAnchorDate === '1970-01-01' || !preg_match('/^\d{4}-\d{2}-\d{2}
 
     <?php
     $apiKey = "";
+    $provider = 0;
     $sql = "SELECT api_key, provider FROM fixer WHERE user_id = :userId";
     $stmt = $db->prepare($sql);
     $stmt->bindValue(':userId', $userId, SQLITE3_INTEGER);
@@ -1135,10 +1194,13 @@ if ($budgetPeriodAnchorDate === '1970-01-01' || !preg_match('/^\d{4}-\d{2}-\d{2}
         if ($row) {
             $apiKey = $row['api_key'];
             $provider = $row['provider'];
-        } else {
-            $provider = 0;
         }
     }
+
+    $currencyConfig = wallos_get_effective_currency_config($db, $userId);
+    $instanceCurrency = wallos_get_instance_currency_config($db);
+    $instanceCurrencyKey = wallos_secret_status($instanceCurrency, 'api_key');
+    $usesInstanceCurrency = $currencyConfig['mode'] === 'instance';
     ?>
 
     <section class="account-section">
@@ -1146,16 +1208,55 @@ if ($budgetPeriodAnchorDate === '1970-01-01' || !preg_match('/^\d{4}-\d{2}-\d{2}
             <h2>Fixer API Key</h2>
         </header>
         <div class="account-fixer">
-            <div class="form-group">
-                <input type="text" name="fixer-key" id="fixerKey" autocomplete="off" value="<?= htmlspecialchars($apiKey) ?>"
-                    placeholder="<?= translate('api_key', $i18n) ?>" <?= $demoMode ? 'disabled title="Not available on Demo Mode"' : '' ?>>
+            <label for="currencyModeInstance"><?= translate('currency_provider', $i18n) ?></label>
+            <div class="form-group-inline">
+                <div>
+                    <input type="radio" name="currencymode" id="currencyModeInstance" value="instance"
+                        onchange="toggleCurrencyMode()" <?= $usesInstanceCurrency ? 'checked' : '' ?> />
+                    <label for="currencyModeInstance"><?= translate('use_instance_provider', $i18n) ?></label>
+                </div>
+                <div>
+                    <input type="radio" name="currencymode" id="currencyModeCustom" value="custom"
+                        onchange="toggleCurrencyMode()" <?= $usesInstanceCurrency ? '' : 'checked' ?> />
+                    <label for="currencyModeCustom"><?= translate('use_custom_provider', $i18n) ?></label>
+                </div>
             </div>
-            <div class="form-group">
-                <label for="fixerProvider"><?= translate('provider', $i18n) ?>:</label>
-                <select name="fixer-provider" id="fixerProvider">
-                    <option value="0" <?= $provider == 0 ? 'selected' : '' ?>>fixer.io</option>
-                    <option value="1" <?= $provider == 1 ? 'selected' : '' ?>>apilayer.com</option>
-                </select>
+            <div class="settings-notes" id="instanceCurrencyInfo" <?= $usesInstanceCurrency ? '' : 'style="display:none"' ?>>
+                <?php if ($instanceCurrency['valid']): ?>
+                    <p>
+                        <i class="fa-solid fa-circle-info"></i>
+                        <?= translate('provider', $i18n) ?>:
+                        <span><?= ((int) $instanceCurrency['values']['provider']) === 1 ? 'apilayer.com' : 'fixer.io' ?></span>
+                    </p>
+                    <p>
+                        <i class="fa-solid fa-circle-info"></i>
+                        <?= translate('api_key', $i18n) ?>:
+                        <span>
+                            <?= $instanceCurrencyKey['managed']
+                                ? translate('managed_externally', $i18n)
+                                : translate('configured', $i18n) ?>
+                        </span>
+                    </p>
+                    <p><?= translate('shared_instance_quota', $i18n) ?></p>
+                <?php else: ?>
+                    <p>
+                        <i class="fa-solid fa-triangle-exclamation"></i>
+                        <?= translate('instance_currency_provider_not_configured', $i18n) ?>
+                    </p>
+                <?php endif; ?>
+            </div>
+            <div id="customCurrencyFields" <?= $usesInstanceCurrency ? 'style="display:none"' : '' ?>>
+                <div class="form-group">
+                    <input type="text" name="fixer-key" id="fixerKey" autocomplete="off" value="<?= htmlspecialchars($apiKey) ?>"
+                        placeholder="<?= translate('api_key', $i18n) ?>" <?= $demoMode ? 'disabled title="Not available on Demo Mode"' : '' ?>>
+                </div>
+                <div class="form-group">
+                    <label for="fixerProvider"><?= translate('provider', $i18n) ?>:</label>
+                    <select name="fixer-provider" id="fixerProvider">
+                        <option value="0" <?= $provider == 0 ? 'selected' : '' ?>>fixer.io</option>
+                        <option value="1" <?= $provider == 1 ? 'selected' : '' ?>>apilayer.com</option>
+                    </select>
+                </div>
             </div>
             <div class="buttons">
                 <input type="submit" value="<?= translate('save', $i18n) ?>" id="addFixerKey"
@@ -1258,6 +1359,50 @@ if ($budgetPeriodAnchorDate === '1970-01-01' || !preg_match('/^\d{4}-\d{2}-\d{2}
                 <input type="checkbox" id="ai_enabled" name="ai_enabled" <?= isset($aiSettings['enabled']) && $aiSettings['enabled'] ? "checked" : "" ?>>
                 <label for="ai_enabled" class="capitalize"><?= translate('enabled', $i18n) ?></label>
             </div>
+            <label for="aiModeInstance"><?= translate('ai_provider', $i18n) ?></label>
+            <div class="form-group-inline">
+                <div>
+                    <input type="radio" name="aimode" id="aiModeInstance" value="instance"
+                        onchange="toggleAiMode()" <?= $usesInstanceAi ? 'checked' : '' ?> />
+                    <label for="aiModeInstance"><?= translate('use_instance_ai_provider', $i18n) ?></label>
+                </div>
+                <div>
+                    <input type="radio" name="aimode" id="aiModeCustom" value="custom"
+                        onchange="toggleAiMode()" <?= $usesInstanceAi ? '' : 'checked' ?> />
+                    <label for="aiModeCustom"><?= translate('use_custom_provider', $i18n) ?></label>
+                </div>
+            </div>
+            <div class="settings-notes" id="instanceAiInfo" <?= $usesInstanceAi ? '' : 'style="display:none"' ?>>
+                <?php if ($instanceAi['valid']): ?>
+                    <p>
+                        <i class="fa-solid fa-circle-info"></i>
+                        <?= translate('provider', $i18n) ?>:
+                        <span><?= htmlspecialchars($instanceAi['values']['type']) ?></span>
+                    </p>
+                    <p>
+                        <i class="fa-solid fa-circle-info"></i>
+                        <?= translate('ai_model', $i18n) ?>:
+                        <span><?= htmlspecialchars($instanceAi['values']['model']) ?></span>
+                    </p>
+                    <?php if ($instanceAi['values']['type'] !== 'ollama'): ?>
+                        <p>
+                            <i class="fa-solid fa-circle-info"></i>
+                            <?= translate('api_key', $i18n) ?>:
+                            <span>
+                                <?= $instanceAiKey['managed']
+                                    ? translate('managed_externally', $i18n)
+                                    : translate('configured', $i18n) ?>
+                            </span>
+                        </p>
+                    <?php endif; ?>
+                <?php else: ?>
+                    <p>
+                        <i class="fa-solid fa-triangle-exclamation"></i>
+                        <?= translate('instance_ai_provider_not_configured', $i18n) ?>
+                    </p>
+                <?php endif; ?>
+            </div>
+            <div id="customAiFields" <?= $usesInstanceAi ? 'style="display:none"' : '' ?>>
             <div class="form-group">
                 <label for="ai_type"><?= translate('provider', $i18n) ?>:</label>
                 <select id="ai_type" name="ai_type" onchange="toggleAiInputs()">
@@ -1288,16 +1433,26 @@ if ($budgetPeriodAnchorDate === '1970-01-01' || !preg_match('/^\d{4}-\d{2}-\d{2}
                     <?= translate('test', $i18n) ?>
                 </button>
             </div>
+            </div>
             <div class="form-group">
                 <label for="ai_model"><?= translate('ai_model', $i18n) ?>:</label>
-                <select id="ai_model" name="ai_model">
-                    <option value=""><?= translate('select_ai_model', $i18n) ?></option>
-                    <?php if (!empty($aiSettings['model'])): ?>
-                        <option value="<?= htmlspecialchars($aiSettings['model']) ?>" selected>
-                            <?= htmlspecialchars($aiSettings['model']) ?>
-                        </option>
-                    <?php endif; ?>
-                </select>
+                <div class="form-group-inline">
+                    <select id="ai_model" name="ai_model">
+                        <option value=""><?= translate('select_ai_model', $i18n) ?></option>
+                        <?php if (!empty($aiSettings['model'])): ?>
+                            <option value="<?= htmlspecialchars($aiSettings['model']) ?>" selected>
+                                <?= htmlspecialchars($aiSettings['model']) ?>
+                            </option>
+                        <?php endif; ?>
+                    </select>
+                    <button type="button" id="fetchInstanceModelsButton" class="button thin <?= $usesInstanceAi ? '' : 'hidden' ?>"
+                        onclick="fetch_ai_models()">
+                        <?= translate('test', $i18n) ?>
+                    </button>
+                </div>
+                <div class="settings-notes" id="instanceAiModelHint" <?= $usesInstanceAi ? '' : 'style="display:none"' ?>>
+                    <p><?= translate('instance_ai_model_override_info', $i18n) ?></p>
+                </div>
             </div>
             <div class="form-group">
                 <label for="ai_run_schedule" class="flex"><?= translate('run_schedule', $i18n) ?>:</label>
@@ -1312,7 +1467,7 @@ if ($budgetPeriodAnchorDate === '1970-01-01' || !preg_match('/^\d{4}-\d{2}-\d{2}
             </div>
             <div class="buttons wrap mobile-reverse">
                 <?php
-                $canBeExecuted = !empty($aiSettings['model']) && !empty($aiSettings['enabled']) && $aiSettings['enabled'] == 1;
+                $canBeExecuted = $aiConfig['valid'] && !empty($aiConfig['values']['enabled']);
                 ?>
                 <input type="button" id="runAiRecommendations"
                     class="secondary-button thin mobile-grow-force <?= !$canBeExecuted ? 'hidden' : '' ?>"

@@ -34,6 +34,7 @@ Example response:
 require_once '../../includes/connect_endpoint.php';
 require_once '../../includes/ssrf_helper.php';
 require_once '../../includes/oidc_settings.php';
+require_once '../../includes/integration_config.php';
 
 header('Content-Type: application/json; charset=UTF-8');
 
@@ -136,9 +137,16 @@ if ($require_email_verification === 1 && empty($server_url)) {
     exit;
 }
 
-// SMTP checks
-$smtp_address = $_POST['smtp_address'] ?? $adminSettings['smtp_address'];
-$smtp_port = $_POST['smtp_port'] ?? $adminSettings['smtp_port'];
+// SMTP checks. Environment managed fields keep their environment value, so the
+// submitted value is neither validated nor stored for them.
+$smtpConfiguration = wallos_get_instance_smtp_config($db);
+
+$smtp_address = empty($smtpConfiguration['managed']['host'])
+    ? ($_POST['smtp_address'] ?? $adminSettings['smtp_address'])
+    : $smtpConfiguration['values']['host'];
+$smtp_port = empty($smtpConfiguration['managed']['port'])
+    ? ($_POST['smtp_port'] ?? $adminSettings['smtp_port'])
+    : $smtpConfiguration['values']['port'];
 
 if (!empty($smtp_address) && !empty($smtp_port)) {
     $smtp_port_int = intval($smtp_port);
@@ -175,6 +183,7 @@ $columnsMap = [
     'smtp_username' => SQLITE3_TEXT,
     'smtp_password' => SQLITE3_TEXT,
     'from_email' => SQLITE3_TEXT,
+    'smtp_from_name' => SQLITE3_TEXT,
     'encryption' => SQLITE3_TEXT,
     'login_disabled' => SQLITE3_INTEGER,
     'update_notification' => SQLITE3_INTEGER,
@@ -188,6 +197,22 @@ if (wallos_get_effective_ssrf_allowlist($db)['is_managed']) {
 
 if (isset(wallos_get_effective_oidc_configuration($db)['managed_fields']['enabled'])) {
     unset($columnsMap['oidc_oauth_enabled']);
+}
+
+$managedSmtpColumns = [
+    'host' => 'smtp_address',
+    'port' => 'smtp_port',
+    'encryption' => 'encryption',
+    'username' => 'smtp_username',
+    'password' => 'smtp_password',
+    'from_email' => 'from_email',
+    'from_name' => 'smtp_from_name',
+];
+
+foreach ($managedSmtpColumns as $field => $column) {
+    if (!empty($smtpConfiguration['managed'][$field])) {
+        unset($columnsMap[$column]);
+    }
 }
 
 foreach ($columnsMap as $postKey => $dataType) {

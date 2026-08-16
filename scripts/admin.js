@@ -23,47 +23,42 @@ function makeFetchCall(url, data, button) {
 
 }
 
+// Environment managed fields are rendered as read-only status inputs, so every
+// value is read defensively.
+function readFieldValue(id) {
+  const element = document.getElementById(id);
+  return element ? element.value : "";
+}
+
+function readCheckboxValue(id) {
+  const element = document.getElementById(id);
+  return element ? element.checked : false;
+}
+
 function testSmtpSettingsButton() {
   const button = document.getElementById("testSmtpSettingsButton");
   button.disabled = true;
 
-  const smtpAddress = document.getElementById("smtpaddress").value;
-  const smtpPort = document.getElementById("smtpport").value;
-  const encryption = document.querySelector('input[name="encryption"]:checked').value;
-  const smtpUsername = document.getElementById("smtpusername").value;
-  const smtpPassword = document.getElementById("smtppassword").value;
-  const fromEmail = document.getElementById("fromemail").value;
-
-  const data = {
-    smtpaddress: smtpAddress,
-    smtpport: smtpPort,
-    encryption: encryption,
-    smtpusername: smtpUsername,
-    smtppassword: smtpPassword,
-    fromemail: fromEmail
-  };
-
-  makeFetchCall('endpoints/notifications/testemailnotifications.php', data, button);
+  // Resolved server side, so the test proves the transport Wallos will use —
+  // including values that come from environment variables or secret files.
+  makeFetchCall('endpoints/notifications/testemailnotifications.php', { smtpmode: "instance" }, button);
 }
 
 function saveSmtpSettingsButton() {
   const button = document.getElementById("saveSmtpSettingsButton");
   button.disabled = true;
 
-  const smtpAddress = document.getElementById("smtpaddress").value;
-  const smtpPort = document.getElementById("smtpport").value;
-  const encryption = document.querySelector('input[name="encryption"]:checked').value;
-  const smtpUsername = document.getElementById("smtpusername").value;
-  const smtpPassword = document.getElementById("smtppassword").value;
-  const fromEmail = document.getElementById("fromemail").value;
+  const encryptionInput = document.querySelector('input[name="encryption"]:checked');
 
   const data = {
-    smtpaddress: smtpAddress,
-    smtpport: smtpPort,
-    encryption: encryption,
-    smtpusername: smtpUsername,
-    smtppassword: smtpPassword,
-    fromemail: fromEmail
+    smtpaddress: readFieldValue("smtpaddress"),
+    smtpport: readFieldValue("smtpport"),
+    encryption: encryptionInput ? encryptionInput.value : "tls",
+    smtpusername: readFieldValue("smtpusername"),
+    smtppassword: readFieldValue("smtppassword"),
+    fromemail: readFieldValue("fromemail"),
+    smtpfromname: readFieldValue("smtpfromname"),
+    smtppasswordremove: readCheckboxValue("smtppasswordremove")
   };
 
   fetch('endpoints/admin/savesmtpsettings.php', {
@@ -90,6 +85,24 @@ function saveSmtpSettingsButton() {
       button.disabled = false;
     });
 
+}
+
+function saveInstanceIntegrationsButton() {
+  const button = document.getElementById("saveInstanceIntegrations");
+  button.disabled = true;
+
+  const data = {
+    currency_provider: readFieldValue("instanceCurrencyProvider"),
+    currency_api_key: readFieldValue("instanceCurrencyApiKey"),
+    currency_api_key_remove: readCheckboxValue("instanceCurrencyApiKeyRemove"),
+    ai_provider: readFieldValue("instanceAiProvider"),
+    ai_base_url: readFieldValue("instanceAiBaseUrl"),
+    ai_model: readFieldValue("instanceAiModel"),
+    ai_api_key: readFieldValue("instanceAiApiKey"),
+    ai_api_key_remove: readCheckboxValue("instanceAiApiKeyRemove")
+  };
+
+  makeFetchCall('endpoints/admin/saveintegrationsettings.php', data, button);
 }
 
 function backupDB() {
