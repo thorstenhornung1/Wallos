@@ -239,7 +239,7 @@ if (
 
     $avatar = filter_var($_POST['avatar'], FILTER_SANITIZE_URL);
     $main_currency = $_POST['main_currency'];
-    $language = $_POST['language'];
+    $language = wallos_resolve_language($_POST['language'] ?? null);
 
     if (!empty($_FILES['profile_pic']["name"])) {
         $file = $_FILES['profile_pic'];

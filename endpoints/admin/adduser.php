@@ -137,7 +137,7 @@ $stmt->bindValue(':id', $loggedInUserId, SQLITE3_TEXT);
 $result = $stmt->execute();
 $row = $result->fetchArray();
 $currency = $row['main_currency'] ?? 1;
-$language = $row['language'] ?? 'en';
+$language = wallos_resolve_language($row['language'] ?? null);
 $avatar = "images/avatars/0.svg";
 
 // Get code for main currency

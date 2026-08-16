@@ -1,4 +1,4 @@
-const STATIC_CACHE = 'static-cache-v3';
+const STATIC_CACHE = 'static-cache-v4';
 const PAGES_CACHE = 'pages-cache-v1';
 const LOGOS_CACHE = 'logos-cache-v2';
 
@@ -54,17 +54,17 @@ const staticAssets = [
     'scripts/i18n/nl.js',
     'scripts/i18n/pl.js',
     'scripts/i18n/pt.js',
-    'scripts/i18n/pt_br.js',
+    'scripts/i18n/pt-BR.js',
     'scripts/i18n/ro.js',
     'scripts/i18n/ru.js',
     'scripts/i18n/sl.js',
-    'scripts/i18n/sr_lat.js',
+    'scripts/i18n/sr-Latn.js',
     'scripts/i18n/sr.js',
     'scripts/i18n/tr.js',
     'scripts/i18n/uk.js',
     'scripts/i18n/vi.js',
-    'scripts/i18n/zh_cn.js',
-    'scripts/i18n/zh_tw.js',
+    'scripts/i18n/zh-CN.js',
+    'scripts/i18n/zh-TW.js',
     'scripts/i18n/getlang.js',
     'scripts/libs/apexcharts.min.js',
     'scripts/libs/sortable.min.js',

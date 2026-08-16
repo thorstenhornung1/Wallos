@@ -1,17 +1,8 @@
 <?php
 
-$lang = "en";
-if (isset($_COOKIE['language'])) {
-    $selectedLanguage = $_COOKIE['language'];
-
-    if (array_key_exists($selectedLanguage, $langname_corrections)) {
-        $selectedLanguage = $langname_corrections[$selectedLanguage];
-    }
-
-    if (array_key_exists($selectedLanguage, $languages)) {
-        $lang = $selectedLanguage;
-    }
-}
+// Accepts anything a browser or an older Wallos may have stored, and always
+// returns a language that exists, so the caller can build a file path from it.
+$lang = wallos_resolve_language($_COOKIE['language'] ?? null);
 
 function translate($text, $translations)
 {

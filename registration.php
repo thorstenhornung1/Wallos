@@ -178,7 +178,7 @@ if (isset($_POST['username'])) {
     $main_currency = $_POST['main_currency'];
     $main_currency_index = array_search($main_currency, array_column($currencies, 'code'));
     $main_currency_id = $currencies[$main_currency_index]['id'];
-    $language = $_POST['language'];
+    $language = wallos_resolve_language($_POST['language'] ?? null);
     $avatar = "images/avatars/0.svg";
 
     if ($password != $confirm_password) {

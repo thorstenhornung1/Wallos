@@ -6,7 +6,7 @@ if (!isset($userData)) {
 
 $userId = $userData['id'];
 $username = $userData['username'];
-$language = $userData['language'];
+$language = wallos_resolve_language($userData['language'] ?? null);
 $main_currency = $userData['main_currency'];
 
 session_regenerate_id(true);
