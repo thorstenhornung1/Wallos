@@ -6,6 +6,18 @@ if (!isset($userData)) {
 
 $userId = $userData['id'];
 $username = $userData['username'];
+
+// Every OIDC sign-in path arrives here — an existing subject, an account linked
+// by verified email, and a freshly created one — which makes this the one place
+// the provider's admin claim is turned into a role.
+//
+// Restating it on every login is what makes revocation work: dropping the group
+// at the provider removes the role the next time the user authenticates. Only
+// the `oidc` source is written, so a local administrator is never affected.
+require_once __DIR__ . '/admin_role_sync.php';
+if (isset($userInfo) && is_array($userInfo) && isset($oidcSettings)) {
+    wallos_sync_oidc_admin_role($db, $userId, $userInfo, $oidcSettings);
+}
 $language = wallos_resolve_language($userData['language'] ?? null);
 $main_currency = $userData['main_currency'];
 

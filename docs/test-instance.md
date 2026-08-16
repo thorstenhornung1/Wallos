@@ -435,16 +435,55 @@ kubectl -n wallos-test set env deployment/wallos \
 `auth.hornung-bn.de` is already in the SSRF allowlist of both manifests, which
 it needs if it resolves to a private address.
 
-Limitations you will hit — these are open issues, not misconfiguration:
+### 7.1 Administrators from a group claim
+
+Optional, and off unless you set both variables:
+
+```yaml
+      OIDC_ADMIN_CLAIM: groups
+      OIDC_ADMIN_VALUE: Wallos Admins
+```
+
+Authentik sends `groups` when the `profile` scope includes a groups mapping; if
+you use entitlements instead, name that claim. Nothing here is
+Authentik-specific — you name the claim, Wallos reads it.
+
+Matching is exact, including case. `Admin` does not match `admin`, because a
+provider where those are two different groups with two different memberships is
+not one to guess about.
+
+The claim is re-read on **every** OIDC login, which is what makes revocation
+work: remove the group in Authentik, and the role goes at the user's next sign
+in. It does not end a session that is already running — for that you need
+back-channel logout ([#49](https://github.com/thorstenhornung1/Wallos/issues/49)).
+
+Only the OIDC-derived role is touched. An administrator who was granted the role
+locally keeps it even if the provider never sends the claim — that account is
+the way back in when the claim name turns out to be wrong, so it must not be
+possible to lose it by misconfiguring the provider.
+
+These two are environment-only on purpose. They decide who may administer the
+installation, and that is the operator's decision; an administrator should not
+be able to edit the rule through the web interface to promote other accounts.
+
+Both halves are required. Setting only one is reported in the configuration
+check rather than silently ignored, so you do not end up believing rights are
+being synchronised when nothing is happening.
+
+### 7.2 Known limitations
+
+Open issues, not misconfiguration:
 
 * an auto-created user is always English and EUR, whatever the `locale` claim
   says ([#34](https://github.com/thorstenhornung1/Wallos/issues/34),
   [#35](https://github.com/thorstenhornung1/Wallos/issues/35),
   [#40](https://github.com/thorstenhornung1/Wallos/issues/40))
 * logout redirects without `id_token_hint`, so Authentik may not end the session
-  ([#36](https://github.com/thorstenhornung1/Wallos/issues/36))
+  ([#36](https://github.com/thorstenhornung1/Wallos/issues/36),
+  [#48](https://github.com/thorstenhornung1/Wallos/issues/48))
 * logging out in Authentik leaves the Wallos session alive
-  ([#37](https://github.com/thorstenhornung1/Wallos/issues/37))
+  ([#37](https://github.com/thorstenhornung1/Wallos/issues/37),
+  [#49](https://github.com/thorstenhornung1/Wallos/issues/49))
 
 ## 8. Reset or remove
 

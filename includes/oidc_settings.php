@@ -19,6 +19,12 @@ function wallos_get_oidc_defaults()
         'auto_create_user' => 0,
         'password_login_disabled' => 0,
         'require_email_verified' => 1,
+        // Which claim, if any, grants the administrator role. Environment only,
+        // deliberately: this decides who may administer the installation, and
+        // that is the operator's call, not something an administrator should be
+        // able to rewrite through the web interface to promote other accounts.
+        'admin_claim' => '',
+        'admin_value' => '',
     ];
 }
 
@@ -164,6 +170,23 @@ function wallos_get_effective_oidc_configuration($db)
         } else {
             $notes[] = 'Ignoring invalid boolean value in OIDC_REQUIRE_EMAIL_VERIFIED.';
         }
+    }
+
+    foreach (['admin_claim' => 'OIDC_ADMIN_CLAIM', 'admin_value' => 'OIDC_ADMIN_VALUE'] as $field => $variable) {
+        if (wallos_has_oidc_env_value($variable)) {
+            $settings[$field] = trim((string) wallos_get_oidc_env_value($variable));
+            $managedFields[$field] = $variable;
+        }
+    }
+
+    // Half a mapping decides nothing, and silently ignoring it would leave an
+    // operator believing admin rights are being synchronised when they are not.
+    $claimSet = ($settings['admin_claim'] ?? '') !== '';
+    $valueSet = ($settings['admin_value'] ?? '') !== '';
+    if ($claimSet !== $valueSet) {
+        $notes[] = $claimSet
+            ? 'OIDC_ADMIN_CLAIM is set without OIDC_ADMIN_VALUE, so no admin role is derived from OIDC.'
+            : 'OIDC_ADMIN_VALUE is set without OIDC_ADMIN_CLAIM, so no admin role is derived from OIDC.';
     }
 
     if (wallos_has_oidc_env_value('OIDC_ISSUER')) {

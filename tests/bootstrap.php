@@ -120,6 +120,13 @@ function wallos_test_reset_env()
         'WALLOS_AI_PROVIDER', 'WALLOS_AI_API_KEY', 'WALLOS_AI_API_KEY_FILE', 'WALLOS_AI_BASE_URL', 'WALLOS_AI_MODEL',
         'WALLOS_DEFAULT_LANGUAGE',
         'SSRF_ALLOWLIST',
+        // A variable missing from this list leaks into the next case and makes
+        // it pass or fail for a reason that has nothing to do with the case.
+        'OIDC_ENABLED', 'OIDC_PROVIDER_NAME', 'OIDC_CLIENT_ID', 'OIDC_CLIENT_SECRET',
+        'OIDC_CLIENT_SECRET_FILE', 'OIDC_ISSUER', 'OIDC_AUTH_URL', 'OIDC_TOKEN_URL',
+        'OIDC_USERINFO_URL', 'OIDC_REDIRECT_URL', 'OIDC_LOGOUT_URL', 'OIDC_SCOPES',
+        'OIDC_USER_IDENTIFIER', 'OIDC_AUTO_CREATE_USER', 'OIDC_DISABLE_PASSWORD_LOGIN',
+        'OIDC_REQUIRE_EMAIL_VERIFIED', 'OIDC_ADMIN_CLAIM', 'OIDC_ADMIN_VALUE',
     ];
 
     foreach ($variables as $name) {
