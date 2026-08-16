@@ -33,7 +33,7 @@ const WALLOS_AI_HOST_PROVIDERS = ['ollama', 'openai-compatible'];
  * @param string  $integration
  * @return array<string, string> Stored instance values, keyed by setting name.
  */
-function wallos_get_instance_settings($db, $integration)
+function wallos_build_instance_settings($db, $integration)
 {
     $tableExists = $db->querySingle("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='integration_settings'");
     if (!$tableExists) {
@@ -65,6 +65,9 @@ function wallos_get_instance_settings($db, $integration)
  */
 function wallos_set_instance_setting($db, $integration, $key, $value, $isSecret = false)
 {
+    // Anything cached from before this write is now stale.
+    wallos_reset_config_cache($db);
+
     if ($value === null || $value === '') {
         $stmt = $db->prepare('DELETE FROM integration_settings WHERE integration = :integration AND setting_key = :key');
         $stmt->bindValue(':integration', $integration, SQLITE3_TEXT);
@@ -140,7 +143,7 @@ function wallos_apply_env_secret(&$config, $field, $variable)
  * @param SQLite3 $db
  * @return array Result structure with host, port, encryption, username, password, from_email and from_name.
  */
-function wallos_get_instance_smtp_config($db)
+function wallos_build_instance_smtp_config($db)
 {
     $config = wallos_config_result();
     $config['mode'] = 'instance';
@@ -224,7 +227,7 @@ function wallos_validate_smtp_config(&$config)
  * @param int|null $userId
  * @return array Result structure, additionally carrying mode, enabled and other_emails.
  */
-function wallos_get_effective_smtp_config($db, $userId = null)
+function wallos_build_effective_smtp_config($db, $userId = null)
 {
     if ($userId === null) {
         $config = wallos_get_instance_smtp_config($db);
@@ -357,7 +360,7 @@ function wallos_parse_currency_provider($value)
  * @param SQLite3 $db
  * @return array Result structure with provider and api_key.
  */
-function wallos_get_instance_currency_config($db)
+function wallos_build_instance_currency_config($db)
 {
     $config = wallos_config_result();
     $config['mode'] = 'instance';
@@ -398,7 +401,7 @@ function wallos_get_instance_currency_config($db)
  * @param int     $userId
  * @return array Result structure with provider and api_key.
  */
-function wallos_get_effective_currency_config($db, $userId)
+function wallos_build_effective_currency_config($db, $userId)
 {
     $stmt = $db->prepare('SELECT * FROM fixer WHERE user_id = :userId LIMIT 1');
     $stmt->bindValue(':userId', $userId, SQLITE3_INTEGER);
@@ -473,7 +476,7 @@ function wallos_currency_config_from_input($provider, $apiKey)
  * @param SQLite3 $db
  * @return array Result structure with type, api_key, url and model.
  */
-function wallos_get_instance_ai_config($db)
+function wallos_build_validated_instance_ai_config($db)
 {
     $config = wallos_build_instance_ai_config($db);
     wallos_validate_ai_config($config);
@@ -585,7 +588,7 @@ function wallos_validate_ai_config(&$config)
  * @param int     $userId
  * @return array Result structure with type, api_key, url, model, enabled and run_schedule.
  */
-function wallos_get_effective_ai_config($db, $userId)
+function wallos_build_effective_ai_config($db, $userId)
 {
     $row = [];
     $tableExists = $db->querySingle("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='ai_settings'");
@@ -647,4 +650,85 @@ function wallos_ai_settings_from_config($config)
         'url' => $config['values']['url'] ?? '',
         'model' => $config['values']['model'] ?? '',
     ];
+}
+
+/* -------------------------------------------------------------------------
+   Memoized entry points
+
+   Resolution is deterministic within one request or job, so each of these is
+   evaluated once. Everything above stays free of caching concerns.
+   ------------------------------------------------------------------------- */
+
+/**
+ * @param SQLite3 $db
+ * @param string  $integration
+ * @return array<string, string>
+ */
+function wallos_get_instance_settings($db, $integration)
+{
+    return wallos_config_cached($db, 'instance_settings:' . $integration,
+        fn() => wallos_build_instance_settings($db, $integration));
+}
+
+/**
+ * @param SQLite3 $db
+ * @return array Result structure.
+ */
+function wallos_get_instance_smtp_config($db)
+{
+    return wallos_config_cached($db, 'smtp:instance',
+        fn() => wallos_build_instance_smtp_config($db));
+}
+
+/**
+ * @param SQLite3  $db
+ * @param int|null $userId
+ * @return array Result structure.
+ */
+function wallos_get_effective_smtp_config($db, $userId = null)
+{
+    return wallos_config_cached($db, 'smtp:' . ($userId === null ? 'system' : (int) $userId),
+        fn() => wallos_build_effective_smtp_config($db, $userId));
+}
+
+/**
+ * @param SQLite3 $db
+ * @return array Result structure.
+ */
+function wallos_get_instance_currency_config($db)
+{
+    return wallos_config_cached($db, 'currency:instance',
+        fn() => wallos_build_instance_currency_config($db));
+}
+
+/**
+ * @param SQLite3 $db
+ * @param int     $userId
+ * @return array Result structure.
+ */
+function wallos_get_effective_currency_config($db, $userId)
+{
+    return wallos_config_cached($db, 'currency:' . (int) $userId,
+        fn() => wallos_build_effective_currency_config($db, $userId));
+}
+
+/**
+ * @param SQLite3 $db
+ * @return array Result structure.
+ */
+function wallos_get_instance_ai_config($db)
+{
+    return wallos_config_cached($db, 'ai:instance',
+        fn() => wallos_build_validated_instance_ai_config($db));
+}
+
+/**
+ * @param SQLite3 $db
+ * @param int     $userId
+ * @return array Result structure.
+ */
+function wallos_get_effective_ai_config($db, $userId)
+{
+    return wallos_config_cached($db, 'ai:' . (int) $userId,
+        fn() => wallos_build_effective_ai_config($db, $userId));
 }

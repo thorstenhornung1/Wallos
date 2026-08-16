@@ -141,6 +141,75 @@ function wallos_env_secret($name)
 }
 
 /**
+ * Shared storage for resolved configuration, keyed by the connection object so
+ * that entries disappear with the connection they belong to.
+ *
+ * @return WeakMap
+ */
+function wallos_config_cache_storage()
+{
+    static $cache = null;
+
+    if ($cache === null) {
+        $cache = new WeakMap();
+    }
+
+    return $cache;
+}
+
+/**
+ * Resolves a configuration once per request or job.
+ *
+ * A page that shows both the effective and the instance transport asks for the
+ * same configuration several times, and a cron job asks once per user. Without
+ * memoization each of those re-reads the environment, re-opens the secret file
+ * and re-queries the instance settings for an answer that cannot change within
+ * the run.
+ *
+ * @param SQLite3  $db
+ * @param string   $key      Identifies the configuration, e.g. "smtp:user:3".
+ * @param callable $resolve  Produces the value on the first call.
+ * @return mixed
+ */
+function wallos_config_cached($db, $key, callable $resolve)
+{
+    $cache = wallos_config_cache_storage();
+    $entries = $cache[$db] ?? [];
+
+    if (array_key_exists($key, $entries)) {
+        return $entries[$key];
+    }
+
+    $value = $resolve();
+
+    $entries[$key] = $value;
+    $cache[$db] = $entries;
+
+    return $value;
+}
+
+/**
+ * Drops memoized configuration after something changed it. Endpoints that store
+ * settings call this so a later read in the same request sees the new state.
+ *
+ * @param SQLite3|null $db Limits the reset to one connection when given.
+ */
+function wallos_reset_config_cache($db = null)
+{
+    $cache = wallos_config_cache_storage();
+
+    if ($db !== null) {
+        unset($cache[$db]);
+
+        return;
+    }
+
+    foreach ($cache as $connection => $entries) {
+        unset($cache[$connection]);
+    }
+}
+
+/**
  * Empty result structure used by every getEffective*Config() resolver.
  *
  * @return array{values: array, source: array, managed: array, managed_by: array, mode: string, valid: bool, notes: string[]}

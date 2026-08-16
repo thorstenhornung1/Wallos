@@ -86,6 +86,8 @@ foreach ($editable as $field => $definition) {
 }
 
 if ($stmt->execute()) {
+    wallos_reset_config_cache($db);
+
     die(json_encode([
         "success" => true,
         "message" => translate('success', $i18n)

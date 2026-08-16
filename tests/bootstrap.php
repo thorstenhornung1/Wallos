@@ -125,6 +125,11 @@ function wallos_test_reset_env()
         putenv($name);
         unset($_ENV[$name], $_SERVER[$name]);
     }
+
+    // Resolution is memoized per request; a test is a new request.
+    if (function_exists('wallos_reset_config_cache')) {
+        wallos_reset_config_cache();
+    }
 }
 
 /**

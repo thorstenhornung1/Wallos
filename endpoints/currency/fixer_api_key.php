@@ -89,6 +89,7 @@ if (!$stmt->execute()) {
     ]));
 }
 
+wallos_reset_config_cache($db);
 wallos_store_currency_usage($db, $config, $userId, $test['usage']);
 
 echo json_encode(["success" => true, "message" => translate('api_key_saved', $i18n)]);

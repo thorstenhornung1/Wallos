@@ -48,27 +48,63 @@ wallos_test('subscription seeding produces the expected fixture', function () {
     $db->close();
 });
 
-wallos_test_pending(
-    'effective configuration is resolved once per request',
-    'specification 45.2 / acceptance 43 — the resolver has no request-local memoization yet',
-    function () {
-        $db = wallos_test_open_counting_database();
-        wallos_test_create_user($db, 1, 'alice');
+wallos_test('effective configuration is resolved once per request', function () {
+    $db = wallos_test_open_counting_database();
+    wallos_test_create_user($db, 1, 'alice');
 
-        wallos_get_instance_smtp_config($db);
-        $db->resetQueryCount();
+    // First resolution loads it.
+    wallos_get_instance_smtp_config($db);
+    wallos_get_effective_smtp_config($db, 1);
+    wallos_get_instance_currency_config($db);
+    wallos_get_effective_ai_config($db, 1);
+    $db->resetQueryCount();
 
-        // A page that shows both the effective and the instance transport.
+    // A page that shows the effective and the instance configuration side by
+    // side asks for each of them again.
+    for ($i = 0; $i < 5; $i++) {
         wallos_get_instance_smtp_config($db);
-        wallos_get_instance_smtp_config($db);
-        wallos_get_instance_smtp_config($db);
-
-        assert_same(0, $db->queryCount,
-            'repeated resolution should be served from memory (got ' . $db->queryCount . ' queries)');
-
-        $db->close();
+        wallos_get_effective_smtp_config($db, 1);
+        wallos_get_instance_currency_config($db);
+        wallos_get_effective_ai_config($db, 1);
     }
-);
+
+    assert_same(0, $db->queryCount,
+        'repeated resolution is served from memory (got ' . $db->queryCount . ' queries)');
+
+    $db->close();
+});
+
+wallos_test('storing an instance setting invalidates the cache', function () {
+    $db = wallos_test_open_database();
+    wallos_test_create_user($db, 1, 'alice');
+
+    assert_true(!wallos_get_instance_currency_config($db)['valid'], 'nothing is configured yet');
+
+    wallos_set_instance_setting($db, 'currency', 'provider', 'apilayer');
+    wallos_set_instance_setting($db, 'currency', 'api_key', 'instance-key', true);
+
+    $config = wallos_get_instance_currency_config($db);
+    assert_true($config['valid'], 'the new credential is visible immediately');
+    assert_same('instance-key', $config['values']['api_key'], 'and it is the one just stored');
+
+    $db->close();
+});
+
+wallos_test('two connections do not share resolved configuration', function () {
+    $first = wallos_test_open_database();
+    $second = wallos_test_open_database();
+
+    wallos_set_instance_setting($first, 'currency', 'api_key', 'first-key', true);
+    wallos_set_instance_setting($second, 'currency', 'api_key', 'second-key', true);
+
+    assert_same('first-key', wallos_get_instance_currency_config($first)['values']['api_key'],
+        'the first connection sees its own value');
+    assert_same('second-key', wallos_get_instance_currency_config($second)['values']['api_key'],
+        'the second connection sees its own value');
+
+    $first->close();
+    $second->close();
+});
 
 wallos_test('one shared credential is fetched once per refresh', function () {
     require_once WALLOS_ROOT . '/includes/currency_provider.php';

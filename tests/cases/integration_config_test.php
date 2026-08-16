@@ -149,10 +149,13 @@ wallos_test('an invalid provider name is a configuration error', function () {
     putenv('WALLOS_CURRENCY_PROVIDER=nonsense');
     assert_true(!wallos_get_instance_currency_config($db)['valid'], 'the configuration is invalid');
 
+    // Configuration is resolved once per request; changing it starts a new one.
+    wallos_reset_config_cache($db);
     putenv('WALLOS_CURRENCY_PROVIDER=fixer');
     putenv('WALLOS_CURRENCY_API_KEY=k');
     assert_same(0, (int) wallos_get_instance_currency_config($db)['values']['provider'], 'fixer maps to 0');
 
+    wallos_reset_config_cache($db);
     putenv('WALLOS_CURRENCY_PROVIDER=apilayer');
     assert_same(1, (int) wallos_get_instance_currency_config($db)['values']['provider'], 'apilayer maps to 1');
 
@@ -182,6 +185,7 @@ wallos_test('AI infrastructure is inherited while preferences stay with the user
 
     $stmt = $db->prepare("UPDATE ai_settings SET model = 'user-model' WHERE user_id = 2");
     $stmt->execute();
+    wallos_reset_config_cache($db);
 
     $config = wallos_get_effective_ai_config($db, 2);
     assert_same('user-model', $config['values']['model'], 'the user may override the model');

@@ -104,6 +104,8 @@ if ($mode === 'custom') {
 }
 
 if ($stmt->execute()) {
+    wallos_reset_config_cache($db);
+
     echo json_encode([
         "success" => true,
         "message" => translate('notifications_settings_saved', $i18n)

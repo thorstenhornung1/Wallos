@@ -47,7 +47,13 @@ if ($mode === 'instance') {
     $stmt->bindValue(':model', $aiModel, SQLITE3_TEXT);
     $stmt->bindValue(':run_schedule', $aiSchedule, SQLITE3_TEXT);
 
-    echo json_encode($stmt->execute()
+    $stored = $stmt->execute();
+
+    if ($stored) {
+        wallos_reset_config_cache($db);
+    }
+
+    echo json_encode($stored
         ? ["success" => true, "message" => translate('success', $i18n), "enabled" => $aiEnabled]
         : ["success" => false, "message" => translate('error', $i18n)]);
     exit;
@@ -120,6 +126,8 @@ $stmt->bindValue(':run_schedule', $aiSchedule, SQLITE3_TEXT);
 $result = $stmt->execute();
 
 if ($result) {
+    wallos_reset_config_cache($db);
+
     $response = [
         "success" => true,
         "message" => translate('success', $i18n),
