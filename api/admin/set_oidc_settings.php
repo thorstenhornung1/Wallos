@@ -12,6 +12,9 @@ It receives the following parameters:
 - user_info_url: (optional) userinfo endpoint.
 - redirect_url: (optional) callback/redirect URL.
 - logout_url: (optional) logout/end-session URL.
+- admin_claim: (optional) claim naming the groups/roles the provider sends.
+- admin_value: (optional) value within that claim which grants the admin role.
+  Both are needed for admin mapping to run; either one empty turns it off.
 - user_identifier_field: (optional) field identifier (e.g. sub).
 - scopes: (optional) scope list.
 - auth_style: (optional) authentication style (auto/header/params).
@@ -102,6 +105,8 @@ $incomingMapping = [
     'auto_create_user' => isset($_POST['auto_create_user']) ? intval($_POST['auto_create_user']) : null,
     'password_login_disabled' => isset($_POST['password_login_disabled']) ? intval($_POST['password_login_disabled']) : null,
     'require_email_verified' => isset($_POST['require_email_verified']) ? intval($_POST['require_email_verified']) : null,
+    'admin_claim' => $_POST['admin_claim'] ?? null,
+    'admin_value' => $_POST['admin_value'] ?? null,
 ];
 
 // Merge if not managed by environment
@@ -157,13 +162,15 @@ if ($hasConfigChange) {
                 auth_style = :oidcAuthStyle,
                 auto_create_user = :oidcAutoCreateUser,
                 password_login_disabled = :oidcPasswordLoginDisabled,
-                require_email_verified = :oidcRequireEmailVerified
+                require_email_verified = :oidcRequireEmailVerified,
+                admin_claim = :oidcAdminClaim,
+                admin_value = :oidcAdminValue
                 WHERE id = 1');
     } else {
         $stmtSave = $db->prepare('INSERT INTO oauth_settings (
-                id, name, client_id, client_secret, authorization_url, token_url, user_info_url, redirect_url, logout_url, user_identifier_field, scopes, auth_style, auto_create_user, password_login_disabled, require_email_verified
+                id, name, client_id, client_secret, authorization_url, token_url, user_info_url, redirect_url, logout_url, user_identifier_field, scopes, auth_style, auto_create_user, password_login_disabled, require_email_verified, admin_claim, admin_value
             ) VALUES (
-                1, :oidcName, :oidcClientId, :oidcClientSecret, :oidcAuthUrl, :oidcTokenUrl, :oidcUserInfoUrl, :oidcRedirectUrl, :oidcLogoutUrl, :oidcUserIdentifierField, :oidcScopes, :oidcAuthStyle, :oidcAutoCreateUser, :oidcPasswordLoginDisabled, :oidcRequireEmailVerified
+                1, :oidcName, :oidcClientId, :oidcClientSecret, :oidcAuthUrl, :oidcTokenUrl, :oidcUserInfoUrl, :oidcRedirectUrl, :oidcLogoutUrl, :oidcUserIdentifierField, :oidcScopes, :oidcAuthStyle, :oidcAutoCreateUser, :oidcPasswordLoginDisabled, :oidcRequireEmailVerified, :oidcAdminClaim, :oidcAdminValue
             )');
     }
 
@@ -181,6 +188,10 @@ if ($hasConfigChange) {
     $stmtSave->bindValue(':oidcAutoCreateUser', $dbSettings['auto_create_user'], SQLITE3_INTEGER);
     $stmtSave->bindValue(':oidcPasswordLoginDisabled', $dbSettings['password_login_disabled'], SQLITE3_INTEGER);
     $stmtSave->bindValue(':oidcRequireEmailVerified', $dbSettings['require_email_verified'], SQLITE3_INTEGER);
+    // Trimmed: a trailing space in a claim name is invisible in the form and
+    // would silently stop every match, since comparison is exact.
+    $stmtSave->bindValue(':oidcAdminClaim', trim((string) ($dbSettings['admin_claim'] ?? '')), SQLITE3_TEXT);
+    $stmtSave->bindValue(':oidcAdminValue', trim((string) ($dbSettings['admin_value'] ?? '')), SQLITE3_TEXT);
     
     $resultSave = $stmtSave->execute();
     if (!$resultSave) {

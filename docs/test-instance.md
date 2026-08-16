@@ -437,7 +437,16 @@ it needs if it resolves to a private address.
 
 ### 7.1 Administrators from a group claim
 
-Optional, and off unless you set both variables:
+Optional, and off until both halves are filled in. Configure it in
+**Admin → OIDC settings**, in the two fields below "Require verified email":
+
+```
+Admin claim         groups
+Admin claim value   Wallos Admins
+```
+
+Or set it from the environment, which then takes precedence and greys the
+fields out in the interface, exactly like the other OIDC settings:
 
 ```yaml
       OIDC_ADMIN_CLAIM: groups
@@ -461,10 +470,6 @@ Only the OIDC-derived role is touched. An administrator who was granted the role
 locally keeps it even if the provider never sends the claim — that account is
 the way back in when the claim name turns out to be wrong, so it must not be
 possible to lose it by misconfiguring the provider.
-
-These two are environment-only on purpose. They decide who may administer the
-installation, and that is the operator's decision; an administrator should not
-be able to edit the rule through the web interface to promote other accounts.
 
 Both halves are required. Setting only one is reported in the configuration
 check rather than silently ignored, so you do not end up believing rights are

@@ -22,6 +22,10 @@ $oidcAuthStyle = isset($data['oidcAuthStyle']) ? trim($data['oidcAuthStyle']) : 
 $oidcAutoCreateUser = isset($data['oidcAutoCreateUser']) ? (int) $data['oidcAutoCreateUser'] : 0;
 $oidcPasswordLoginDisabled = isset($data['oidcPasswordLoginDisabled']) ? (int) $data['oidcPasswordLoginDisabled'] : 0;
 $oidcRequireEmailVerified = isset($data['oidcRequireEmailVerified']) ? (int) $data['oidcRequireEmailVerified'] : 1;
+// Trimmed like every other field here: claim matching is exact, so a trailing
+// space that nobody can see in the form would stop every match.
+$oidcAdminClaim = isset($data['oidcAdminClaim']) ? trim($data['oidcAdminClaim']) : '';
+$oidcAdminValue = isset($data['oidcAdminValue']) ? trim($data['oidcAdminValue']) : '';
 
 $oidcConfiguration = wallos_get_effective_oidc_configuration($db);
 $managedFields = $oidcConfiguration['managed_fields'];
@@ -42,6 +46,8 @@ $submittedSettings = [
     'auto_create_user' => $oidcAutoCreateUser,
     'password_login_disabled' => $oidcPasswordLoginDisabled,
     'require_email_verified' => $oidcRequireEmailVerified,
+    'admin_claim' => $oidcAdminClaim,
+    'admin_value' => $oidcAdminValue,
 ];
 
 foreach ($submittedSettings as $field => $value) {
@@ -84,14 +90,16 @@ if ($row['count'] > 0) {
             auth_style = :oidcAuthStyle,
             auto_create_user = :oidcAutoCreateUser,
             password_login_disabled = :oidcPasswordLoginDisabled,
-            require_email_verified = :oidcRequireEmailVerified
+            require_email_verified = :oidcRequireEmailVerified,
+            admin_claim = :oidcAdminClaim,
+            admin_value = :oidcAdminValue
             WHERE id = 1');
 } else {
     // Insert new row
     $stmt = $db->prepare('INSERT INTO oauth_settings (
-            id, name, client_id, client_secret, authorization_url, token_url, user_info_url, redirect_url, logout_url, user_identifier_field, scopes, auth_style, auto_create_user, password_login_disabled, require_email_verified
+            id, name, client_id, client_secret, authorization_url, token_url, user_info_url, redirect_url, logout_url, user_identifier_field, scopes, auth_style, auto_create_user, password_login_disabled, require_email_verified, admin_claim, admin_value
         ) VALUES (
-            1, :oidcName, :oidcClientId, :oidcClientSecret, :oidcAuthUrl, :oidcTokenUrl, :oidcUserInfoUrl, :oidcRedirectUrl, :oidcLogoutUrl, :oidcUserIdentifierField, :oidcScopes, :oidcAuthStyle, :oidcAutoCreateUser, :oidcPasswordLoginDisabled, :oidcRequireEmailVerified
+            1, :oidcName, :oidcClientId, :oidcClientSecret, :oidcAuthUrl, :oidcTokenUrl, :oidcUserInfoUrl, :oidcRedirectUrl, :oidcLogoutUrl, :oidcUserIdentifierField, :oidcScopes, :oidcAuthStyle, :oidcAutoCreateUser, :oidcPasswordLoginDisabled, :oidcRequireEmailVerified, :oidcAdminClaim, :oidcAdminValue
         )');
 }
 
@@ -109,6 +117,8 @@ $stmt->bindValue(':oidcAuthStyle', $dbSettings['auth_style'], SQLITE3_TEXT);
 $stmt->bindValue(':oidcAutoCreateUser', $dbSettings['auto_create_user'], SQLITE3_INTEGER);
 $stmt->bindValue(':oidcPasswordLoginDisabled', $dbSettings['password_login_disabled'], SQLITE3_INTEGER);
 $stmt->bindValue(':oidcRequireEmailVerified', $dbSettings['require_email_verified'], SQLITE3_INTEGER);
+$stmt->bindValue(':oidcAdminClaim', (string) ($dbSettings['admin_claim'] ?? ''), SQLITE3_TEXT);
+$stmt->bindValue(':oidcAdminValue', (string) ($dbSettings['admin_value'] ?? ''), SQLITE3_TEXT);
 $stmt->execute();
 
 if ($db->changes() > 0) {

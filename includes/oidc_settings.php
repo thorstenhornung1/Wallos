@@ -19,10 +19,9 @@ function wallos_get_oidc_defaults()
         'auto_create_user' => 0,
         'password_login_disabled' => 0,
         'require_email_verified' => 1,
-        // Which claim, if any, grants the administrator role. Environment only,
-        // deliberately: this decides who may administer the installation, and
-        // that is the operator's call, not something an administrator should be
-        // able to rewrite through the web interface to promote other accounts.
+        // Which claim, if any, grants the administrator role. Configurable in
+        // the admin interface like the rest of the OIDC settings, and
+        // overridable by OIDC_ADMIN_CLAIM / OIDC_ADMIN_VALUE like the rest.
         'admin_claim' => '',
         'admin_value' => '',
     ];

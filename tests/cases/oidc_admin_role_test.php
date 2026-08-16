@@ -243,6 +243,111 @@ wallos_test('half a mapping is reported rather than ignored', function () {
     $db->close();
 });
 
+wallos_test('the admin interface can configure the mapping', function () {
+    // Stored with the rest of the OIDC settings rather than being
+    // environment-only: whoever can edit the issuer or the client id already
+    // controls authentication completely, so singling these two out would have
+    // split the configuration across two places for no gain.
+    $db = wallos_test_open_database();
+    $stmt = $db->prepare("INSERT INTO oauth_settings (id, name, client_id, client_secret,
+        authorization_url, token_url, user_info_url, redirect_url, admin_claim, admin_value)
+        VALUES (1, 'p', 'c', 's', 'https://a', 'https://t', 'https://u', 'https://r', :claim, :value)");
+    $stmt->bindValue(':claim', 'groups', SQLITE3_TEXT);
+    $stmt->bindValue(':value', 'Wallos Admins', SQLITE3_TEXT);
+    $stmt->execute();
+
+    $configuration = wallos_get_effective_oidc_configuration($db);
+
+    assert_same('groups', $configuration['settings']['admin_claim'], 'claim read from the database');
+    assert_same('Wallos Admins', $configuration['settings']['admin_value'], 'value read from the database');
+    assert_true(wallos_oidc_admin_mapping_configured($configuration['settings']), 'mapping is on');
+    assert_true(!isset($configuration['managed_fields']['admin_claim']),
+        'and editable, since no environment variable claims it');
+
+    $db->close();
+});
+
+wallos_test('the environment overrides what the interface stored', function () {
+    // Same precedence as every other OIDC field: an operator who sets the
+    // variable takes the decision away from the interface, and the interface
+    // says so rather than silently accepting edits that do nothing.
+    $db = wallos_test_open_database();
+    $stmt = $db->prepare("INSERT INTO oauth_settings (id, name, client_id, client_secret,
+        authorization_url, token_url, user_info_url, redirect_url, admin_claim, admin_value)
+        VALUES (1, 'p', 'c', 's', 'https://a', 'https://t', 'https://u', 'https://r', 'groups', 'From UI')");
+    $stmt->execute();
+
+    putenv('OIDC_ADMIN_CLAIM=entitlements');
+    putenv('OIDC_ADMIN_VALUE=From environment');
+
+    $configuration = wallos_get_effective_oidc_configuration($db);
+
+    assert_same('entitlements', $configuration['settings']['admin_claim'], 'environment wins');
+    assert_same('From environment', $configuration['settings']['admin_value'], 'for both halves');
+    assert_same('OIDC_ADMIN_CLAIM', $configuration['managed_fields']['admin_claim'] ?? null,
+        'and the field is marked managed so the interface disables it');
+
+    $db->close();
+});
+
+wallos_test('the migration adds the columns and leaves them empty', function () {
+    // An existing installation must upgrade into "no admin mapping", not into
+    // some default that starts handing out administrator rights.
+    $db = wallos_test_open_database();
+
+    require WALLOS_ROOT . '/migrations/000059.php';
+
+    $columns = [];
+    $result = $db->query("SELECT name FROM pragma_table_info('oauth_settings')");
+    while ($row = $result->fetchArray(SQLITE3_ASSOC)) {
+        $columns[] = $row['name'];
+    }
+
+    assert_true(in_array('admin_claim', $columns, true), 'admin_claim exists');
+    assert_true(in_array('admin_value', $columns, true), 'admin_value exists');
+
+    $settings = wallos_get_db_oidc_settings($db);
+    assert_same('', $settings['admin_claim'], 'empty by default');
+    assert_true(!wallos_oidc_admin_mapping_configured($settings), 'so no mapping happens');
+
+    $db->close();
+});
+
+wallos_test('the role migration is idempotent for the columns', function () {
+    $db = wallos_test_open_database();
+
+    require WALLOS_ROOT . '/migrations/000059.php';
+    require WALLOS_ROOT . '/migrations/000059.php';
+
+    $settings = wallos_get_db_oidc_settings($db);
+    assert_same('', $settings['admin_claim'], 'still there, still empty');
+
+    $db->close();
+});
+
+wallos_test('both save paths write the claim mapping', function () {
+    // Two endpoints save OIDC settings — the admin interface posts to
+    // endpoints/, the API to api/. A field added to one and forgotten in the
+    // other is silently unsaveable from whichever was missed.
+    foreach (['endpoints/admin/saveoidcsettings.php', 'api/admin/set_oidc_settings.php'] as $path) {
+        $source = file_get_contents(WALLOS_ROOT . '/' . $path);
+
+        assert_true(strpos($source, 'admin_claim') !== false, $path . ' saves admin_claim');
+        assert_true(strpos($source, 'admin_value') !== false, $path . ' saves admin_value');
+    }
+});
+
+wallos_test('the interface offers both fields', function () {
+    $admin = file_get_contents(WALLOS_ROOT . '/admin.php');
+    $script = file_get_contents(WALLOS_ROOT . '/scripts/admin.js');
+
+    assert_true(strpos($admin, 'oidcAdminClaim') !== false, 'the claim field is rendered');
+    assert_true(strpos($admin, 'oidcAdminValue') !== false, 'the value field is rendered');
+    assert_true(strpos($admin, "oidc_input_attrs('admin_claim'") !== false,
+        'and is disabled when an environment variable manages it');
+    assert_true(strpos($script, 'oidcAdminClaim') !== false, 'and the save button submits it');
+});
+
 wallos_test('nothing is configured by default', function () {
     $db = wallos_test_open_database();
     $configuration = wallos_get_effective_oidc_configuration($db);

@@ -316,6 +316,24 @@ $loginDisabledAllowed = $userCount == 1 && $settings['registrations_open'] == 0;
                     <?= oidc_input_attrs('require_email_verified', $oidcManagedFields) ?> />
                 <label for="oidcRequireEmailVerified"><?= translate('require_email_verified_linking', $i18n) ?></label>
             </div>
+            <div class="form-group">
+                <input type="text" id="oidcAdminClaim" placeholder="<?= translate('oidc_admin_claim', $i18n) ?>"
+                    autocomplete="off"
+                    value="<?= htmlspecialchars($oidcSettings['admin_claim'] ?? '') ?>"
+                    <?= oidc_input_attrs('admin_claim', $oidcManagedFields) ?> />
+            </div>
+            <div class="form-group">
+                <input type="text" id="oidcAdminValue" placeholder="<?= translate('oidc_admin_value', $i18n) ?>"
+                    autocomplete="off"
+                    value="<?= htmlspecialchars($oidcSettings['admin_value'] ?? '') ?>"
+                    <?= oidc_input_attrs('admin_value', $oidcManagedFields) ?> />
+            </div>
+            <div class="settings-notes">
+                <p>
+                    <i class="fa-solid fa-circle-info"></i>
+                    <?= translate('oidc_admin_claim_hint', $i18n) ?>
+                </p>
+            </div>
             <?php if (!empty($oidcManagedFields) || !empty($oidcNotes)): ?>
                 <div class="settings-notes">
                     <?php if (!empty($oidcManagedFields)): ?>
