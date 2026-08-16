@@ -1,5 +1,15 @@
 # Changelog
 
+## [5.5.2](https://github.com/thorstenhornung1/Wallos/releases/tag/v5.5.2) (2026-08-16)
+
+### Bug Fixes
+
+* **oidc:** an authorization response arriving at `login.php` is consumed
+  instead of discarded. Only the document root handled callbacks, so an
+  identity provider configured with the login page as its redirect URI — the
+  obvious choice — authorised successfully and the user was returned to the
+  login form with no account created and no error anywhere ([#42](https://github.com/thorstenhornung1/Wallos/issues/42))
+
 ## [5.5.1](https://github.com/thorstenhornung1/Wallos/releases/tag/v5.5.1) (2026-08-16)
 
 ### Bug Fixes
