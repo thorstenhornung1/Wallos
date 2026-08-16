@@ -21,14 +21,15 @@ if (isset($_SESSION['from_oidc']) && $_SESSION['from_oidc'] === true) {
     $logoutUrl = $oidcSettings['logout_url'] ?? '';
 }
 
-// get token from cookie to remove from DB
+// Revoke the persistent login token.
+//
+// This used to also match on :userId, but $userId is never assigned in this
+// file — it bound NULL, and `user_id = NULL` is never true, so the delete
+// matched nothing and every logout left a usable token behind. The token value
+// identifies the row by itself.
+require_once __DIR__ . '/includes/session_tokens.php';
 if (isset($_SESSION['token'])) {
-    $token = $_SESSION['token'];
-    $sql = "DELETE FROM login_tokens WHERE token = :token AND user_id = :userId";
-    $stmt = $db->prepare($sql);
-    $stmt->bindParam(':token', $token, SQLITE3_TEXT);
-    $stmt->bindParam(':userId', $userId, SQLITE3_INTEGER);
-    $stmt->execute();
+    wallos_revoke_login_token($db, $_SESSION['token']);
 }
 $_SESSION = array();
 session_destroy();
