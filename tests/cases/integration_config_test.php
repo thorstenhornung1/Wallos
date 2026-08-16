@@ -239,3 +239,24 @@ wallos_test('the API payload exposes status, never secrets', function () {
 
     $db->close();
 });
+
+wallos_test('a usable transport does not mean notifications are enabled', function () {
+    // From the 2026-08-16 test run: a green test button was read as proof that
+    // scheduled mail would arrive. It is not — the transport can be perfectly
+    // valid while the user has never enabled or saved notifications, and the
+    // cron job only sends for users who did.
+    $db = wallos_test_open_database();
+    integration_fixture($db);
+
+    $stmt = $db->prepare('DELETE FROM email_notifications WHERE user_id = 2');
+    $stmt->execute();
+    wallos_reset_config_cache($db);
+
+    $config = wallos_get_effective_smtp_config($db, 2);
+
+    assert_true($config['valid'], 'the inherited transport is usable');
+    assert_same(0, (int) $config['values']['enabled'],
+        'a user without a saved row has notifications disabled');
+
+    $db->close();
+});

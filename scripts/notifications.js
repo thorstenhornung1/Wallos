@@ -112,7 +112,12 @@ function testNotificationEmailButton()  {
     const button = document.getElementById("testNotificationsEmail");
     button.disabled = true;
 
-    makeFetchCall('endpoints/notifications/testemailnotifications.php', collectSmtpFormData(), button);
+    const data = collectSmtpFormData();
+    // Lets the endpoint point out that notifications are not enabled yet; the
+    // admin transport test has no user notifications to speak of.
+    data.context = "user";
+
+    makeFetchCall('endpoints/notifications/testemailnotifications.php', data, button);
 }
 
 function saveNotificationsWebhookButton() {

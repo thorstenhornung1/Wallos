@@ -60,9 +60,22 @@ try {
     $mail->Body = translate('test_notification', $i18n);
 
     if ($mail->send()) {
+        $message = translate('notification_sent_successfuly', $i18n);
+
+        // A working transport is not the same as working notifications: the
+        // scheduled job only sends for users who enabled and saved them. Say so
+        // here, or a green test is read as proof that renewals will arrive.
+        if (($data['context'] ?? '') === 'user') {
+            $effective = wallos_get_effective_smtp_config($db, $userId);
+
+            if (empty($effective['values']['enabled'])) {
+                $message .= ' ' . translate('notifications_not_enabled_yet', $i18n);
+            }
+        }
+
         $response = [
             "success" => true,
-            "message" => translate('notification_sent_successfuly', $i18n)
+            "message" => $message
         ];
     } else {
         $response = [

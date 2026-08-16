@@ -7,6 +7,9 @@ actually work.
 
 Everything below is copy-paste. Values you choose are marked.
 
+A run of this plan against a live Swarm cluster is documented in
+[test-results-2026-08-16.md](test-results-2026-08-16.md).
+
 Two deployment paths, one test plan:
 
 * **Docker Swarm** — `docs/test-instance/wallos-test-stack.yml`
@@ -48,6 +51,18 @@ spends a real quota. Replace them only to exercise a real provider call.
 printf 'test-smtp-password'   | docker secret create wallos_test_smtp_password -
 printf 'invalid-currency-key' | docker secret create wallos_test_currency_api_key -
 printf 'invalid-ai-key'       | docker secret create wallos_test_ai_api_key -
+```
+
+`printf`, not `echo`: `echo` appends a newline, and the secret would be one byte
+longer than the password actually is. Wallos strips trailing newlines when it
+reads a secret file, so this particular setup would survive it — but a provider
+that does not would fail authentication with a message pointing at a wrong
+password rather than at one byte too many.
+
+Verify what arrived:
+
+```sh
+$EXEC sh -c 'for f in /run/secrets/*; do printf "%s %s bytes\n" "$f" "$(wc -c < "$f")"; done'
 ```
 
 The stack expects the `traefik_public` network and a node labelled `app=true`,
@@ -223,15 +238,39 @@ instance's.
 
 ### 5.6 Notifications actually go out
 
-Create a subscription due tomorrow with notifications enabled and a lead time of
-one day, then:
+Two things have to be true before the scheduled job sends anything, and a green
+Test button in 5.1 proves neither:
+
+1. **Email notifications enabled and saved.** The test button resolves the
+   transport directly and sends; the cron job only sends for users whose
+   `email_notifications` row says enabled. Pressing Test without saving leaves
+   no row at all. Since v5.5.1 the test reply says so explicitly.
+2. **A subscription that is actually due today.** Each subscription has its own
+   lead time; `-1` means "use my notification setting" from **Settings →
+   Notifications**, which defaults to one day.
+
+So: enable email notifications and **save**, create a subscription due tomorrow
+with notifications on, then:
 
 ```sh
 $EXEC php /var/www/html/endpoints/cronjobs/sendnotifications.php
 ```
 
-Mailpit receives one mail per user with a due subscription, each through the
-transport that user resolves to.
+The job explains its decision, which is what makes it debuggable:
+
+```
+Subscription: Test
+Next payment date: 2026-08-17
+Current date: 2026-08-16
+Difference: 1
+
+Email Notifications sent
+```
+
+If nothing arrives, this output separates "the job never considered this
+subscription" from "it tried and the transport failed". Mailpit receives one
+mail per user with a due subscription, each through the transport that user
+resolves to.
 
 ### 5.7 A broken secret file does not fall back
 

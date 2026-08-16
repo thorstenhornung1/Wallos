@@ -516,6 +516,7 @@ $i18n = [
     "managed_externally" => "Managed externally",
     "managed_by_environment" => "Managed by environment variables:",
     "leave_empty_to_keep" => "leave empty to keep the stored value",
+    "notifications_not_enabled_yet" => "Email notifications are not enabled yet, so scheduled notifications will not be sent until you enable and save them.",
     "remove_stored_secret" => "Remove the stored value",
 ];
 
