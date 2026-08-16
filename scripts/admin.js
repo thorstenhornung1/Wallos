@@ -481,6 +481,7 @@ function saveOidcSettingsButton() {
   const oidcRequireEmailVerified = document.getElementById("oidcRequireEmailVerified").checked ? 1 : 0;
   const oidcAdminClaim = document.getElementById("oidcAdminClaim").value;
   const oidcAdminValue = document.getElementById("oidcAdminValue").value;
+  const oidcPostLogoutRedirectUrl = document.getElementById("oidcPostLogoutRedirectUrl").value;
 
   const data = {
     oidcName: oidcName,
@@ -498,7 +499,8 @@ function saveOidcSettingsButton() {
     oidcPasswordLoginDisabled: oidcPasswordLoginDisabled,
     oidcRequireEmailVerified: oidcRequireEmailVerified,
     oidcAdminClaim: oidcAdminClaim,
-    oidcAdminValue: oidcAdminValue
+    oidcAdminValue: oidcAdminValue,
+    oidcPostLogoutRedirectUrl: oidcPostLogoutRedirectUrl
   };
 
 

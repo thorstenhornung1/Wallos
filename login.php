@@ -161,7 +161,22 @@ if ($oidcEnabled) {
 }
 
 $loginFailed = false;
-$hasSuccessMessage = (isset($_GET['validated']) && $_GET['validated'] == "true") || (isset($_GET['registered']) && $_GET['registered'] == true) ? true : false;
+
+// Returning from the provider's end-session endpoint. State is validated when
+// the provider returns one; providers are not required to, so an absent state
+// is accepted rather than turning a correct logout into an error page.
+require_once __DIR__ . '/includes/oidc/logout.php';
+$loggedOut = false;
+if (isset($_GET['logged_out'])) {
+    $loggedOut = wallos_oidc_logout_state_is_valid(
+        $_GET['state'] ?? null,
+        $_SESSION['oidc_logout_state'] ?? null
+    );
+    // Single use: the state has served its purpose the moment it is checked.
+    unset($_SESSION['oidc_logout_state']);
+}
+
+$hasSuccessMessage = (isset($_GET['validated']) && $_GET['validated'] == "true") || (isset($_GET['registered']) && $_GET['registered'] == true) || $loggedOut ? true : false;
 $userEmailWaitingVerification = false;
 $oidcErrorKey = null;
 if (isset($_POST['username']) && isset($_POST['password'])) {
@@ -449,6 +464,10 @@ if (isset($_GET['error'])) {
                         if (isset($_GET['validated']) && $_GET['validated'] == "true") {
                             ?>
                             <li><i class="fa-solid fa-check"></i><?= translate('email_verified', $i18n) ?></li>
+                            <?php
+                        } else if ($loggedOut) {
+                            ?>
+                            <li><i class="fa-solid fa-check"></i><?= translate('logged_out_successfully', $i18n) ?></li>
                             <?php
                         } else if (isset($_GET['registered']) && $_GET['registered']) {
                             ?>

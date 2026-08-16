@@ -24,6 +24,9 @@ function wallos_get_oidc_defaults()
         // overridable by OIDC_ADMIN_CLAIM / OIDC_ADMIN_VALUE like the rest.
         'admin_claim' => '',
         'admin_value' => '',
+        // Where the provider returns the user after ending the session. Empty
+        // means it is derived from the redirect URL.
+        'post_logout_redirect_url' => '',
     ];
 }
 
@@ -229,6 +232,7 @@ function wallos_get_effective_oidc_configuration($db)
         'logout_url' => 'OIDC_LOGOUT_URL',
         'user_identifier_field' => 'OIDC_USER_IDENTIFIER',
         'scopes' => 'OIDC_SCOPES',
+        'post_logout_redirect_url' => 'OIDC_POST_LOGOUT_REDIRECT_URL',
     ];
 
     foreach ($envFieldMap as $field => $envVar) {
@@ -296,6 +300,7 @@ function wallos_oidc_writable_fields()
         'require_email_verified' => 'int',
         'admin_claim' => 'text',
         'admin_value' => 'text',
+        'post_logout_redirect_url' => 'text',
     ];
 }
 

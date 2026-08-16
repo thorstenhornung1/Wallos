@@ -317,6 +317,12 @@ $loginDisabledAllowed = $userCount == 1 && $settings['registrations_open'] == 0;
                 <label for="oidcRequireEmailVerified"><?= translate('require_email_verified_linking', $i18n) ?></label>
             </div>
             <div class="form-group">
+                <input type="text" id="oidcPostLogoutRedirectUrl"
+                    placeholder="<?= translate('oidc_post_logout_redirect_url', $i18n) ?>" autocomplete="off"
+                    value="<?= htmlspecialchars($oidcSettings['post_logout_redirect_url'] ?? '') ?>"
+                    <?= oidc_input_attrs('post_logout_redirect_url', $oidcManagedFields) ?> />
+            </div>
+            <div class="form-group">
                 <input type="text" id="oidcAdminClaim" placeholder="<?= translate('oidc_admin_claim', $i18n) ?>"
                     autocomplete="off"
                     value="<?= htmlspecialchars($oidcSettings['admin_claim'] ?? '') ?>"

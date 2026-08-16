@@ -29,6 +29,7 @@ $fieldMap = [
     'require_email_verified' => 'oidcRequireEmailVerified',
     'admin_claim' => 'oidcAdminClaim',
     'admin_value' => 'oidcAdminValue',
+    'post_logout_redirect_url' => 'oidcPostLogoutRedirectUrl',
 ];
 
 $submitted = [];

@@ -483,12 +483,38 @@ Open issues, not misconfiguration:
   says ([#34](https://github.com/thorstenhornung1/Wallos/issues/34),
   [#35](https://github.com/thorstenhornung1/Wallos/issues/35),
   [#40](https://github.com/thorstenhornung1/Wallos/issues/40))
-* logout redirects without `id_token_hint`, so Authentik may not end the session
-  ([#36](https://github.com/thorstenhornung1/Wallos/issues/36),
-  [#48](https://github.com/thorstenhornung1/Wallos/issues/48))
 * logging out in Authentik leaves the Wallos session alive
   ([#37](https://github.com/thorstenhornung1/Wallos/issues/37),
   [#49](https://github.com/thorstenhornung1/Wallos/issues/49))
+
+### 7.3 Logout
+
+Logging out of Wallos now ends the provider session too, using the standard
+end-session request with `id_token_hint`, `post_logout_redirect_uri` and
+`state`.
+
+The end-session URL comes from discovery when you use `OIDC_ISSUER`, so there is
+usually nothing to configure. An explicit "Logout URL" in the admin interface
+takes precedence if your provider needs one.
+
+**One thing to set in Authentik:** register the return URI, or Authentik will
+ignore it and leave the user on its own page. In the provider's redirect URI
+list add:
+
+```
+https://test.hornung-bn.de/login.php?logged_out=1
+```
+
+The default is derived from your redirect URL; override it with the
+"Post-logout redirect URL" field or `OIDC_POST_LOGOUT_REDIRECT_URL`.
+
+Local logout always completes first — token deleted, session destroyed, cookie
+cleared — before the redirect is issued. A provider that is unreachable or
+misconfigured cannot leave you signed in to Wallos.
+
+Whether Authentik ends only the application session or the whole SSO session
+depends on its provider invalidation flow. That is a provider-side setting;
+Wallos sends the standard request either way.
 
 ## 8. Reset or remove
 

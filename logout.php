@@ -1,6 +1,9 @@
 <?php
 require_once 'includes/connect.php';
 require_once 'includes/oidc_settings.php';
+require_once 'includes/oidc/logout.php';
+require_once 'includes/session_tokens.php';
+
 $secondsInMonth = 30 * 24 * 60 * 60;
 if (session_status() === PHP_SESSION_NONE) {
     session_set_cookie_params([
@@ -11,35 +14,52 @@ if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
 
-$logoutOIDC = false;
+// Everything the remote logout needs is read before the session is destroyed.
+$fromOidc = isset($_SESSION['from_oidc']) && $_SESSION['from_oidc'] === true;
+$idToken = $_SESSION['oidc_id_token'] ?? null;
+$sessionToken = $_SESSION['token'] ?? null;
 
-// Check if user is logged in with OIDC
-if (isset($_SESSION['from_oidc']) && $_SESSION['from_oidc'] === true) {
-    $logoutOIDC = true;
+$endSessionUrl = null;
+$postLogoutRedirectUrl = null;
+$logoutState = null;
+
+if ($fromOidc) {
     $oidcConfiguration = wallos_get_effective_oidc_configuration($db);
-    $oidcSettings = $oidcConfiguration['settings'];
-    $logoutUrl = $oidcSettings['logout_url'] ?? '';
+    $endSessionUrl = wallos_oidc_end_session_url(
+        $oidcConfiguration['settings'],
+        $oidcConfiguration['discovery_document']
+    );
+    $postLogoutRedirectUrl = wallos_oidc_post_logout_redirect_url($oidcConfiguration['settings']);
+    $logoutState = bin2hex(random_bytes(16));
 }
 
-// Revoke the persistent login token.
-//
-// This used to also match on :userId, but $userId is never assigned in this
-// file — it bound NULL, and `user_id = NULL` is never true, so the delete
-// matched nothing and every logout left a usable token behind. The token value
-// identifies the row by itself.
-require_once __DIR__ . '/includes/session_tokens.php';
-if (isset($_SESSION['token'])) {
-    wallos_revoke_login_token($db, $_SESSION['token']);
-}
+// Local logout happens first and completely. A provider that is unreachable,
+// misconfigured or slow must never be able to leave the user logged in here.
+wallos_revoke_login_token($db, $sessionToken);
+
 $_SESSION = array();
 session_destroy();
 $cookieExpire = time() - 3600;
 setcookie('wallos_login', '', $cookieExpire);
+
+if ($endSessionUrl !== null) {
+    // The state is carried in a fresh session purely so the return can be
+    // recognised; it holds nothing else.
+    session_start();
+    session_regenerate_id(true);
+    $_SESSION['oidc_logout_state'] = $logoutState;
+    session_write_close();
+}
+
 $db->close();
 
-if ($logoutOIDC && !empty($logoutUrl)) {
-    $returnTo = urlencode($oidcSettings['redirect_url'] ?? '');
-    header("Location: $logoutUrl?post_logout_redirect_uri=$returnTo");
+if ($endSessionUrl !== null) {
+    header('Location: ' . wallos_oidc_build_end_session_url(
+        $endSessionUrl,
+        $idToken,
+        $postLogoutRedirectUrl,
+        $logoutState
+    ));
     exit();
 }
 
