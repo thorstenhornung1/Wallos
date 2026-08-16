@@ -46,6 +46,7 @@ than at one byte too many.
 | 5.6 notifications actually go out | **pass** | `Difference: 1` → `Email Notifications sent` |
 | 5.7 a broken secret file does not fall back | **pass** | send refused, path named, no mail |
 | 5.8 cron jobs run clean | **pass** | five jobs, no warning, no fatal |
+| 7 OIDC against authentik | **pass**, after five separate fixes | account auto-provisioned, `oidc_sub` set |
 
 ## Details
 
@@ -131,6 +132,86 @@ Restoring the correct path made delivery work again in the same run.
 `sendverificationemails` and `sendresetpasswordemails` all completed without a
 PHP warning or fatal error.
 
+## Section 7 — OIDC against authentik
+
+Working, but it took five separate causes to get there. Two of them produced
+issues in this repository.
+
+Environment: authentik 2026.5.6, provider and application both named
+`wallos-test`, image upgraded to **v5.5.2** mid-run (see below).
+
+### What went wrong, in order
+
+| # | Cause | What the user saw |
+| --- | --- | --- |
+| 1 | Redirect URI `…/login.php` — that file did not consume the callback | login page, no message |
+| 2 | Redirect URI mismatch after fixing 1 (`…` vs `…/login.php`) | authentik error page |
+| 3 | Application had lost its provider assignment | "Permission denied" |
+| 4 | Provider still on the default `email` scope mapping (`email_verified: False`) | would have produced `oidc_email_not_verified` |
+| 5 | Two providers with near-identical names — edits landed on the wrong one | nothing at all |
+
+Causes 2–5 were on the authentik side. Cause 5 is worth naming precisely,
+because it cost two rounds: creating the application generated a second
+provider called `Provider for wallos-test`, sitting directly beneath the
+manually created `wallos-test`. Only the generated one was linked to the
+application, so every change to the other had no effect and produced no
+warning.
+
+Both were only diagnosable by querying authentik's database. That observation
+became [#43](https://github.com/thorstenhornung1/Wallos/issues/43).
+
+### #42 — found and fixed during this run
+
+Following section 7 as written, the callback arrived at `login.php` and was
+discarded: `login.php` never included `checksession.php`, the only file
+reading `$_GET['code']`. Filed as
+[#42](https://github.com/thorstenhornung1/Wallos/issues/42), fixed in **v5.5.2**
+by moving the handler into `includes/oidc/consume_oidc_callback.php` and
+including it from both entry points.
+
+Verified against the running instance afterwards:
+
+```
+login.php?code=…&state=…   ->  302  Location: login.php?error=oidc_invalid_state
+index.php?code=…&state=…   ->  302  Location: login.php?error=oidc_invalid_state
+login.php                  ->  200  (unchanged)
+```
+
+The invalid state is expected — the probe had no session. What matters is that
+a response exists at all where there was silence before, and that the ordinary
+page render is untouched.
+
+### Auto-provisioning
+
+Login succeeded and created the account:
+
+```
+id  username          email                   language  main_currency  oidc
+ 1  dummy             dummy@example.com       de        1              0
+ 2  dummy2            dummy2@example.com      de        35             0
+ 3  thorsten.hornung  thorsten@hornung-bn.de  en        69             1
+```
+
+`language=en` while manually created users have `de` — the known limitation
+from [#34](https://github.com/thorstenhornung1/Wallos/issues/34) /
+[#35](https://github.com/thorstenhornung1/Wallos/issues/35) /
+[#40](https://github.com/thorstenhornung1/Wallos/issues/40), reproduced.
+
+The differing `main_currency` values are **not** a finding: all three resolve
+to EUR. Wallos stores currencies per user, so each account gets its own row.
+
+### Not tested
+
+[#36](https://github.com/thorstenhornung1/Wallos/issues/36) (logout without
+`id_token_hint`) and [#37](https://github.com/thorstenhornung1/Wallos/issues/37)
+(authentik logout leaves the Wallos session alive). Both are session-lifecycle
+behaviour and were out of scope once the login itself worked.
+
+#37 deserves attention beyond this test instance: on a production Wallos with
+password login disabled, authentik is the only way in — and "sign out
+everywhere" not ending the application session is then a different kind of
+problem than it is here.
+
 ## Not run
 
 **5.2 — the secret never reaches the browser.** Requires an authenticated
@@ -138,7 +219,8 @@ session, and the tester chose not to share the password. The plan documents the
 check as three copy-paste `curl` lines; the expected result is `0` for both
 `settings.php` and `admin.php`.
 
-**Section 6 (load)** and **section 7 (OIDC)** were out of scope for this run.
+**Section 6 (load)** was out of scope for this run. Section 7 was executed —
+see above.
 
 ## Observations
 
