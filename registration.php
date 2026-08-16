@@ -210,6 +210,14 @@ if (isset($_POST['username'])) {
             // Get id of the newly created user
             $userId = $db->lastInsertRowID();
 
+            // On a fresh installation nobody holds the admin role yet, and the
+            // administration area would be unreachable. The first account
+            // created through this form takes it. OIDC provisioning does not do
+            // this on purpose: an account created by whoever authenticates first
+            // must not inherit the installation.
+            require_once __DIR__ . '/includes/user_roles.php';
+            wallos_claim_first_admin($db, $userId);
+
             // Add username as household member for that user
             $query = "INSERT INTO household (name, user_id) VALUES (:name, :user_id)";
             $stmt = $db->prepare($query);

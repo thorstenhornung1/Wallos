@@ -11,13 +11,12 @@
 #
 # Do not edit by hand — run dev/db-audit.sh --update and commit the diff.
 #
-# total: 1489 matches in 207 file(s)
-admin.php	4
-api/admin/get_admin_settings.php	2
-api/admin/get_oidc_settings.php	1
-api/admin/set_admin_settings.php	22
-api/admin/set_disable_password_login.php	2
-api/admin/set_oidc_settings.php	18
+# total: 1516 matches in 210 file(s)
+admin.php	5
+api/admin/get_admin_settings.php	1
+api/admin/set_admin_settings.php	20
+api/admin/set_disable_password_login.php	1
+api/admin/set_oidc_settings.php	16
 api/categories/get_categories.php	3
 api/categories/set_categories.php	21
 api/currencies/get_currencies.php	3
@@ -44,7 +43,7 @@ calendar.php	8
 dev/seed.php	14
 endpoints/admin/adduser.php	31
 endpoints/admin/deleteunusedlogos.php	2
-endpoints/admin/deleteuser.php	19
+endpoints/admin/deleteuser.php	21
 endpoints/admin/enableoidc.php	1
 endpoints/admin/saveoidcsettings.php	15
 endpoints/admin/saveopenregistrations.php	6
@@ -123,6 +122,7 @@ endpoints/user/disable_totp.php	10
 endpoints/user/enable_totp.php	8
 endpoints/user/regenerateapikey.php	2
 endpoints/user/save_user.php	29
+includes/api_admin.php	4
 includes/budget_period_calculations.php	2
 includes/checkredirect.php	2
 includes/checksession.php	2
@@ -151,6 +151,7 @@ includes/ssrf_helper.php	6
 includes/stats_calculations.php	21
 includes/stats_extra_calculations.php	2
 includes/user_provisioning.php	4
+includes/user_roles.php	21
 index.php	10
 login.php	16
 migrations/000002.php	2
@@ -199,6 +200,7 @@ migrations/000053.php	8
 migrations/000054.php	4
 migrations/000055.php	10
 migrations/000057.php	2
+migrations/000058.php	1
 passwordreset.php	18
 profile.php	5
 registration.php	36
@@ -217,5 +219,6 @@ tests/cases/performance_test.php	11
 tests/cases/session_tokens_test.php	6
 tests/cases/subscription_index_test.php	5
 tests/cases/user_provisioning_test.php	2
+tests/cases/user_roles_test.php	5
 totp.php	17
 verifyemail.php	6

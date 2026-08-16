@@ -14,6 +14,7 @@ MAILPIT=${MAILPIT_BASE:-http://localhost:8025}
 ENGINE=${CONTAINER_ENGINE:-podman}
 CONTAINER=${WALLOS_CONTAINER:-wallos-dev}
 JAR=$(mktemp)
+JAR2=$(mktemp)
 FAILURES=0
 
 check() {
@@ -53,7 +54,7 @@ LATEST_MIGRATION=$("$ENGINE" exec "$CONTAINER" php -r '
 ' 2>/dev/null || true)
 
 check "the migration chain is fully applied" \
-    "$(contains "$LATEST_MIGRATION" '000057')"
+    "$(contains "$LATEST_MIGRATION" '000058')"
 check "startup produced no PHP errors" "$(absent "$LOGS" 'PHP \(Fatal\|Parse\|Warning\)')"
 
 # --- account ---------------------------------------------------------------
@@ -72,6 +73,28 @@ SETTINGS=$(curl -fsS -b "$JAR" "$BASE/settings.php")
 ADMIN=$(curl -fsS -b "$JAR" "$BASE/admin.php")
 check "settings page renders" "$(contains "$SETTINGS" 'Use instance SMTP')"
 check "admin page renders" "$(contains "$ADMIN" 'Instance Integrations')"
+
+# The admin page above renders because of a role row, not because this account
+# happens to be the first in the table. A second account must not get in.
+ROLES=$("$ENGINE" exec "$CONTAINER" php -r '
+    $db = new SQLite3("/var/www/html/db/wallos.db");
+    $r = $db->query("SELECT user_id, role, source FROM user_roles");
+    while ($x = $r->fetchArray(SQLITE3_ASSOC)) { echo $x["user_id"], ":", $x["role"], ":", $x["source"], "\n"; }
+' 2>/dev/null)
+check "the first account holds a local admin role" "$(contains "$ROLES" '1:admin:local')"
+
+curl -fsS -c "$JAR2" "$BASE/registration.php" -o /dev/null
+curl -fsS -b "$JAR2" -c "$JAR2" -X POST "$BASE/registration.php" \
+    --data-urlencode "username=e2e2" --data-urlencode "email=e2e2@example.com" \
+    --data-urlencode "password=E2ePass123!" --data-urlencode "confirm_password=E2ePass123!" \
+    --data-urlencode "main_currency=1" --data-urlencode "language=en" -o /dev/null || true
+rm -f "$JAR2"; JAR2=$(mktemp)
+curl -fsS -c "$JAR2" "$BASE/login.php" -o /dev/null
+curl -fsS -b "$JAR2" -c "$JAR2" -X POST "$BASE/login.php" \
+    --data-urlencode "username=e2e2" --data-urlencode "password=E2ePass123!" -o /dev/null
+SECOND_ADMIN=$(curl -fsS -b "$JAR2" "$BASE/admin.php" || true)
+check "a second account cannot reach the admin page" \
+    "$(absent "$SECOND_ADMIN" 'Instance Integrations')"
 
 # --- secrets stay server side ----------------------------------------------
 for SECRET in instance-smtp-password instance-currency-key sk-instance-ai-key; do
@@ -95,7 +118,7 @@ for JOB in sendnotifications sendcancellationnotifications updateexchange sendve
     check "$JOB runs without PHP errors" "$(absent "$OUTPUT" 'Fatal error\|Parse error\|Warning:')"
 done
 
-rm -f "$JAR"
+rm -f "$JAR" "$JAR2"
 
 printf '\n'
 if [ "$FAILURES" -eq 0 ]; then

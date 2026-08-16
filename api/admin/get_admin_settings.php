@@ -2,7 +2,7 @@
 /*
 This API Endpoint accepts both POST and GET requests.
 It receives the following parameters:
-- api_key: the API key of the user (must be user ID 1 / admin).
+- api_key: the API key of an administrator.
 
 It returns a JSON object with the following properties:
 - success: whether the request was successful (boolean).
@@ -45,43 +45,11 @@ if ($_SERVER["REQUEST_METHOD"] === "POST" || $_SERVER["REQUEST_METHOD"] === "GET
 
     $apiKey = $_REQUEST['api_key'] ?? $_REQUEST['apiKey'] ?? null;
 
-    if (!$apiKey) {
-        $response = [
-            "success" => false,
-            "title" => "Missing parameters"
-        ];
-        echo json_encode($response);
-        exit;
-    }
-
-
-    // Get user from API key
-    $sql = "SELECT * FROM user WHERE api_key = :apiKey";
-    $stmt = $db->prepare($sql);
-    $stmt->bindValue(':apiKey', $apiKey);
-    $result = $stmt->execute();
-    $user = $result->fetchArray(SQLITE3_ASSOC);
-
-    // If the user is not found, return an error
-    if (!$user) {
-        $response = [
-            "success" => false,
-            "title" => "Invalid API key"
-        ];
-        echo json_encode($response);
-        exit;
-    }
-
+    // Resolves the key and checks the admin role in one place, shared with the
+    // other admin endpoints.
+    require_once __DIR__ . '/../../includes/api_admin.php';
+    $user = wallos_require_admin_api_user($db, $apiKey);
     $userId = $user['id'];
-
-    if ($userId !== 1) {
-        $response = [
-            "success" => false,
-            "title" => "Invalid user"
-        ];
-        echo json_encode($response);
-        exit;
-    }
 
     $sql = "SELECT * FROM 'admin'";
     $stmt = $db->prepare($sql);

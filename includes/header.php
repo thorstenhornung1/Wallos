@@ -51,7 +51,8 @@ if (isset($themeValue)) {
   ]);
 }
 
-$isAdmin = $_SESSION['userId'] == 1;
+require_once __DIR__ . '/user_roles.php';
+$isAdmin = wallos_user_is_admin($db, $_SESSION['userId'] ?? 0);
 
 $locale = isset($_COOKIE['user_locale']) ? $_COOKIE['user_locale'] : 'en_US';
 $formatter = new IntlDateFormatter(

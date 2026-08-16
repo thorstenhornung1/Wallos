@@ -2,7 +2,7 @@
 /*
 This API Endpoint accepts POST requests only.
 It receives the following parameters:
-- api_key: the API key of the user (must be user ID 1 / admin).
+- api_key: the API key of an administrator.
 - oidc_enabled: (optional) '1' to enable OIDC logins, '0' to disable.
 - name: (optional) provider name.
 - client_id: (optional) OAuth client ID.
@@ -59,32 +59,11 @@ if (!$apiKey) {
     exit;
 }
 
-$sql = "SELECT * FROM user WHERE api_key = :apiKey";
-$stmt = $db->prepare($sql);
-$stmt->bindValue(':apiKey', $apiKey, SQLITE3_TEXT);
-$result = $stmt->execute();
-$user = $result->fetchArray(SQLITE3_ASSOC);
-
-if (!$user) {
-    echo json_encode([
-        'success' => false,
-        'title' => 'Unauthorized',
-        'message' => 'Invalid API key.'
-    ]);
-    exit;
-}
-
+// Resolves the key and checks the admin role in one place, shared with the
+// other admin endpoints.
+require_once __DIR__ . '/../../includes/api_admin.php';
+$user = wallos_require_admin_api_user($db, $apiKey);
 $userId = $user['id'];
-
-// Must be Admin user (ID 1)
-if ($userId !== 1) {
-    echo json_encode([
-        'success' => false,
-        'title' => 'Forbidden',
-        'message' => 'Only the admin user (user ID 1) can update OIDC configurations.'
-    ]);
-    exit;
-}
 
 // 1. Handle OIDC Enabled Toggle
 if (isset($_POST['oidc_enabled'])) {

@@ -2,7 +2,7 @@
 /*
 This API Endpoint accepts POST requests only.
 It receives the following parameters:
-- api_key: the API key of the user.
+- api_key: the API key of an administrator.
 - disable: '1' to disable password login, '0' to enable it.
 
 It returns a JSON object with the following properties:
@@ -44,20 +44,10 @@ if (!$apiKey) {
     exit;
 }
 
-$sql = "SELECT * FROM user WHERE api_key = :apiKey";
-$stmt = $db->prepare($sql);
-$stmt->bindValue(':apiKey', $apiKey);
-$result = $stmt->execute();
-$user = $result->fetchArray(SQLITE3_ASSOC);
-
-if (!$user || $user['id'] !== 1) {
-    echo json_encode([
-        'success' => false,
-        'title' => 'Unauthorized',
-        'message' => 'Invalid API key or insufficient privileges.'
-    ]);
-    exit;
-}
+// Resolves the key and checks the admin role in one place, shared with the
+// other admin endpoints.
+require_once __DIR__ . '/../../includes/api_admin.php';
+$user = wallos_require_admin_api_user($db, $apiKey);
 
 // Now check 'disable' parameter only after authentication
 $disable = $_POST['disable'] ?? null;

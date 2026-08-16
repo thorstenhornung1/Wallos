@@ -41,7 +41,8 @@ function oidc_input_attrs($field, $managedFields)
     return isset($managedFields[$field]) ? 'disabled data-managed-by="' . htmlspecialchars($managedFields[$field]) . '"' : '';
 }
 
-// get user accounts
+// get user accounts, and who among them administers this installation
+require_once __DIR__ . '/includes/user_roles.php';
 $stmt = $db->prepare('SELECT id, username, email FROM user ORDER BY id ASC');
 $result = $stmt->execute();
 
@@ -50,6 +51,14 @@ while ($row = $result->fetchArray(SQLITE3_ASSOC)) {
     $users[] = $row;
 }
 $userCount = is_array($users) ? count($users) : 0;
+
+// One query for the whole list rather than a role lookup per row.
+$adminIds = [];
+$roleResult = $db->query("SELECT DISTINCT user_id FROM user_roles WHERE role = 'admin'");
+while ($roleResult !== false && $roleRow = $roleResult->fetchArray(SQLITE3_ASSOC)) {
+    $adminIds[(int) $roleRow['user_id']] = true;
+}
+$adminCount = count($adminIds);
 
 $loginDisabledAllowed = $userCount == 1 && $settings['registrations_open'] == 0;
 ?>
@@ -162,7 +171,11 @@ $loginDisabledAllowed = $userCount == 1 && $settings['registrations_open'] == 0;
             <div class="user-list">
                 <?php
                 foreach ($users as $user) {
-                    $userIcon = $user['id'] == 1 ? 'fa-user-shield' : 'fa-user';
+                    $userIsAdmin = isset($adminIds[(int) $user['id']]);
+                    $userIcon = $userIsAdmin ? 'fa-user-shield' : 'fa-user';
+                    // What needs protecting is not a particular id, it is that
+                    // somebody can still reach this page afterwards.
+                    $userIsLastAdmin = $userIsAdmin && $adminCount <= 1;
                     ?>
                     <div class="form-group-inline" data-userid="<?= $user['id'] ?>">
                         <div class="user-list-row">
@@ -181,7 +194,7 @@ $loginDisabledAllowed = $userCount == 1 && $settings['registrations_open'] == 0;
                         </div>
                         <div>
                             <?php
-                            if ($user['id'] != 1) {
+                            if (!$userIsLastAdmin) {
                                 ?>
                                 <button class="image-button medium" onClick="removeUser(<?= $user['id'] ?>)"
                                     title="<?= translate('delete_user', $i18n) ?>">
