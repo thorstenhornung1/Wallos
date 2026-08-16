@@ -1,76 +1,94 @@
 <?php
 require_once '../../includes/connect_endpoint.php';
 require_once '../../includes/validate_endpoint.php';
+require_once '../../includes/currency_provider.php';
 
 $newApiKey = isset($_POST["api_key"]) ? trim($_POST["api_key"]) : "";
 $provider = isset($_POST["provider"]) ? $_POST["provider"] : 0;
 
-$removeOldKey = "DELETE FROM fixer WHERE user_id = :userId";
-$stmt = $db->prepare($removeOldKey);
-$stmt->bindParam(":userId", $userId, SQLITE3_INTEGER);
-$stmt->execute();
+// Clients that predate the instance/custom choice keep their own credentials.
+$defaultMode = $newApiKey === "" ? 'instance' : 'custom';
+$mode = wallos_normalize_mode($_POST['mode'] ?? $defaultMode);
 
-if ($provider == 1) {
-    $testKeyUrl = "https://api.apilayer.com/fixer/latest?base=USD&symbols=EUR";
-    $context = stream_context_create([
-        'http' => [
-            'method' => 'GET',
-            'header' => 'apikey: ' . $newApiKey,
-        ]
-    ]);
-    $response = file_get_contents($testKeyUrl, false, $context);
-} else {
-    $testKeyUrl = "http://data.fixer.io/api/latest?access_key=$newApiKey";
-    $response = file_get_contents($testKeyUrl);
+$stmt = $db->prepare("SELECT COUNT(*) AS count FROM fixer WHERE user_id = :userId");
+$stmt->bindValue(':userId', $userId, SQLITE3_INTEGER);
+$result = $stmt->execute();
+$row = $result ? $result->fetchArray(SQLITE3_ASSOC) : false;
+$rowExists = $row && $row['count'] > 0;
+
+if ($mode === 'instance') {
+    $instanceConfig = wallos_get_instance_currency_config($db);
+
+    if (!$instanceConfig['valid']) {
+        die(json_encode([
+            "success" => false,
+            "message" => translate('instance_currency_provider_not_configured', $i18n)
+        ]));
+    }
+
+    // The stored key is kept untouched so switching back does not lose it.
+    $query = $rowExists
+        ? "UPDATE fixer SET provider_mode = 'instance' WHERE user_id = :userId"
+        : "INSERT INTO fixer (api_key, provider, provider_mode, user_id) VALUES ('', 0, 'instance', :userId)";
+    $stmt = $db->prepare($query);
+    $stmt->bindValue(':userId', $userId, SQLITE3_INTEGER);
+
+    if ($stmt->execute()) {
+        die(json_encode(["success" => true, "message" => translate('api_key_saved', $i18n)]));
+    }
+
+    die(json_encode([
+        "success" => false,
+        "message" => translate('failed_to_store_api_key', $i18n)
+    ]));
 }
 
-// apilayer reports the monthly quota in its response headers; keep it for the settings usage bar
-$usageLimit = null;
-$usageRemaining = null;
-if ($provider == 1 && isset($http_response_header)) {
-    foreach ($http_response_header as $header) {
-        if (stripos($header, 'x-ratelimit-limit-month:') === 0) {
-            $usageLimit = (int) trim(substr($header, strlen('x-ratelimit-limit-month:')));
-        } elseif (stripos($header, 'x-ratelimit-remaining-month:') === 0) {
-            $usageRemaining = (int) trim(substr($header, strlen('x-ratelimit-remaining-month:')));
-        }
-    }
+if ($newApiKey === "") {
+    // Submitting an empty key removes the stored credential, as before.
+    $stmt = $db->prepare("DELETE FROM fixer WHERE user_id = :userId");
+    $stmt->bindValue(":userId", $userId, SQLITE3_INTEGER);
+    $stmt->execute();
+
+    die(json_encode(["success" => true, "message" => translate('api_key_saved', $i18n)]));
 }
 
-$apiData = json_decode($response, true);
-if ($apiData['success'] && $apiData['success'] == 1) {
-    if (!empty($newApiKey)) {
-        $insertNewKey = "INSERT INTO fixer (api_key, provider, user_id) VALUES (:api_key, :provider, :userId)";
-        $stmt = $db->prepare($insertNewKey);
-        $stmt->bindParam(":api_key", $newApiKey, SQLITE3_TEXT);
-        $stmt->bindParam(":provider", $provider, SQLITE3_INTEGER);
-        $stmt->bindParam(":userId", $userId, SQLITE3_INTEGER);
-        $result = $stmt->execute();
-        if ($result) {
-            if ($usageLimit !== null && $usageRemaining !== null
-                && $db->querySingle("SELECT COUNT(*) FROM pragma_table_info('fixer') WHERE name='usage_used'") > 0) {
-                $usageStmt = $db->prepare("UPDATE fixer SET usage_used = :used, usage_limit = :limit, usage_updated_at = :updatedAt WHERE user_id = :userId");
-                $usageStmt->bindValue(':used', $usageLimit - $usageRemaining, SQLITE3_INTEGER);
-                $usageStmt->bindValue(':limit', $usageLimit, SQLITE3_INTEGER);
-                $usageStmt->bindValue(':updatedAt', date('Y-m-d H:i:s'), SQLITE3_TEXT);
-                $usageStmt->bindValue(':userId', $userId, SQLITE3_INTEGER);
-                $usageStmt->execute();
-            }
-            echo json_encode(["success" => true, "message" => translate('api_key_saved', $i18n)]);
-        } else {
-            $response = [
-                "success" => false,
-                "message" => translate('failed_to_store_api_key', $i18n)
-            ];
-            echo json_encode($response);
-        }
-    } else {
-        echo json_encode(["success" => true, "message" => translate('apy_key_saved', $i18n)]);
-    }
-} else {
-    $response = [
+$config = wallos_currency_config_from_input($provider, $newApiKey);
+
+if (!$config['valid']) {
+    die(json_encode([
         "success" => false,
         "message" => translate('invalid_api_key', $i18n)
-    ];
-    echo json_encode($response);
+    ]));
 }
+
+// Verified with the same client the scheduled updates use.
+$test = wallos_fetch_exchange_rates($config, 'USD');
+
+if (!$test['success']) {
+    die(json_encode([
+        "success" => false,
+        "message" => translate('invalid_api_key', $i18n)
+    ]));
+}
+
+$removeOldKey = "DELETE FROM fixer WHERE user_id = :userId";
+$stmt = $db->prepare($removeOldKey);
+$stmt->bindValue(":userId", $userId, SQLITE3_INTEGER);
+$stmt->execute();
+
+$insertNewKey = "INSERT INTO fixer (api_key, provider, provider_mode, user_id) VALUES (:api_key, :provider, 'custom', :userId)";
+$stmt = $db->prepare($insertNewKey);
+$stmt->bindValue(":api_key", $config['values']['api_key'], SQLITE3_TEXT);
+$stmt->bindValue(":provider", $config['values']['provider'], SQLITE3_INTEGER);
+$stmt->bindValue(":userId", $userId, SQLITE3_INTEGER);
+
+if (!$stmt->execute()) {
+    die(json_encode([
+        "success" => false,
+        "message" => translate('failed_to_store_api_key', $i18n)
+    ]));
+}
+
+wallos_store_currency_usage($db, $config, $userId, $test['usage']);
+
+echo json_encode(["success" => true, "message" => translate('api_key_saved', $i18n)]);

@@ -3,6 +3,7 @@ set_time_limit(300);
 require_once 'validate.php';
 require_once __DIR__ . '/../../includes/connect_endpoint_crontabs.php';
 require_once __DIR__ . '/../../includes/ssrf_helper.php';
+require_once __DIR__ . '/../../includes/integration_config.php';
 
 if (php_sapi_name() === 'cli') {
     $runType = $argv[1] ?? 'weekly';
@@ -16,20 +17,21 @@ if (!in_array($runType, ['weekly', 'monthly'])) {
 
 echo "Running " . $runType . " AI Recommendations generation.\n";
 
+// Only the user owned values are selected here; the provider itself may be
+// inherited from the instance, so it is resolved per user below.
 $stmt = $db->prepare("
-    SELECT user_id, type, api_key, model, url
+    SELECT user_id
     FROM ai_settings
     WHERE enabled = 1
-    AND model != ''
     AND run_schedule = ?
 ");
 $stmt->bindValue(1, $runType, SQLITE3_TEXT);
 $queryResult = $stmt->execute();
 
 // Fetch all into array first so the connection is free for inner queries
-$allAiSettings = [];
+$scheduledUserIds = [];
 while ($row = $queryResult->fetchArray(SQLITE3_ASSOC)) {
-    $allAiSettings[] = $row;
+    $scheduledUserIds[] = (int) $row['user_id'];
 }
 $stmt->close();
 
@@ -66,14 +68,20 @@ $processed = 0;
 $successes = 0;
 $failures  = [];
 
-foreach ($allAiSettings as $aiSettings) {
+foreach ($scheduledUserIds as $tempUserId) {
     $processed++;
-    $tempUserId = $aiSettings['user_id'];
 
-    $type   = $aiSettings['type']    ?? '';
-    $model  = $aiSettings['model']   ?? '';
-    $host   = $aiSettings['url']     ?? '';
-    $apiKey = $aiSettings['api_key'] ?? '';
+    $aiConfig = wallos_get_effective_ai_config($db, $tempUserId);
+
+    if (!$aiConfig['valid']) {
+        $failures[] = ['user_id' => $tempUserId, 'reason' => $aiConfig['notes'][0] ?? 'invalid configuration'];
+        continue;
+    }
+
+    $type   = $aiConfig['values']['type']    ?? '';
+    $model  = $aiConfig['values']['model']   ?? '';
+    $host   = $aiConfig['values']['url']     ?? '';
+    $apiKey = $aiConfig['values']['api_key'] ?? '';
     $ssrf   = null;
 
     // Validate provider

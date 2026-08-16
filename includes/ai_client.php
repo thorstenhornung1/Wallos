@@ -4,15 +4,27 @@
   Callers must have loaded connect_endpoint.php (for $db) and ssrf_helper.php.
 */
 
+require_once __DIR__ . '/integration_config.php';
+
+/*
+  Returns the AI configuration that is effective for a user: their own provider
+  when they run a custom one, the instance provider otherwise. Null means the
+  effective configuration is incomplete and no request should be attempted.
+*/
 function ai_load_settings($db, $userId)
 {
-    $stmt = $db->prepare("SELECT * FROM ai_settings WHERE user_id = ?");
-    $stmt->bindValue(1, $userId, SQLITE3_INTEGER);
-    $result = $stmt->execute();
-    $aiSettings = $result->fetchArray(SQLITE3_ASSOC);
-    $stmt->close();
+    $config = wallos_get_effective_ai_config($db, $userId);
 
-    return $aiSettings ?: null;
+    if (!$config['valid']) {
+        return null;
+    }
+
+    $aiSettings = wallos_ai_settings_from_config($config);
+    $aiSettings['user_id'] = $userId;
+    $aiSettings['provider_mode'] = $config['mode'];
+    $aiSettings['run_schedule'] = $config['values']['run_schedule'] ?? 'manual';
+
+    return $aiSettings;
 }
 
 function ai_log_failure($type, $userId, $reason, $context = [])

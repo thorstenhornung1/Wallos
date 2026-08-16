@@ -3,6 +3,7 @@
 require_once '../../includes/connect_endpoint.php';
 require_once '../../includes/validate_endpoint.php';
 require_once '../../includes/ssrf_helper.php';
+require_once '../../includes/integration_config.php';
 
 $chatgptModelsApiUrl = 'https://api.openai.com/v1/models';
 $geminiModelsApiUrl = 'https://generativelanguage.googleapis.com/v1beta/models';
@@ -14,6 +15,21 @@ $data = json_decode($input, true);
 $aiType = isset($data["type"]) ? trim($data["type"]) : '';
 $aiApiKey = isset($data["api_key"]) ? trim($data["api_key"]) : '';
 $aiOllamaHost = isset($data["ollama_host"]) ? trim($data["ollama_host"]) : '';
+
+// When the user inherits the instance provider, its credentials are resolved
+// here — they are never handed to the browser and therefore never submitted.
+if (wallos_normalize_mode($data['provider_mode'] ?? 'custom') === 'instance') {
+    $instanceConfig = wallos_get_instance_ai_config($db);
+
+    if (!$instanceConfig['valid']) {
+        echo json_encode(["success" => false, "message" => translate('instance_ai_provider_not_configured', $i18n)]);
+        exit;
+    }
+
+    $aiType = (string) $instanceConfig['values']['type'];
+    $aiApiKey = (string) $instanceConfig['values']['api_key'];
+    $aiOllamaHost = (string) $instanceConfig['values']['url'];
+}
 
 $ssrf = null; // Initialize to avoid errors for public API types
 

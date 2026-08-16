@@ -1,12 +1,11 @@
 <?php
 require_once '../../includes/connect_endpoint.php';
 require_once '../../includes/validate_endpoint.php';
+require_once '../../includes/currency_provider.php';
 
 $shouldUpdate = true;
 
-if (isset($_POST['force']) && $_POST['force'] === "true") {
-    $shouldUpdate = true;
-} else {
+if (!isset($_POST['force']) || $_POST['force'] !== "true") {
     $query = "SELECT date FROM last_exchange_update WHERE user_id = :userId";
     $stmt = $db->prepare($query);
     $stmt->bindParam(':userId', $userId, SQLITE3_INTEGER);
@@ -26,111 +25,10 @@ if (isset($_POST['force']) && $_POST['force'] === "true") {
     }
 }
 
-$query = "SELECT api_key, provider FROM fixer WHERE user_id = :userId";
-$stmt = $db->prepare($query);
-$stmt->bindParam(':userId', $userId, SQLITE3_INTEGER);
-$result = $stmt->execute();
+$update = wallos_update_exchange_rates_for_user($db, $userId);
 
-if ($result) {
-    $row = $result->fetchArray(SQLITE3_ASSOC);
+$db->close();
 
-    if ($row) {
-        $apiKey = $row['api_key'];
-        $provider = $row['provider'];
-
-        $codes = "";
-        $query = "SELECT id, name, symbol, code FROM currencies WHERE user_id = :userId";
-        $stmt = $db->prepare($query);
-        $stmt->bindParam(':userId', $userId, SQLITE3_INTEGER);
-        $result = $stmt->execute();
-        while ($row = $result->fetchArray(SQLITE3_ASSOC)) {
-            $codes .= $row['code'] . ",";
-        }
-        $codes = rtrim($codes, ',');
-        $query = "SELECT u.main_currency, c.code FROM user u LEFT JOIN currencies c ON u.main_currency = c.id WHERE u.id = :userId";
-        $stmt = $db->prepare($query);
-        $stmt->bindParam(':userId', $userId, SQLITE3_INTEGER);
-        $result = $stmt->execute();
-        $row = $result->fetchArray(SQLITE3_ASSOC);
-        $mainCurrencyCode = $row['code'];
-        $mainCurrencyId = $row['main_currency'];
-
-        if ($provider === 1) {
-            $api_url = "https://api.apilayer.com/fixer/latest?base=EUR&symbols=" . $codes;
-            $context = stream_context_create([
-                'http' => [
-                    'method' => 'GET',
-                    'header' => 'apikey: ' . $apiKey,
-                ]
-            ]);
-            $response = file_get_contents($api_url, false, $context);
-
-            // Piggyback on this request to record the monthly quota apilayer
-            // reports in its response headers (shown on the settings page).
-            if (isset($http_response_header)) {
-                $usageLimit = null;
-                $usageRemaining = null;
-                foreach ($http_response_header as $header) {
-                    if (stripos($header, 'x-ratelimit-limit-month:') === 0) {
-                        $usageLimit = (int) trim(substr($header, strlen('x-ratelimit-limit-month:')));
-                    } elseif (stripos($header, 'x-ratelimit-remaining-month:') === 0) {
-                        $usageRemaining = (int) trim(substr($header, strlen('x-ratelimit-remaining-month:')));
-                    }
-                }
-                if ($usageLimit !== null && $usageRemaining !== null
-                    && $db->querySingle("SELECT COUNT(*) FROM pragma_table_info('fixer') WHERE name='usage_used'") > 0) {
-                    $usageStmt = $db->prepare("UPDATE fixer SET usage_used = :used, usage_limit = :limit, usage_updated_at = :updatedAt WHERE user_id = :userId");
-                    $usageStmt->bindValue(':used', $usageLimit - $usageRemaining, SQLITE3_INTEGER);
-                    $usageStmt->bindValue(':limit', $usageLimit, SQLITE3_INTEGER);
-                    $usageStmt->bindValue(':updatedAt', date('Y-m-d H:i:s'), SQLITE3_TEXT);
-                    $usageStmt->bindValue(':userId', $userId, SQLITE3_INTEGER);
-                    $usageStmt->execute();
-                }
-            }
-        } else {
-            $api_url = "http://data.fixer.io/api/latest?access_key=" . $apiKey . "&base=EUR&symbols=" . $codes;
-            $response = file_get_contents($api_url);
-        }
-
-        $apiData = json_decode($response, true);
-
-        $mainCurrencyToEUR = $apiData['rates'][$mainCurrencyCode];
-
-        if ($apiData !== null && isset($apiData['rates'])) {
-            foreach ($apiData['rates'] as $currencyCode => $rate) {
-                if ($currencyCode === $mainCurrencyCode) {
-                    $exchangeRate = 1.0;
-                } else {
-                    $exchangeRate = $rate / $mainCurrencyToEUR;
-                }
-                $updateQuery = "UPDATE currencies SET rate = :rate WHERE code = :code AND user_id = :userId";
-                $updateStmt = $db->prepare($updateQuery);
-                $updateStmt->bindParam(':rate', $exchangeRate, SQLITE3_TEXT);
-                $updateStmt->bindParam(':code', $currencyCode, SQLITE3_TEXT);
-                $updateStmt->bindParam(':userId', $userId, SQLITE3_INTEGER);
-                $updateResult = $updateStmt->execute();
-
-                if (!$updateResult) {
-                    echo "Error updating rate for currency: $currencyCode";
-                }
-            }
-            $currentDate = new DateTime();
-            $formattedDate = $currentDate->format('Y-m-d');
-
-            $updateQuery = "UPDATE last_exchange_update SET date = :formattedDate WHERE user_id = :userId";
-            $updateStmt = $db->prepare($updateQuery);
-            $updateStmt->bindParam(':formattedDate', $formattedDate, SQLITE3_TEXT);
-            $updateStmt->bindParam(':userId', $userId, SQLITE3_INTEGER);
-            $updateResult = $updateStmt->execute();
-
-            $db->close();
-            echo "Rates updated successfully!";
-        }
-    } else {
-        echo "Exchange rates update skipped. No fixer.io api key provided";
-        $apiKey = null;
-    }
-} else {
-    echo "Exchange rates update skipped. No fixer.io api key provided";
-    $apiKey = null;
-}
+echo $update['success']
+    ? "Rates updated successfully!"
+    : "Exchange rates update skipped. " . $update['message'];
