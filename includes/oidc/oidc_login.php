@@ -46,6 +46,19 @@ $addLoginTokensStmt->bindParam(':token', $token, SQLITE3_TEXT);
 $addLoginTokensStmt->execute();
 
 $_SESSION['token'] = $token;
+
+// Recorded so the provider can end this session later. The sid comes from the
+// ID token when the provider issues one; without it revocation falls back to
+// ending every session of this subject.
+require_once __DIR__ . '/backchannel.php';
+$oidcSessionId = null;
+if (isset($_SESSION['oidc_id_token'])) {
+    $parsedIdToken = wallos_jwt_parse($_SESSION['oidc_id_token']);
+    if ($parsedIdToken !== null && isset($parsedIdToken['payload']['sid'])) {
+        $oidcSessionId = (string) $parsedIdToken['payload']['sid'];
+    }
+}
+wallos_oidc_register_session($db, $userId, $oidcSessionId, session_id(), $token);
 $cookieValue = $username . "|" . $token . "|" . $main_currency;
 setcookie('wallos_login', $cookieValue, [
     'expires' => $cookieExpire,

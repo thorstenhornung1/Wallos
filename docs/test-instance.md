@@ -516,6 +516,43 @@ Whether Authentik ends only the application session or the whole SSO session
 depends on its provider invalidation flow. That is a provider-side setting;
 Wallos sends the standard request either way.
 
+### 7.4 Back-channel logout
+
+The other direction: Authentik telling Wallos that a session is over, without
+the user's browser being involved. This is what makes an account you disable in
+Authentik stop working in Wallos immediately, instead of when the session
+happens to expire.
+
+In the Authentik provider, set the backchannel logout URL to:
+
+```
+https://test.hornung-bn.de/backchannel-logout.php
+```
+
+Nothing else to configure. The endpoint takes the provider's signing keys from
+the JWKS published in discovery, so it needs `OIDC_ISSUER` (or a discovery
+document) to be in use.
+
+What it accepts: a POSTed `logout_token` whose signature verifies against those
+keys, whose issuer and audience match this installation, that is recent, that
+carries the back-channel logout event, and that carries no nonce. Anything else
+is refused with a bare `invalid_request` — the reason goes to the container log,
+not to the caller.
+
+What it does: ends the matching session, deletes its remember-me token, and
+makes the running PHP session stop working on its very next request. When the
+provider sends a `sid` it ends exactly that session; with only a `sub` it ends
+every session of that person.
+
+What it never does: delete a Wallos account or any of its data. Subscriptions,
+history, categories and settings are local application data. An identity
+disappearing at the provider is not permission to destroy financial records —
+if you want the account gone, delete it in Wallos.
+
+To check it end to end: sign in through Authentik, then terminate that session
+in Authentik's admin interface, then reload any Wallos page. You should land on
+the login screen.
+
 ## 8. Reset or remove
 
 Start from an empty database without redeploying:

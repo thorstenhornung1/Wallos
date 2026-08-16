@@ -37,6 +37,14 @@ if ($fromOidc) {
 // misconfigured or slow must never be able to leave the user logged in here.
 wallos_revoke_login_token($db, $sessionToken);
 
+// Drop the back-channel session row as well, so a provider ending a session
+// that already ended finds nothing to do rather than a stale row.
+$stmt = $db->prepare('DELETE FROM oidc_sessions WHERE session_id = :sessionId');
+if ($stmt !== false) {
+    $stmt->bindValue(':sessionId', session_id(), SQLITE3_TEXT);
+    $stmt->execute();
+}
+
 $_SESSION = array();
 session_destroy();
 $cookieExpire = time() - 3600;
