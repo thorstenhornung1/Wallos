@@ -320,13 +320,52 @@ or fatal error.
 
 ## 6. Load, to see the performance work
 
+`dev/benchmark.sh` seeds data, measures, and cleans up after itself. It takes the
+median of five runs per figure and touches only rows prefixed `bench-` or `seed-`:
+
 ```sh
-$EXEC php /var/www/html/dev/seed.php 10 1000
+dev/benchmark.sh --base https://test.hornung-bn.de \
+                 --user youruser --password 'yourpassword' \
+                 --exec "$EXEC"
 ```
 
-10 users, 10,000 subscriptions, prefixed `seed-` and replaced on each run. The
-subscription list stays responsive: rates come from one query instead of one per
-row, and the list query uses an index.
+Two axes, because they stress different things: one account's list grows to 100,
+1000 and 5000 entries, then the notification cron runs against 1, 10 and 100
+users.
+
+Measured on the local dev container (Podman, 5.6.3, SQLite on a tmpfs-free
+bind mount), so treat these as a shape rather than as absolute numbers for your
+hardware:
+
+| entries | list | stats | calendar |
+|---|---|---|---|
+| 100 | 30 ms | 11 ms | 9 ms |
+| 1000 | 179 ms | 35 ms | 29 ms |
+| 5000 | 875 ms | 147 ms | 116 ms |
+
+| users | notify cron | rates cron |
+|---|---|---|
+| baseline (empty script) | 113 ms | — |
+| 1 | 124 ms | 409 ms |
+| 10 | 130 ms | 330 ms |
+| 100 | 131 ms | 371 ms |
+
+What the numbers say:
+
+- **The cron is flat.** 1 user and 100 users cost the same, and both sit barely
+  above the 113 ms it takes to start PHP at all. Notification settings are read
+  once per run rather than once per user, so adding users adds almost nothing.
+- **The list is linear in the number of entries, not quadratic.** 100 → 5000 is
+  50× the data for 29× the time. Exchange rates are fetched in one query, so a
+  row no longer costs a round trip. What remains is rendering: 5000 entries
+  produce a large HTML document, and that is the honest cost of the page.
+- **5000 entries in one account is past comfortable.** 875 ms is a page you feel.
+  If that becomes a real shape rather than a benchmark, the answer is pagination
+  in the list, not more query tuning — the query is already one indexed scan.
+
+Re-run this after any change to the subscription list, the rate handling, or the
+cron jobs, and compare against your own previous run rather than against this
+table.
 
 ## 7. OIDC against your Authentik
 
