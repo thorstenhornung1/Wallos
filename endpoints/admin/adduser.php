@@ -2,6 +2,7 @@
 require_once '../../includes/connect_endpoint.php';
 require_once '../../includes/validate_endpoint_admin.php';
 require_once '../../includes/integration_config.php';
+require_once '../../includes/user_provisioning.php';
 
 $currencies = [
     ['id' => 1, 'name' => 'Euro', 'symbol' => '€', 'code' => 'EUR'],
@@ -38,26 +39,6 @@ $currencies = [
     ['id' => 32, 'name' => 'South African Rand', 'symbol' => 'R', 'code' => 'ZAR'],
     ['id' => 33, 'name' => 'Ukrainian Hryvnia', 'symbol' => '₴', 'code' => 'UAH'],
     ['id' => 34, 'name' => 'New Taiwan Dollar', 'symbol' => 'NT$', 'code' => 'TWD'],
-];
-
-$categories = [
-    ['id' => 1, 'name' => 'No category'],
-    ['id' => 2, 'name' => 'Entertainment'],
-    ['id' => 3, 'name' => 'Music'],
-    ['id' => 4, 'name' => 'Utilities'],
-    ['id' => 5, 'name' => 'Food & Beverages'],
-    ['id' => 6, 'name' => 'Health & Wellbeing'],
-    ['id' => 7, 'name' => 'Productivity'],
-    ['id' => 8, 'name' => 'Banking'],
-    ['id' => 9, 'name' => 'Transport'],
-    ['id' => 10, 'name' => 'Education'],
-    ['id' => 11, 'name' => 'Insurance'],
-    ['id' => 12, 'name' => 'Gaming'],
-    ['id' => 13, 'name' => 'News & Magazines'],
-    ['id' => 14, 'name' => 'Software'],
-    ['id' => 15, 'name' => 'Technology'],
-    ['id' => 16, 'name' => 'Cloud Services'],
-    ['id' => 17, 'name' => 'Charity & Donations'],
 ];
 
 $payment_methods = [
@@ -177,15 +158,8 @@ if ($result) {
 
     if ($newUserId > 1) {
 
-        // Add categories for that user
-        $query = 'INSERT INTO categories (name, "order", user_id) VALUES (:name, :order, :user_id)';
-        $stmt = $db->prepare($query);
-        foreach ($categories as $index => $category) {
-            $stmt->bindValue(':name', $category['name'], SQLITE3_TEXT);
-            $stmt->bindValue(':order', $index + 1, SQLITE3_INTEGER);
-            $stmt->bindValue(':user_id', $newUserId, SQLITE3_INTEGER);
-            $stmt->execute();
-        }
+        // Add categories for that user, in the language the account gets
+        wallos_create_default_categories($db, $newUserId, $language);
 
         // Add payment methods for that user
         $query = 'INSERT INTO payment_methods (name, icon, "order", user_id) VALUES (:name, :icon, :order, :user_id)';

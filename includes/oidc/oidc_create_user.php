@@ -55,21 +55,9 @@ $stmt->bindValue(':name', $username, SQLITE3_TEXT);
 $stmt->bindValue(':user_id', $newUserId, SQLITE3_INTEGER);
 $stmt->execute();
 
-// Categories
-$categories = [
-    'No category', 'Entertainment', 'Music', 'Utilities', 'Food & Beverages',
-    'Health & Wellbeing', 'Productivity', 'Banking', 'Transport', 'Education',
-    'Insurance', 'Gaming', 'News & Magazines', 'Software', 'Technology',
-    'Cloud Services', 'Charity & Donations'
-];
-
-$stmt = $db->prepare("INSERT INTO categories (name, \"order\", user_id) VALUES (:name, :order, :user_id)");
-foreach ($categories as $index => $name) {
-    $stmt->bindValue(':name', $name, SQLITE3_TEXT);
-    $stmt->bindValue(':order', $index + 1, SQLITE3_INTEGER);
-    $stmt->bindValue(':user_id', $newUserId, SQLITE3_INTEGER);
-    $stmt->execute();
-}
+// Categories, in the language resolved for this account
+require_once __DIR__ . '/../user_provisioning.php';
+wallos_create_default_categories($db, $newUserId, $language);
 
 // Payment Methods
 $payment_methods = [

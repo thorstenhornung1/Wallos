@@ -519,6 +519,23 @@ $i18n = [
     "notifications_not_enabled_yet" => "Email notifications are not enabled yet, so scheduled notifications will not be sent until you enable and save them.",
     "default_language" => "Default language for new accounts",
     "default_language_info" => "Applies to accounts created without a language choice, such as users provisioned through OIDC. It never changes a language a user has already chosen.",
+    // Default categories a new account starts with
+    "category_entertainment" => "Entertainment",
+    "category_music" => "Music",
+    "category_utilities" => "Utilities",
+    "category_food_and_beverages" => "Food & Beverages",
+    "category_health_and_wellbeing" => "Health & Wellbeing",
+    "category_productivity" => "Productivity",
+    "category_banking" => "Banking",
+    "category_transport" => "Transport",
+    "category_education" => "Education",
+    "category_insurance" => "Insurance",
+    "category_gaming" => "Gaming",
+    "category_news_and_magazines" => "News & Magazines",
+    "category_software" => "Software",
+    "category_technology" => "Technology",
+    "category_cloud_services" => "Cloud Services",
+    "category_charity_and_donations" => "Charity & Donations",
     "remove_stored_secret" => "Remove the stored value",
 ];
 

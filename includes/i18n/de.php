@@ -518,6 +518,23 @@ $i18n = [
     "notifications_not_enabled_yet" => "E-Mail-Benachrichtigungen sind noch nicht aktiviert. Geplante Benachrichtigungen werden erst versendet, wenn Sie sie aktivieren und speichern.",
     "default_language" => "Standardsprache für neue Konten",
     "default_language_info" => "Gilt für Konten, die ohne Sprachauswahl angelegt werden, etwa über OIDC bereitgestellte Benutzer. Eine bereits gewählte Sprache wird nie geändert.",
+    // Default categories a new account starts with
+    "category_entertainment" => "Unterhaltung",
+    "category_music" => "Musik",
+    "category_utilities" => "Nebenkosten",
+    "category_food_and_beverages" => "Essen & Trinken",
+    "category_health_and_wellbeing" => "Gesundheit & Wohlbefinden",
+    "category_productivity" => "Produktivität",
+    "category_banking" => "Bankwesen",
+    "category_transport" => "Verkehr",
+    "category_education" => "Bildung",
+    "category_insurance" => "Versicherung",
+    "category_gaming" => "Spiele",
+    "category_news_and_magazines" => "Nachrichten & Zeitschriften",
+    "category_software" => "Software",
+    "category_technology" => "Technik",
+    "category_cloud_services" => "Cloud-Dienste",
+    "category_charity_and_donations" => "Spenden & Wohltätigkeit",
     "remove_stored_secret" => "Gespeicherten Wert entfernen",
 ];
 

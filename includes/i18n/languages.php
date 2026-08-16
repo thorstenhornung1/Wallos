@@ -149,3 +149,42 @@ $languages = wallos_languages();
 $langname_corrections = [
     "jp" => "ja",
 ];
+
+/**
+ * Returns the translation table of a specific language.
+ *
+ * translate() answers in the language of the current request. Provisioning
+ * needs the language of the account being created, which is not the same
+ * thing: an administrator working in English creates an account for someone
+ * whose language is German, and an OIDC login carries the provider's locale.
+ *
+ * Missing keys fall back to English, so a language file that has not been
+ * updated yet produces English rather than nothing.
+ *
+ * @param string $language
+ * @return array<string, string>
+ */
+function wallos_translations($language)
+{
+    static $cache = [];
+
+    $language = wallos_resolve_language($language);
+
+    if (!isset($cache[$language])) {
+        // The language files assign $i18n; required from inside a function it
+        // stays local, which is what makes loading a second language safe.
+        $i18n = [];
+        require __DIR__ . '/' . $language . '.php';
+        $translations = $i18n;
+
+        if ($language !== 'en') {
+            $i18n = [];
+            require __DIR__ . '/en.php';
+            $translations += $i18n;
+        }
+
+        $cache[$language] = $translations;
+    }
+
+    return $cache[$language];
+}
