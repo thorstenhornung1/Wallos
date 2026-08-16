@@ -43,7 +43,17 @@ done
 
 # --- startup ---------------------------------------------------------------
 LOGS=$("$ENGINE" logs "$CONTAINER" 2>&1 || true)
-check "migrations ran during startup" "$(contains "$LOGS" 'Migration migrations/000055.php completed')"
+
+# Asked of the database rather than the log: the log only mentions a migration
+# on the run that applied it, so a restarted container would fail a log check
+# while being perfectly up to date.
+LATEST_MIGRATION=$("$ENGINE" exec "$CONTAINER" php -r '
+    $db = new SQLite3("/var/www/html/db/wallos.db");
+    echo (string) $db->querySingle("SELECT MAX(migration) FROM migrations");
+' 2>/dev/null || true)
+
+check "the migration chain is fully applied" \
+    "$(contains "$LATEST_MIGRATION" '000057')"
 check "startup produced no PHP errors" "$(absent "$LOGS" 'PHP \(Fatal\|Parse\|Warning\)')"
 
 # --- account ---------------------------------------------------------------
