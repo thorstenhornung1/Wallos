@@ -1,96 +1,74 @@
 name: Build & Release
+
 on:
   push:
     branches:
-      - "*"
+      - main
+    tags:
+      - "v*"
   pull_request:
     branches:
       - main
+  workflow_dispatch:
+
 permissions:
-  contents: write
-  pull-requests: write
+  contents: read
   packages: write
+
 env:
-  # login to docker hub with provided secrets
-  REGISTRY: docker.io
-  REGISTRY_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
-  REGISTRY_PASSWORD: ${{ secrets.DOCKERHUB_TOKEN }}
-  IMAGE_NAME: ${{ vars.DOCKERHUB_TAG }}
-  # For release-please, see available types at https://github.com/google-github-actions/release-please-action/tree/v4/?tab=readme-ov-file#release-types-supported
-  PROJECT_TYPE: simple
+  IMAGE: ghcr.io/${{ github.repository_owner }}/wallos
 
 jobs:
-  release:
+  test:
     runs-on: ubuntu-latest
-    outputs:
-      release_created: ${{ steps.rp.outputs.release_created }}
-      tag_patterns: ${{ steps.tags.outputs.tags }}
     steps:
       - uses: actions/checkout@v4
-      - id: rp
-        if: github.event_name != 'pull_request' && github.ref_name == 'main'
-        uses: google-github-actions/release-please-action@v4
+      - name: Set up PHP
+        uses: shivammathur/setup-php@v2
         with:
-          release-type: ${{ env.PROJECT_TYPE }}
-      - name: Prepare tags for Docker meta
-        id: tags
-        env:
-          # When release please is skipped, these values will be empty
-          is_release: ${{ steps.rp.outputs.release_created }}
-          version: v${{ steps.rp.outputs.major }}.${{ steps.rp.outputs.minor }}.${{ steps.rp.outputs.patch }}
-        run: |
-          tags=""
-          if [[ "$is_release" = 'true' ]]; then
-            tags="type=semver,pattern={{version}},value=$version
-            type=ref,event=branch,value=main"
-          else
-            tags="type=ref,event=branch
-            type=ref,event=pr"
-          fi
-          {
-            echo 'tags<<EOF'
-            echo "$tags"
-            echo EOF
-          } >> "$GITHUB_OUTPUT"
+          php-version: "8.3"
+          extensions: sqlite3
+      - name: Run the test suite
+        run: php tests/run.php
 
   build:
     runs-on: ubuntu-latest
-    needs: release
+    needs: test
     strategy:
       fail-fast: false
       matrix:
         platform:
           - linux/amd64
           - linux/arm64
-          - linux/arm/v7
     steps:
       - uses: actions/checkout@v4
-      - name: Log into registry ${{ env.REGISTRY }}
-        uses: docker/login-action@v3
-        with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ env.REGISTRY_USERNAME }}
-          password: ${{ env.REGISTRY_PASSWORD }}
-      - name: Login to GitHub Container Registry
+
+      - name: Log in to GitHub Container Registry
+        if: github.event_name != 'pull_request'
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Docker meta
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: |
-            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
-            ghcr.io/ellite/wallos
-          tags: ${{ needs.release.outputs.tag_patterns }}
-      # necessary for multi-platform images
+          images: ${{ env.IMAGE }}
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=raw,value=latest,enable=${{ startsWith(github.ref, 'refs/tags/v') }}
+            type=raw,value=main,enable=${{ github.ref == 'refs/heads/main' }}
+            type=ref,event=pr
+
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
-      # necessary for multi-platform images
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
+
       - name: Build and push by digest
         id: build
         uses: docker/build-push-action@v6
@@ -98,28 +76,30 @@ jobs:
           context: .
           platforms: ${{ matrix.platform }}
           labels: ${{ steps.meta.outputs.labels }}
-          outputs: type=image,"name=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }},ghcr.io/ellite/wallos",push-by-digest=true,name-canonical=true,push=${{ github.event_name != 'pull_request' }}
+          outputs: type=image,name=${{ env.IMAGE }},push-by-digest=true,name-canonical=true,push=${{ github.event_name != 'pull_request' }}
           # Scope cache per platform to prevent architecture-mismatched layers
           cache-from: type=gha,scope=${{ github.workflow }}-${{ matrix.platform }}
           cache-to: type=gha,mode=max,scope=${{ github.workflow }}-${{ matrix.platform }}
+
       - name: Export digest
         if: github.event_name != 'pull_request'
         run: |
           mkdir -p /tmp/digests
           digest="${{ steps.build.outputs.digest }}"
           touch "/tmp/digests/${digest#sha256:}"
+
       - name: Upload digest
         if: github.event_name != 'pull_request'
         uses: actions/upload-artifact@v4
         with:
-          name: digests-${{ matrix.platform == 'linux/amd64' && 'amd64' || matrix.platform == 'linux/arm64' && 'arm64' || 'armv7' }}
+          name: digests-${{ matrix.platform == 'linux/amd64' && 'amd64' || 'arm64' }}
           path: /tmp/digests/*
           if-no-files-found: error
           retention-days: 1
 
   merge:
     runs-on: ubuntu-latest
-    needs: [release, build]
+    needs: build
     if: github.event_name != 'pull_request'
     steps:
       - name: Download digests
@@ -128,44 +108,34 @@ jobs:
           path: /tmp/digests
           pattern: digests-*
           merge-multiple: true
-      - name: Log into registry ${{ env.REGISTRY }}
-        uses: docker/login-action@v3
-        with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ env.REGISTRY_USERNAME }}
-          password: ${{ env.REGISTRY_PASSWORD }}
-      - name: Login to GitHub Container Registry
+
+      - name: Log in to GitHub Container Registry
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
+
       - name: Docker meta
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: |
-            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
-            ghcr.io/ellite/wallos
-          tags: ${{ needs.release.outputs.tag_patterns }}
-      - name: Create manifest list and push to Docker Hub
+          images: ${{ env.IMAGE }}
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=raw,value=latest,enable=${{ startsWith(github.ref, 'refs/tags/v') }}
+            type=raw,value=main,enable=${{ github.ref == 'refs/heads/main' }}
+
+      - name: Create manifest list and push
         working-directory: /tmp/digests
         run: |
           docker buildx imagetools create \
-            $(jq -cr '.tags | map(select(startswith("${{ env.REGISTRY }}")) | "-t " + .) | join(" ")' <<< "$DOCKER_METADATA_OUTPUT_JSON") \
-            $(printf '${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@sha256:%s ' *)
-      - name: Create manifest list and push to GHCR
-        working-directory: /tmp/digests
-        run: |
-          docker buildx imagetools create \
-            $(jq -cr '.tags | map(select(startswith("ghcr.io")) | "-t " + .) | join(" ")' <<< "$DOCKER_METADATA_OUTPUT_JSON") \
-            $(printf 'ghcr.io/ellite/wallos@sha256:%s ' *)
-      - name: Send notification to Discord
-        if: needs.release.outputs.release_created == 'true'
-        uses: Ilshidur/action-discord@d2594079a10f1d6739ee50a2471f0ca57418b554 # v0.4.0 (pin @master to a full commit SHA)
-        with:
-          args: "A new release has been created: ${{ steps.meta.outputs.version }}"
-        env:
-          DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
+            $(jq -cr '.tags | map("-t " + .) | join(" ")' <<< "$DOCKER_METADATA_OUTPUT_JSON") \
+            $(printf '${{ env.IMAGE }}@sha256:%s ' *)
+
+      - name: Show published tags
+        run: jq -r '.tags[]' <<< "$DOCKER_METADATA_OUTPUT_JSON"

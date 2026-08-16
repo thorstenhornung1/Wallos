@@ -1,5 +1,47 @@
 # Changelog
 
+## [5.5.0](https://github.com/thorstenhornung1/Wallos/releases/tag/v5.5.0) (2026-08-16)
+
+First release of this fork. Based on upstream 5.4.4, with instance-wide
+configuration and the low-risk correctness and performance fixes that came out
+of the same work.
+
+### Features
+
+* **config:** shared configuration and secret resolution layer, with `WALLOS_*`
+  environment variables and `*_FILE` secrets for Docker, Kubernetes and Podman
+* **smtp:** one instance SMTP transport serving password resets, verification
+  mail, renewal and cancellation notifications, and the test button, with an
+  explicit per-user instance/custom choice
+* **currency:** instance-wide exchange rate provider that users inherit by
+  default, with quota reported where the credential lives
+* **ai:** instance-wide AI provider; users keep their own enable flag, schedule
+  and optional model override without ever seeing the shared key
+* **admin:** Instance Integrations section, environment-managed fields shown
+  read-only with the variable that owns them, and secrets reported as status
+  rather than rendered into the page
+
+### Bug Fixes
+
+* **currency:** exchange rate updates are scoped to the user being refreshed;
+  previously a scheduled refresh overwrote every other user's rates with a
+  conversion base that was not theirs
+
+### Performance
+
+* **currency:** prices convert from a rate map loaded once per request instead
+  of one query per subscription — 200 queries and 41ms become 1 query and 0.3ms
+  on a 200-subscription list
+* **currency:** one user's rate refresh is committed atomically and reuses one
+  prepared statement
+* **subscriptions:** two measured indexes; the subscription list drops from
+  26.2ms to 1.8ms on 10 users and 10,000 subscriptions
+
+### Development
+
+* container-based test suite (`dev/test.sh`) and development environment
+  (`dev/up.sh`, `dev/e2e.sh`) with Mailpit, needing no local PHP
+
 ## [5.4.4](https://github.com/ellite/Wallos/compare/v5.4.3...v5.4.4) (2026-08-15)
 
 

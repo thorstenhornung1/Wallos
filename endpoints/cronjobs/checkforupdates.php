@@ -9,7 +9,7 @@ $options = [
     ]
 ];
 
-$repository = 'ellite/Wallos'; // Change this to your repository if you fork Wallos
+$repository = 'thorstenhornung1/Wallos'; // Change this to your repository if you fork Wallos
 $url = "https://api.github.com/repos/$repository/releases/latest";
 
 $context = stream_context_create($options);
