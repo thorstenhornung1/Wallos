@@ -418,6 +418,7 @@ $i18n = [
     "oidc_admin_claim_hint" => "Optional. Beide Felder werden benötigt; bleibt eines leer, wird keine Administratorrolle vom Anbieter abgeleitet. Der Claim wird bei jeder Anmeldung neu gelesen, das Entfernen der Gruppe beim Anbieter entzieht die Rolle also bei der nächsten Anmeldung. Der Vergleich erfolgt exakt, auch bei der Groß- und Kleinschreibung. Lokal vergebene Administratorrechte bleiben unabhängig davon bestehen, was der Anbieter sendet.",
     "logged_out_successfully" => "Sie wurden abgemeldet.",
     "oidc_post_logout_redirect_url" => "Rücksprung-URL nach der Abmeldung (optional)",
+    "oidc_issuer" => "Issuer-URL (füllt die Endpunkte unten aus)",
     "oidc_email_not_verified" => "Anmeldung fehlgeschlagen: Der Identitätsanbieter meldet, dass Ihre E-Mail-Adresse nicht bestätigt ist. Bestätigen Sie sie dort oder bitten Sie Ihre Administration, unbestätigte Adressen zuzulassen.",
     "smtp_settings" => "SMTP Einstellungen",
     "smtp_usage_info" => "Wird für die Passwortwiederherstellung und andere System-E-Mails verwendet",

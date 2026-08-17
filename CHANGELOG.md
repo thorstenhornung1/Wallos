@@ -1,5 +1,24 @@
 # Changelog
 
+## [5.7.1](https://github.com/thorstenhornung1/Wallos/releases/tag/v5.7.1) (2026-08-17)
+
+### Bug Fixes
+
+* **oidc:** discovery now runs from an issuer stored in the admin interface, not
+  only from the `OIDC_ISSUER` environment variable. Without a discovery document
+  there is no JWKS, so back-channel logout refused every token, and no
+  `end_session_endpoint`, so RP-initiated logout fell back to whatever had been
+  pasted into the logout URL — with nothing in the interface suggesting a setting
+  was missing ([#78](https://github.com/thorstenhornung1/Wallos/issues/78))
+
+### Performance
+
+* **oidc:** the discovery document is cached for an hour. It is fetched inside the
+  configuration resolution, which `login.php` runs on every render, so before this
+  every visit to the login page waited on an HTTP request to the identity provider
+  — up to the ten second timeout when the provider was unwell. A failed refresh
+  falls back to the cached copy however old it is
+
 ## [5.7.0](https://github.com/thorstenhornung1/Wallos/releases/tag/v5.7.0) (2026-08-17)
 
 ### Features

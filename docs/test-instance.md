@@ -530,8 +530,9 @@ https://test.hornung-bn.de/backchannel-logout.php
 ```
 
 Nothing else to configure. The endpoint takes the provider's signing keys from
-the JWKS published in discovery, so it needs `OIDC_ISSUER` (or a discovery
-document) to be in use.
+the JWKS published in discovery, so an issuer must be set — either the
+**Issuer URL** field in the OIDC settings or `OIDC_ISSUER`. Without one there is
+no discovery document, no signing keys, and every logout token is refused.
 
 What it accepts: a POSTed `logout_token` whose signature verifies against those
 keys, whose issuer and audience match this installation, that is recent, that

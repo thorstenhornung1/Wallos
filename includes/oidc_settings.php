@@ -27,6 +27,10 @@ function wallos_get_oidc_defaults()
         // Where the provider returns the user after ending the session. Empty
         // means it is derived from the redirect URL.
         'post_logout_redirect_url' => '',
+        // The provider's base URL. Set it and Wallos reads the rest —
+        // endpoints, signing keys, end-session URL — from what the provider
+        // publishes at /.well-known/openid-configuration.
+        'issuer' => '',
     ];
 }
 
@@ -71,6 +75,73 @@ function wallos_get_db_oidc_enabled($db)
     $row = $result ? $result->fetchArray(SQLITE3_ASSOC) : false;
 
     return $row ? (int) $row['oidc_oauth_enabled'] : 0;
+}
+
+/**
+ * How long a discovery document is reused before being fetched again.
+ *
+ * The document describes endpoints and key locations, which change rarely and
+ * are picked up within the hour when they do. Fetching it per request is what
+ * the cache exists to stop: wallos_get_effective_oidc_configuration() runs on
+ * every login page render, so without this every visitor waits on the identity
+ * provider — up to the ten second timeout when it is unwell.
+ */
+define('WALLOS_OIDC_DISCOVERY_TTL', 3600);
+
+/**
+ * Discovery, reading through a cache in the database.
+ *
+ * A failed refresh falls back to the cached copy however old it is. A provider
+ * that is briefly unreachable should not take the login page down with it, and
+ * yesterday's endpoints are almost certainly still today's.
+ *
+ * @param SQLite3 $db
+ * @param string  $issuer
+ * @return array [document|null, error|null]
+ */
+function wallos_get_oidc_discovery_document($db, $issuer)
+{
+    $issuer = rtrim(trim((string) $issuer), '/');
+    if ($issuer === '') {
+        return [null, 'OIDC issuer is empty.'];
+    }
+
+    $cached = null;
+    $stmt = $db->prepare('SELECT document, fetched_at FROM oidc_discovery_cache WHERE issuer = :issuer');
+    if ($stmt !== false) {
+        $stmt->bindValue(':issuer', $issuer, SQLITE3_TEXT);
+        $result = $stmt->execute();
+        $row = $result === false ? false : $result->fetchArray(SQLITE3_ASSOC);
+
+        if ($row) {
+            $document = json_decode($row['document'], true);
+            if (is_array($document)) {
+                $cached = $document;
+                if ((time() - (int) $row['fetched_at']) < WALLOS_OIDC_DISCOVERY_TTL) {
+                    return [$cached, null];
+                }
+            }
+        }
+    }
+
+    [$document, $error] = wallos_fetch_oidc_discovery_document($issuer);
+
+    if ($document === null) {
+        // Stale beats absent: the alternative is a login page that fails
+        // because the provider is having a bad minute.
+        return $cached !== null ? [$cached, null] : [null, $error];
+    }
+
+    $stmt = $db->prepare('INSERT OR REPLACE INTO oidc_discovery_cache (issuer, document, fetched_at)
+                          VALUES (:issuer, :document, :fetchedAt)');
+    if ($stmt !== false) {
+        $stmt->bindValue(':issuer', $issuer, SQLITE3_TEXT);
+        $stmt->bindValue(':document', json_encode($document), SQLITE3_TEXT);
+        $stmt->bindValue(':fetchedAt', time(), SQLITE3_INTEGER);
+        $stmt->execute();
+    }
+
+    return [$document, null];
 }
 
 function wallos_fetch_oidc_discovery_document($issuer)
@@ -191,17 +262,31 @@ function wallos_get_effective_oidc_configuration($db)
             : 'OIDC_ADMIN_VALUE is set without OIDC_ADMIN_CLAIM, so no admin role is derived from OIDC.';
     }
 
-    if (wallos_has_oidc_env_value('OIDC_ISSUER')) {
-        $issuer = (string) wallos_get_oidc_env_value('OIDC_ISSUER');
+    // An issuer from the environment takes precedence, as everywhere else, but
+    // a stored one works just as well. Discovery used to run only for the
+    // environment variable, which left an installation configured through the
+    // admin interface without a discovery document — and so without the signing
+    // keys back-channel logout needs, and without an end-session endpoint.
+    $issuerFromEnvironment = wallos_has_oidc_env_value('OIDC_ISSUER');
+    $issuer = $issuerFromEnvironment
+        ? (string) wallos_get_oidc_env_value('OIDC_ISSUER')
+        : (string) ($settings['issuer'] ?? '');
+
+    if ($issuerFromEnvironment) {
+        $settings['issuer'] = $issuer;
         $managedFields['issuer'] = 'OIDC_ISSUER';
 
+        // The environment owning the issuer means the environment owns the
+        // endpoints derived from it; they are replaced rather than merged.
         foreach (['authorization_url', 'token_url', 'user_info_url'] as $field) {
             $settings[$field] = '';
             $managedFields[$field] = 'OIDC_ISSUER';
         }
+    }
 
+    if ($issuerFromEnvironment || trim($issuer) !== '') {
         if (trim($issuer) !== '') {
-            [$discoveryDocument, $discoveryError] = wallos_fetch_oidc_discovery_document($issuer);
+            [$discoveryDocument, $discoveryError] = wallos_get_oidc_discovery_document($db, $issuer);
             if ($discoveryError !== null) {
                 $notes[] = $discoveryError;
             } elseif ($discoveryDocument !== null) {
@@ -212,12 +297,19 @@ function wallos_get_effective_oidc_configuration($db)
                 ];
 
                 foreach ($discoveryMap as $field => $documentField) {
-                    if (isset($discoveryDocument[$documentField])) {
+                    if (!isset($discoveryDocument[$documentField])) {
+                        continue;
+                    }
+                    // A stored issuer fills in only what was left blank, so an
+                    // operator whose provider needs a hand-written endpoint can
+                    // still write one. An issuer from the environment replaces
+                    // them, which is the behaviour that already existed.
+                    if ($issuerFromEnvironment || trim((string) $settings[$field]) === '') {
                         $settings[$field] = $discoveryDocument[$documentField];
                     }
                 }
             }
-        } else {
+        } elseif ($issuerFromEnvironment) {
             $notes[] = 'Ignoring empty OIDC_ISSUER value.';
         }
     }
@@ -301,6 +393,7 @@ function wallos_oidc_writable_fields()
         'admin_claim' => 'text',
         'admin_value' => 'text',
         'post_logout_redirect_url' => 'text',
+        'issuer' => 'text',
     ];
 }
 

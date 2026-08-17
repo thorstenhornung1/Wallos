@@ -447,6 +447,7 @@ $i18n = [
     "oidc_admin_claim_hint" => "Optional. Both fields are needed; leaving either empty means no administrator role is derived from the provider. The claim is re-read on every login, so removing the group at the provider removes the role at the next sign in. Matching is exact, including case. Administrators granted the role locally keep it regardless of what the provider sends.",
     "logged_out_successfully" => "You have been signed out.",
     "oidc_post_logout_redirect_url" => "Post-logout redirect URL (optional)",
+    "oidc_issuer" => "Issuer URL (fills in the endpoints below)",
     "oidc_email_not_verified" => "Login failed: the identity provider reports that your email address is not verified. Verify it there, or ask your administrator to allow unverified addresses.",
     "smtp_settings" => "SMTP Settings",
     "smtp_usage_info" => "Will be used for password recovery and other system emails.",

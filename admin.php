@@ -260,6 +260,12 @@ $loginDisabledAllowed = $userCount == 1 && $settings['registrations_open'] == 0;
                     value="<?= htmlspecialchars($oidcSettings['name']) ?>" <?= oidc_input_attrs('name', $oidcManagedFields) ?> />
             </div>
             <div class="form-group">
+                <input type="text" id="oidcIssuer" placeholder="<?= translate('oidc_issuer', $i18n) ?>"
+                    autocomplete="off"
+                    value="<?= htmlspecialchars($oidcSettings['issuer'] ?? '') ?>"
+                    <?= oidc_input_attrs('issuer', $oidcManagedFields) ?> />
+            </div>
+            <div class="form-group">
                 <input type="text" id="oidcClientId" placeholder="Client ID" autocomplete="off"
                     value="<?= htmlspecialchars($oidcSettings['client_id']) ?>" <?= oidc_input_attrs('client_id', $oidcManagedFields) ?> />
             </div>
