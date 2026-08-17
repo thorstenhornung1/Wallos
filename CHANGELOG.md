@@ -1,5 +1,59 @@
 # Changelog
 
+## [5.7.0](https://github.com/thorstenhornung1/Wallos/releases/tag/v5.7.0) (2026-08-17)
+
+### Features
+
+* **auth:** the administrator role is a stored role rather than `user.id == 1`.
+  Multiple administrators are possible, the role can be granted and revoked, and
+  it no longer goes to whichever account happened to be created first — which,
+  with OIDC auto-provisioning, could be whoever authenticated first
+  ([#46](https://github.com/thorstenhornung1/Wallos/issues/46))
+* **oidc:** an admin claim from the identity provider can grant the role,
+  configured in the admin interface or through `OIDC_ADMIN_CLAIM` /
+  `OIDC_ADMIN_VALUE`. Provider-neutral — the operator names the claim. Re-read on
+  every login, so removing the group at the provider removes the role at the next
+  sign in. Locally granted admin rights are never touched by it
+  ([#47](https://github.com/thorstenhornung1/Wallos/issues/47))
+* **oidc:** logout follows RP-initiated logout semantics — `id_token_hint`,
+  a dedicated `post_logout_redirect_uri`, and `state`. The end-session URL comes
+  from discovery when it is not configured explicitly
+  ([#48](https://github.com/thorstenhornung1/Wallos/issues/48))
+* **oidc:** back-channel logout at `/backchannel-logout.php`, so the provider can
+  end a Wallos session without the browser. Signed `logout_token` validation with
+  no new dependency. Revocation reaches a running PHP session, not just the
+  remember-me token, and never deletes an account or its data
+  ([#49](https://github.com/thorstenhornung1/Wallos/issues/49))
+* **dev:** `dev/benchmark.sh`, a repeatable performance measurement over
+  subscription lists of 100/1000/5000 entries and notification crons at
+  1/10/100 users
+
+### Bug Fixes
+
+* **auth:** logging out now actually deletes the login token. The statement
+  matched on a variable that was never assigned, so `user_id = NULL` matched
+  nothing and every logout left a usable remember-me token behind — the user
+  appeared signed out while the credential that signs them back in survived
+  ([#45](https://github.com/thorstenhornung1/Wallos/issues/45))
+* **oidc:** both save paths for OIDC settings share one writer. The admin
+  interface trimmed text fields and the API did not, so a client id pasted
+  through the API with a trailing space was stored with it and every handshake
+  afterwards failed as "invalid client"
+
+### Upgrade notes
+
+The account with id 1 keeps administrator rights. If that account was deleted at
+some point, the oldest surviving account is given the role instead — otherwise
+the admin area would be unreachable, since ids are never reused.
+
+To make a different account an administrator:
+
+```sh
+sqlite3 /path/to/db/wallos.db \
+  "INSERT OR IGNORE INTO user_roles (user_id, role, source)
+   SELECT id, 'admin', 'local' FROM user WHERE username = 'yourname';"
+```
+
 ## [5.6.3](https://github.com/thorstenhornung1/Wallos/releases/tag/v5.6.3) (2026-08-16)
 
 ### Bug Fixes

@@ -54,7 +54,7 @@ LATEST_MIGRATION=$("$ENGINE" exec "$CONTAINER" php -r '
 ' 2>/dev/null || true)
 
 check "the migration chain is fully applied" \
-    "$(contains "$LATEST_MIGRATION" '000061')"
+    "$(contains "$LATEST_MIGRATION" '000062')"
 check "startup produced no PHP errors" "$(absent "$LOGS" 'PHP \(Fatal\|Parse\|Warning\)')"
 
 # --- account ---------------------------------------------------------------

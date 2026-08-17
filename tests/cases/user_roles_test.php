@@ -116,6 +116,50 @@ wallos_test('the second account does not take the role', function () {
     $db->close();
 });
 
+wallos_test('an installation whose first account was deleted keeps an administrator', function () {
+    // The realistic upgrade trap. Delete the original account, sign in through
+    // OIDC, and the new account gets id 7 — SQLite never reuses ids. Migration
+    // 000058 then finds no user 1 and gives the role to nobody, leaving the
+    // admin area unreachable.
+    $db = wallos_test_open_database();
+    wallos_test_create_user($db, 7, 'signed-up-later');
+
+    require WALLOS_ROOT . '/migrations/000058.php';
+    assert_same(0, wallos_count_admins($db), 'nobody yet, because there is no user 1');
+
+    require WALLOS_ROOT . '/migrations/000062.php';
+
+    assert_same(1, wallos_count_admins($db), 'the oldest surviving account takes it');
+    assert_true(wallos_user_is_admin($db, 7), 'and can reach the admin area');
+
+    $db->close();
+});
+
+wallos_test('the repair never overrides an existing administrator', function () {
+    $db = wallos_test_open_database();
+    wallos_test_create_user($db, 3, 'carol');
+    wallos_test_create_user($db, 9, 'dave');
+    wallos_grant_role($db, 9, WALLOS_ROLE_ADMIN, WALLOS_ROLE_SOURCE_LOCAL);
+
+    require WALLOS_ROOT . '/migrations/000062.php';
+
+    assert_same(1, wallos_count_admins($db), 'still one administrator');
+    assert_true(wallos_user_is_admin($db, 9), 'the one who already had it');
+    assert_true(!wallos_user_is_admin($db, 3), 'the older account was not promoted');
+
+    $db->close();
+});
+
+wallos_test('the repair does nothing on an empty installation', function () {
+    $db = wallos_test_open_database();
+
+    require WALLOS_ROOT . '/migrations/000062.php';
+
+    assert_same(0, wallos_count_admins($db), 'no users, no roles');
+
+    $db->close();
+});
+
 // ------------------------------------------------------------------ helper
 
 wallos_test('the admin helper answers for every combination of sources', function () {
