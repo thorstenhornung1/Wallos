@@ -1,5 +1,38 @@
 # Changelog
 
+## [5.7.2](https://github.com/thorstenhornung1/Wallos/releases/tag/v5.7.2) (2026-08-17)
+
+No application code changes. Both fixes come from the 2026-08-16/17 test run on
+Docker Swarm.
+
+### Bug Fixes
+
+* **dev:** `dev/benchmark.sh` measured nothing in its cron column. It timed with
+  `date +%s%N`, and BusyBox — what the Alpine-based image ships — ignores `%N` and
+  returns whole seconds, so two readings inside the same second differ by zero.
+  Every cron figure came out as `0 ms`, baseline included, which reads like "too
+  fast to measure" when it means "not measured". Timing now happens inside a PHP
+  process with `microtime()`
+* **docs:** the Swarm stack pinned the service with `node.labels.app == true`
+  while the document claimed it was constrained to one node. A label can be on
+  several nodes and Swarm will eventually use that freedom — during the test run
+  the task moved, found an empty node-local volume, migrated it, and came up as a
+  fresh installation. It looks exactly like total data loss. The constraint is a
+  hostname now, and the failure mode is described where the volumes are
+
+### Documentation
+
+* test 5.2 has a separate administrator block for `admin.php`, which returns a
+  redirect to a non-administrator — and `grep -c` on a redirect returns `0` for the
+  same reason an empty page does, proving nothing. The block asserts the page
+  rendered before trusting the count
+* an authentik trap: logging out of authentik before logging out of Wallos hits a
+  hard-coded `Logout successful` page in `end_session.py`, which also suppresses
+  the back-channel token. Nothing to fix in Wallos; documented because it is silent
+  and every parameter looks correct while it happens
+* the image no longer ships a `VERSION` file; the document says how to read the
+  running image tag instead
+
 ## [5.7.1](https://github.com/thorstenhornung1/Wallos/releases/tag/v5.7.1) (2026-08-17)
 
 ### Bug Fixes
