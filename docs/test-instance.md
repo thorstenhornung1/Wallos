@@ -85,13 +85,37 @@ docker service logs -f wallos-test_wallos 2>&1 | grep -i migration
 `Migration migrations/000055.php completed successfully.` and `000056` confirm
 the instance configuration and the subscription indexes are in place.
 
-### Why one replica, pinned
+### Why one replica, pinned to a hostname
 
-The volumes are node-local and SQLite has a single writer. The service is
-therefore constrained to one node and updates use `order: stop-first`, so the
-old task is gone before the new one starts. Do not put the database on CephFS
-or NFS to make it float — SQLite locking is not safe on a network filesystem,
-and that is the constraint the optional PostgreSQL backend exists to remove.
+The volumes are node-local and SQLite has a single writer, so the service runs
+one replica, updates with `order: stop-first`, and is pinned with
+
+```yaml
+- node.hostname == docker-infra-3
+```
+
+**Change that hostname to your node.** A hostname, not a label: `node.labels.app
+== true` looks equivalent and is not, because the label can be on several nodes
+and Swarm will eventually use that freedom.
+
+This is worth stating plainly because of how the failure presents. A task
+rescheduled to another node finds an empty volume, runs the migrations against
+it, and comes up as a fresh installation — login page, no accounts, no
+subscriptions. It looks precisely like total data loss. The data is untouched on
+the original node, and nothing on screen suggests that. This happened during the
+2026-08-16 test run.
+
+Do not put the database on CephFS or NFS to make it float — SQLite locking is
+not safe on a network filesystem, and that is the constraint the optional
+PostgreSQL backend exists to remove.
+
+### Which version is running
+
+The image no longer ships a `VERSION` file, so read the tag instead:
+
+```sh
+docker inspect --format '{{.Spec.TaskTemplate.ContainerSpec.Image}}' wallos-test_wallos
+```
 
 ## 2B. Deploy on Kubernetes
 
@@ -181,13 +205,39 @@ CSRF=$(curl -s -b "$COOKIES" "$BASE/settings.php" \
 Now look for the password in the pages that use it:
 
 ```sh
-for page in settings.php admin.php; do
+for page in settings.php index.php; do
   printf '%s: %s\n' "$page" \
     "$(curl -s -b "$COOKIES" "$BASE/$page" | grep -c test-smtp-password)"
 done
 ```
 
 Expected: `0` for both. The password exists, sends mail, and is not in the page.
+
+`settings.php` is the one that carries weight: the value *is* in scope there,
+because that page renders the mail configuration form. A field pre-filled with
+the current password — the obvious, convenient implementation — would put the
+secret into the HTML of every page load, where it survives in the browser cache,
+in a saved page, and in any screenshot of the settings screen.
+
+**`admin.php` needs a separate run with an administrator session.** A
+non-administrator gets a redirect, and `grep -c` on a redirect returns `0` for
+the same reason an empty page does — which proves nothing at all. Repeat the
+block above with an administrator's credentials to cover it:
+
+```sh
+ADMIN_COOKIES=$(mktemp)
+curl -s -c "$ADMIN_COOKIES" "$BASE/login.php" -o /dev/null
+curl -s -b "$ADMIN_COOKIES" -c "$ADMIN_COOKIES" -X POST "$BASE/login.php" \
+  --data-urlencode "username=<an administrator>" \
+  --data-urlencode "password=<their password>" -o /dev/null
+
+# Confirm the page actually rendered before trusting the count.
+curl -s -b "$ADMIN_COOKIES" "$BASE/admin.php" | grep -c 'Instance Integrations'
+curl -s -b "$ADMIN_COOKIES" "$BASE/admin.php" | grep -c test-smtp-password
+```
+
+Expected: a non-zero first count — proof the page rendered — and `0` for the
+second.
 
 ### 5.3 Environment-managed fields cannot be edited
 
@@ -345,16 +395,23 @@ hardware:
 
 | users | notify cron | rates cron |
 |---|---|---|
-| baseline (empty script) | 113 ms | — |
-| 1 | 124 ms | 409 ms |
-| 10 | 130 ms | 330 ms |
-| 100 | 131 ms | 371 ms |
+| baseline (empty script) | 12 ms | — |
+| 1 | 25 ms | 243 ms |
+| 10 | 27 ms | 220 ms |
+| 100 | 25 ms | 229 ms |
 
 What the numbers say:
 
-- **The cron is flat.** 1 user and 100 users cost the same, and both sit barely
-  above the 113 ms it takes to start PHP at all. Notification settings are read
-  once per run rather than once per user, so adding users adds almost nothing.
+- **The cron is flat.** 1 user and 100 users cost the same, about 13 ms above
+  the bare interpreter start. Notification settings are read once per run rather
+  than once per user, so adding users adds nothing measurable.
+
+  The cron timings are taken from inside a PHP process. An earlier version of
+  the script used `date +%s%N` from the shell, which the Alpine-based image does
+  not support — BusyBox ignores `%N` and returns whole seconds, so every figure
+  including the baseline came out as `0 ms`. A table of zeros reads like "too
+  fast to measure" when it means "not measured", so if you see one, the script
+  is older than 5.7.2.
 - **The list is linear in the number of entries, not quadratic.** 100 → 5000 is
   50× the data for 29× the time. Exchange rates are fetched in one query, so a
   row no longer costs a round trip. What remains is rendering: 5000 entries
@@ -515,6 +572,22 @@ misconfigured cannot leave you signed in to Wallos.
 Whether Authentik ends only the application session or the whole SSO session
 depends on its provider invalidation flow. That is a provider-side setting;
 Wallos sends the standard request either way.
+
+**One authentik trap, found in the 2026-08-17 run.** If you log out of authentik
+first and *then* ask Wallos to log out, you land on a page containing nothing but
+`Logout successful`, stopped at the end-session URL. Every parameter Wallos sent
+is correct and the registered URI matches byte for byte.
+
+The cause is in authentik's `providers/oauth2/views/end_session.py`: `dispatch()`
+returns that hard-coded HTML when a flow plan is left in the session, before any
+logout logic runs. The guard is meant for iframe-based single logout, and an
+abandoned plan looks the same to it. Since `dispatch()` precedes `get()`, such a
+request also sends **no** back-channel token — one cause, two symptoms.
+
+Nothing to change in Wallos or in the provider configuration. Test the logout in
+a fresh private window, and log out of Wallos *before* logging out of authentik.
+It belongs here because the failure is silent, the page says "successful", and
+everything looks right while it happens.
 
 ### 7.4 Back-channel logout
 

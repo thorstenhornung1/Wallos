@@ -76,14 +76,23 @@ enable_notifications() {
 
 measure_cron() {
     job=$1
-    i=0
-    while [ "$i" -lt "$RUNS" ]; do
-        start=$(date +%s%N 2>/dev/null || python3 -c 'import time; print(int(time.time()*1e9))')
-        $EXEC php "/var/www/html/endpoints/cronjobs/$job.php" >/dev/null 2>&1 || true
-        end=$(date +%s%N 2>/dev/null || python3 -c 'import time; print(int(time.time()*1e9))')
-        echo $(( (end - start) / 1000000 ))
-        i=$((i + 1))
-    done | sort -n | awk -v n="$RUNS" 'NR == int((n + 1) / 2) { print $1 }'
+    # Timed from inside a PHP process rather than with `date +%s%N`, which is not
+    # portable: BusyBox date — what the Alpine-based image ships — ignores %N and
+    # returns whole seconds, so two readings inside the same second differ by
+    # zero. That produced a table of 0ms figures, baseline included, which reads
+    # like "too fast to measure" rather than "not measured".
+    $EXEC php -r '
+        $runs = (int) "'"$RUNS"'";
+        $script = "/var/www/html/'"$1"'";
+        $times = [];
+        for ($i = 0; $i < $runs; $i++) {
+            $start = microtime(true);
+            exec("php " . escapeshellarg($script) . " > /dev/null 2>&1");
+            $times[] = (microtime(true) - $start) * 1000;
+        }
+        sort($times);
+        printf("%d", (int) round($times[intdiv(count($times), 2)]));
+    ' 2>/dev/null
 }
 
 # Moves the logged-in user's own subscriptions to a given count, so the measured
@@ -136,13 +145,13 @@ done
 
 printf '\nNotification cron, all users\n'
 printf '  %-12s %10s %10s\n' 'users' 'notify' 'rates'
-printf '  %-12s %9sms %9s\n' 'baseline' "$(measure_cron ../../dev/noop)" '-'
+printf '  %-12s %9sms %9s\n' 'baseline' "$(measure_cron dev/noop.php)" '-'
 for users in 1 10 100; do
     seed "$users" 10
     enable_notifications
     printf '  %-12s %9sms %9sms\n' "$users" \
-        "$(measure_cron sendnotifications)" \
-        "$(measure_cron updateexchange)"
+        "$(measure_cron endpoints/cronjobs/sendnotifications.php)" \
+        "$(measure_cron endpoints/cronjobs/updateexchange.php)"
 done
 printf '\n  baseline is an empty script: interpreter start-up, included in every row above.\n' 
 

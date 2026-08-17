@@ -63,7 +63,14 @@ services:
       replicas: 1
       placement:
         constraints:
-          - node.labels.app == true
+          # A HOSTNAME, not a label. Both volumes are node-local, so a task that
+          # starts on a different node comes up against an empty database and
+          # looks exactly like total data loss — the data is intact on the
+          # original node, but nothing on screen says so.
+          #
+          # `node.labels.app == true` is not enough: if the label is on more than
+          # one node, Swarm may reschedule freely and will, eventually.
+          - node.hostname == docker-infra-3
       update_config:
         parallelism: 1
         # SQLite has a single writer and the volume is node-local: the old task
