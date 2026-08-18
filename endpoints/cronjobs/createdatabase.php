@@ -1,6 +1,22 @@
 <?php
 
 require_once __DIR__ . '/../../includes/database/connection.php';
+require_once __DIR__ . '/../../includes/database/configuration.php';
+
+// PostgreSQL takes a different path entirely: everything below builds the
+// SQLite schema statement by statement, and the migrations then walk it
+// forward. A PostgreSQL install starts from a generated baseline instead —
+// see includes/database/pgsql/install.php for why.
+$databaseConfiguration = wallos_database_configuration();
+if ($databaseConfiguration['error'] === null && $databaseConfiguration['driver'] === 'pgsql') {
+    require_once __DIR__ . '/../../includes/database/pgsql/install.php';
+
+    $db = wallos_database_connect();
+    wallos_pgsql_install_if_needed($db);
+    $db->close();
+
+    return;
+}
 
 $databaseFile = wallos_database_path();
 

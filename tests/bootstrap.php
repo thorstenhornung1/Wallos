@@ -205,6 +205,10 @@ function wallos_test_database()
             symlink(WALLOS_ROOT . '/includes/database/connection.php', $sandbox . '/includes/database/connection.php');
             mkdir($sandbox . '/includes/database/sqlite', 0700, true);
             symlink(WALLOS_ROOT . '/includes/database/sqlite/database.php', $sandbox . '/includes/database/sqlite/database.php');
+            // createdatabase.php resolves the configuration to decide whether
+            // it is building a SQLite schema at all.
+            symlink(WALLOS_ROOT . '/includes/database/configuration.php', $sandbox . '/includes/database/configuration.php');
+            symlink(WALLOS_ROOT . '/includes/config_helper.php', $sandbox . '/includes/config_helper.php');
         }
 
         $databaseFile = $sandbox . '/db/wallos.db';
