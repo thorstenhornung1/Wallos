@@ -154,7 +154,7 @@ if (isset($apiData['success']) && $apiData['success'] == true) {
     if ($resultInsert) {
         // If usage limits are parsed and supported by the db schema
         if ($usageLimit !== null && $usageRemaining !== null
-            && $db->querySingle("SELECT COUNT(*) FROM pragma_table_info('fixer') WHERE name='usage_used'") > 0) {
+            && $db->columnExists('fixer', 'usage_used') > 0) {
             $usageStmt = $db->prepare("UPDATE fixer SET usage_used = :used, usage_limit = :limit, usage_updated_at = :updatedAt WHERE user_id = :userId");
             $usageStmt->bindValue(':used', $usageLimit - $usageRemaining, SQLITE3_INTEGER);
             $usageStmt->bindValue(':limit', $usageLimit, SQLITE3_INTEGER);

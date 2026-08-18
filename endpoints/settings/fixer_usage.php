@@ -33,7 +33,7 @@ if ($config['mode'] === 'instance') {
     ]));
 }
 
-if ($db->querySingle("SELECT COUNT(*) FROM pragma_table_info('fixer') WHERE name='usage_used'") == 0) {
+if ($db->columnExists('fixer', 'usage_used') == 0) {
     die(json_encode(["success" => false]));
 }
 

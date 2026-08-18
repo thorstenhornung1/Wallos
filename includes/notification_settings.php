@@ -62,9 +62,7 @@ function wallos_load_notification_settings($db)
  */
 function wallos_load_notification_timing($db)
 {
-    $hasPeriodSummary = (bool) $db->querySingle(
-        "SELECT COUNT(*) FROM pragma_table_info('notification_settings') WHERE name='period_summary_at_period_start'"
-    );
+    $hasPeriodSummary = (bool) $db->columnExists('notification_settings', 'period_summary_at_period_start');
 
     $columns = $hasPeriodSummary
         ? 'user_id, days, period_summary_at_period_start'

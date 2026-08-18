@@ -20,7 +20,7 @@ if (!isset($_GET['search']) || trim($_GET['search']) === '') {
 }
 
 $apiKey = '';
-if ($db->querySingle("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='google_search'") > 0) {
+if ($db->tableExists('google_search') > 0) {
     $stmt = $db->prepare("SELECT api_key FROM google_search WHERE user_id = :userId");
     $stmt->bindValue(':userId', $userId, SQLITE3_INTEGER);
     $result = $stmt->execute();

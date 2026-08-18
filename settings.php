@@ -1298,7 +1298,7 @@ if ($budgetPeriodAnchorDate === '1970-01-01' || !preg_match('/^\d{4}-\d{2}-\d{2}
 
     <?php
     $googleSearchApiKey = "";
-    if ($db->querySingle("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='google_search'") > 0) {
+    if ($db->tableExists('google_search')) {
         $sql = "SELECT api_key FROM google_search WHERE user_id = :userId";
         $stmt = $db->prepare($sql);
         $stmt->bindValue(':userId', $userId, SQLITE3_INTEGER);

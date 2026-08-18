@@ -221,7 +221,7 @@ function wallos_store_currency_usage($db, $config, $userId, $usage)
         return;
     }
 
-    if (!$db->querySingle("SELECT COUNT(*) FROM pragma_table_info('fixer') WHERE name='usage_used'")) {
+    if (!$db->columnExists('fixer', 'usage_used')) {
         return;
     }
 

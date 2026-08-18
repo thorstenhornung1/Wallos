@@ -228,3 +228,31 @@ wallos_test('nothing opens a raw connection outside the boundary', function () {
 
     assert_same([], $offenders, 'application code opens connections through the factory');
 });
+
+wallos_test('application code no longer queries the SQLite schema directly', function () {
+    // Ten files asked sqlite_master or pragma_table_info whether a table or
+    // column existed. Those are the two questions a second backend answers
+    // completely differently, and they were spread across endpoints, includes
+    // and API handlers rather than sitting behind the boundary.
+    $offenders = [];
+    $paths = array_merge(
+        glob(WALLOS_ROOT . '/*.php'),
+        glob(WALLOS_ROOT . '/includes/*.php'),
+        glob(WALLOS_ROOT . '/endpoints/*/*.php'),
+        glob(WALLOS_ROOT . '/api/*/*.php')
+    );
+
+    foreach ($paths as $path) {
+        // createdatabase.php builds the SQLite schema itself; migrations are
+        // SQLite-only by design, since a second backend gets a baseline schema
+        // rather than a replayed migration chain.
+        if (basename($path) === 'createdatabase.php') {
+            continue;
+        }
+        if (preg_match('/sqlite_master|pragma_table_info|PRAGMA /', file_get_contents($path)) === 1) {
+            $offenders[] = str_replace(WALLOS_ROOT . '/', '', $path);
+        }
+    }
+
+    assert_same([], $offenders, 'schema questions go through tableExists()/columnExists()');
+});

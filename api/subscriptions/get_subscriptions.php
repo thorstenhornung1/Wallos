@@ -304,15 +304,8 @@ if ($_SERVER["REQUEST_METHOD"] === "POST" || $_SERVER["REQUEST_METHOD"] === "GET
     ];
 
     if ($allUserSubscription == 1 && $userId == 1) {
-        $sql = "PRAGMA table_info(user)";
-        $stmt = $db->prepare($sql);
-        $result = $stmt->execute();
-        $userColumns = array();
-        while ($row = $result->fetchArray(SQLITE3_ASSOC)) {
-            $userColumns[] = $row['name'];
-        }
-        $userNameCol = in_array('username', $userColumns) ? 'username' : null;
-        $userEmailCol = in_array('email', $userColumns) ? 'email' : null;
+        $userNameCol = $db->columnExists('user', 'username') ? 'username' : null;
+        $userEmailCol = $db->columnExists('user', 'email') ? 'email' : null;
         if ($userNameCol && $userEmailCol) {
             $sql = "SELECT id, $userNameCol as name, $userEmailCol as email FROM user";
         } elseif ($userNameCol) {

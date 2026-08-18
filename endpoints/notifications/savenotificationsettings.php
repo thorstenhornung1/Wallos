@@ -16,11 +16,7 @@ if (!isset($data["days"]) || $data['days'] == "") {
     $days = $data["days"];
     $periodSummaryAtPeriodStart = isset($data["period_summary_at_period_start"]) ? (int) $data["period_summary_at_period_start"] : 0;
 
-    $hasPeriodSummaryColumn = false;
-    $columnResult = $db->query("SELECT * FROM pragma_table_info('notification_settings') WHERE name='period_summary_at_period_start'");
-    if ($columnResult && $columnResult->fetchArray(SQLITE3_ASSOC)) {
-        $hasPeriodSummaryColumn = true;
-    }
+    $hasPeriodSummaryColumn = $db->columnExists('notification_settings', 'period_summary_at_period_start');
 
     $query = "SELECT COUNT(*) FROM notification_settings WHERE user_id = :userId";
     $stmt = $db->prepare($query);

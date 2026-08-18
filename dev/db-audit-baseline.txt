@@ -11,7 +11,7 @@
 #
 # Do not edit by hand — run dev/db-audit.sh --update and commit the diff.
 #
-# total: 1548 matches in 218 file(s)
+# total: 1533 matches in 218 file(s)
 admin.php	5
 api/admin/get_admin_settings.php	1
 api/admin/set_admin_settings.php	20
@@ -22,7 +22,7 @@ api/categories/set_categories.php	21
 api/currencies/get_currencies.php	3
 api/currencies/set_currencies.php	24
 api/fixer/get_fixer.php	2
-api/fixer/set_fixer.php	12
+api/fixer/set_fixer.php	11
 api/household/get_household.php	3
 api/household/set_household.php	20
 api/notifications/get_notification_settings.php	10
@@ -35,7 +35,7 @@ api/subscriptions/get_ical_feed.php	12
 api/subscriptions/get_monthly_cost.php	5
 api/subscriptions/get_period_budget.php	7
 api/subscriptions/get_subscription.php	16
-api/subscriptions/get_subscriptions.php	11
+api/subscriptions/get_subscriptions.php	9
 api/subscriptions/set_subscriptions.php	78
 api/users/get_user.php	1
 api/users/set_budget.php	7
@@ -69,12 +69,12 @@ endpoints/currency/update_exchange.php	1
 endpoints/db/import.php	2
 endpoints/db/migrate.php	1
 endpoints/household/household.php	11
-endpoints/logos/google_search.php	3
+endpoints/logos/google_search.php	2
 endpoints/notifications/savediscordnotifications.php	6
 endpoints/notifications/saveemailnotifications.php	11
 endpoints/notifications/savegotifynotifications.php	6
 endpoints/notifications/savemattermostnotifications.php	6
-endpoints/notifications/savenotificationsettings.php	6
+endpoints/notifications/savenotificationsettings.php	4
 endpoints/notifications/saventfynotifications.php	7
 endpoints/notifications/savepushovernotifications.php	5
 endpoints/notifications/savepushplusnotifications.php	4
@@ -94,9 +94,9 @@ endpoints/settings/customcss.php	3
 endpoints/settings/customtheme.php	5
 endpoints/settings/deleteaccount.php	19
 endpoints/settings/disabled_to_bottom.php	2
-endpoints/settings/fixer_usage.php	3
+endpoints/settings/fixer_usage.php	2
 endpoints/settings/google_search.php	3
-endpoints/settings/google_search_usage.php	3
+endpoints/settings/google_search_usage.php	2
 endpoints/settings/hide_disabled.php	2
 endpoints/settings/mobile_navigation.php	2
 endpoints/settings/monthly_price.php	2
@@ -127,14 +127,14 @@ includes/checkredirect.php	2
 includes/checksession.php	2
 includes/checkuser.php	1
 includes/config_helper.php	2
-includes/currency_provider.php	17
+includes/currency_provider.php	16
 includes/currency_rates.php	4
 includes/getdbkeys.php	10
 includes/getsettings.php	7
-includes/integration_config.php	35
+includes/integration_config.php	33
 includes/list_subscriptions.php	2
 includes/mailer.php	2
-includes/notification_settings.php	8
+includes/notification_settings.php	6
 includes/oidc/admin_role_sync.php	1
 includes/oidc/backchannel.php	13
 includes/oidc/diagnostics.php	2
@@ -208,9 +208,9 @@ migrations/000063.php	2
 passwordreset.php	18
 profile.php	5
 registration.php	36
-settings.php	49
+settings.php	48
 stats.php	2
-subscriptions.php	6
+subscriptions.php	5
 tests/bootstrap.php	22
 tests/cases/currency_rates_test.php	4
 tests/cases/currency_refresh_test.php	13

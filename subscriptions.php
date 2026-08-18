@@ -276,7 +276,7 @@ $subscriptionsView = (isset($_COOKIE['subscriptionsView']) && $_COOKIE['subscrip
     }
 
     $googleSearchEnabled = false;
-    if ($db->querySingle("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='google_search'") > 0) {
+    if ($db->tableExists('google_search')) {
       $googleSearchStmt = $db->prepare("SELECT COUNT(*) AS count FROM google_search WHERE user_id = :userId AND api_key != ''");
       $googleSearchStmt->bindValue(':userId', $userId, SQLITE3_INTEGER);
       $googleSearchResult = $googleSearchStmt->execute();

@@ -36,7 +36,7 @@ const WALLOS_AI_HOST_PROVIDERS = ['ollama', 'openai-compatible'];
  */
 function wallos_build_instance_settings($db, $integration)
 {
-    $tableExists = $db->querySingle("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='integration_settings'");
+    $tableExists = $db->tableExists('integration_settings');
     if (!$tableExists) {
         return [];
     }
@@ -592,7 +592,7 @@ function wallos_validate_ai_config(&$config)
 function wallos_build_effective_ai_config($db, $userId)
 {
     $row = [];
-    $tableExists = $db->querySingle("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='ai_settings'");
+    $tableExists = $db->tableExists('ai_settings');
 
     if ($tableExists) {
         $stmt = $db->prepare('SELECT * FROM ai_settings WHERE user_id = :userId LIMIT 1');
