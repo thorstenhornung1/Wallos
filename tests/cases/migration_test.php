@@ -13,7 +13,7 @@ require_once WALLOS_ROOT . '/includes/integration_config.php';
  */
 function migration_legacy_database()
 {
-    $db = new SQLite3(WALLOS_TEST_TMP . '/legacy-' . uniqid('', true) . '.db',
+    $db = new WallosSqliteDatabase(WALLOS_TEST_TMP . '/legacy-' . uniqid('', true) . '.db',
         SQLITE3_OPEN_CREATE | SQLITE3_OPEN_READWRITE);
 
     $db->exec("CREATE TABLE admin (
@@ -106,7 +106,7 @@ wallos_test('running the migration twice changes nothing', function () {
 
 wallos_test('a database without the mode column still resolves correctly', function () {
     // Covers the window between deploying new code and running migrations.
-    $db = new SQLite3(WALLOS_TEST_TMP . '/premigration-' . uniqid('', true) . '.db',
+    $db = new WallosSqliteDatabase(WALLOS_TEST_TMP . '/premigration-' . uniqid('', true) . '.db',
         SQLITE3_OPEN_CREATE | SQLITE3_OPEN_READWRITE);
     $db->exec("CREATE TABLE admin (id INTEGER PRIMARY KEY, smtp_address TEXT, smtp_port INTEGER DEFAULT 587,
         smtp_username TEXT, smtp_password TEXT, from_email TEXT, encryption TEXT DEFAULT 'tls')");

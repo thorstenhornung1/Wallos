@@ -5,9 +5,7 @@ $migrationsDir = __DIR__ . '/../migrations/';
 
 $completedMigrations = [];
 
-$migrationTableExists = $db
-    ->query("SELECT name FROM sqlite_master WHERE type='table' AND name='migrations'")
-    ->fetchArray(SQLITE3_ASSOC) !== false;
+$migrationTableExists = $db->tableExists('migrations');
 
 if ($migrationTableExists) {
     $migrationQuery = $db->query('SELECT migration FROM migrations');

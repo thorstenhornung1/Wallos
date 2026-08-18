@@ -11,7 +11,7 @@
 #
 # Do not edit by hand — run dev/db-audit.sh --update and commit the diff.
 #
-# total: 1533 matches in 218 file(s)
+# total: 1527 matches in 218 file(s)
 admin.php	5
 api/admin/get_admin_settings.php	1
 api/admin/set_admin_settings.php	20
@@ -40,7 +40,7 @@ api/subscriptions/set_subscriptions.php	78
 api/users/get_user.php	1
 api/users/set_budget.php	7
 calendar.php	8
-dev/seed.php	14
+dev/seed.php	13
 endpoints/admin/adduser.php	31
 endpoints/admin/deleteunusedlogos.php	2
 endpoints/admin/deleteuser.php	21
@@ -143,7 +143,7 @@ includes/oidc/oidc_create_user.php	29
 includes/oidc/oidc_login.php	4
 includes/oidc_settings.php	12
 includes/remember_me.php	7
-includes/run_migrations.php	4
+includes/run_migrations.php	2
 includes/session_tokens.php	2
 includes/ssrf_helper.php	6
 includes/stats_calculations.php	21
@@ -211,14 +211,14 @@ registration.php	36
 settings.php	48
 stats.php	2
 subscriptions.php	5
-tests/bootstrap.php	22
+tests/bootstrap.php	20
 tests/cases/currency_rates_test.php	4
 tests/cases/currency_refresh_test.php	13
 tests/cases/currency_scope_test.php	10
-tests/cases/database_boundary_test.php	14
+tests/cases/database_boundary_test.php	15
 tests/cases/integration_config_test.php	1
 tests/cases/language_migration_test.php	5
-tests/cases/migration_test.php	20
+tests/cases/migration_test.php	18
 tests/cases/oidc_admin_role_test.php	4
 tests/cases/oidc_backchannel_test.php	9
 tests/cases/oidc_discovery_test.php	10

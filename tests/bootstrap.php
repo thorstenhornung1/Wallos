@@ -214,8 +214,7 @@ function wallos_test_database()
             putenv('WALLOS_DB_PATH=' . $databaseFile);
             ob_start();
             require $sandbox . '/endpoints/cronjobs/createdatabase.php';
-            $db = new SQLite3($databaseFile);
-            $db->busyTimeout(5000);
+            $db = wallos_database_connect($databaseFile);
             require $sandbox . '/includes/run_migrations.php';
             $db->close();
             ob_end_clean();

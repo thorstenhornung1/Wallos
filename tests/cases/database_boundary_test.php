@@ -249,7 +249,10 @@ wallos_test('application code no longer queries the SQLite schema directly', fun
         if (basename($path) === 'createdatabase.php') {
             continue;
         }
-        if (preg_match('/sqlite_master|pragma_table_info|PRAGMA /', file_get_contents($path)) === 1) {
+        // Assembled rather than written out, so this check does not count as
+        // one of the things it is checking for.
+        $patterns = 'sqlite' . '_master|pragma' . '_table_info|PRA' . 'GMA ';
+        if (preg_match('/' . $patterns . '/', file_get_contents($path)) === 1) {
             $offenders[] = str_replace(WALLOS_ROOT . '/', '', $path);
         }
     }

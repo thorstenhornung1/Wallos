@@ -16,7 +16,8 @@ if (php_sapi_name() !== 'cli') {
 $userCount = isset($argv[1]) ? max(1, (int) $argv[1]) : 10;
 $perUser = isset($argv[2]) ? max(1, (int) $argv[2]) : 100;
 
-$db = new SQLite3(__DIR__ . '/../db/wallos.db');
+require_once __DIR__ . '/../includes/database/connection.php';
+$db = wallos_database_connect();
 $db->busyTimeout(5000);
 
 $seedPrefix = 'seed-';
