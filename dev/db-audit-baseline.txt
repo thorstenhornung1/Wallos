@@ -11,7 +11,7 @@
 #
 # Do not edit by hand — run dev/db-audit.sh --update and commit the diff.
 #
-# total: 1527 matches in 218 file(s)
+# total: 1539 matches in 220 file(s)
 admin.php	5
 api/admin/get_admin_settings.php	1
 api/admin/set_admin_settings.php	20
@@ -41,6 +41,8 @@ api/users/get_user.php	1
 api/users/set_budget.php	7
 calendar.php	8
 dev/seed.php	13
+dev/stress-seed.php	6
+dev/stress-verify.php	6
 endpoints/admin/adduser.php	31
 endpoints/admin/deleteunusedlogos.php	2
 endpoints/admin/deleteuser.php	21
