@@ -163,7 +163,7 @@ foreach ($binarySettings as $postKey => $dbCol) {
     if (isset($_POST[$postKey])) {
         $val = $_POST[$postKey];
         if ($val === '1' || $val === '0' || $val === 1 || $val === 0) {
-            $updateFields[] = "`$dbCol` = :$postKey";
+            $updateFields[] = "\"$dbCol\" = :$postKey";
             $params[$postKey] = [
                 'val' => ($val === '1' || $val === 1) ? 1 : 0,
                 'type' => SQLITE3_INTEGER
@@ -182,7 +182,7 @@ foreach ($binarySettings as $postKey => $dbCol) {
 if (isset($_POST['dark_theme'])) {
     $darkTheme = $_POST['dark_theme'];
     if (in_array($darkTheme, ['0', '1', '2', 0, 1, 2], true)) {
-        $updateFields[] = "`dark_theme` = :dark_theme";
+        $updateFields[] = '"dark_theme" = :dark_theme';
         $params['dark_theme'] = [
             'val' => intval($darkTheme),
             'type' => SQLITE3_INTEGER
@@ -201,7 +201,7 @@ if (isset($_POST['color_theme'])) {
     $colorTheme = $_POST['color_theme'];
     $allowedThemes = ['blue', 'green', 'red', 'yellow', 'purple', 'custom'];
     if (in_array($colorTheme, $allowedThemes, true)) {
-        $updateFields[] = "`color_theme` = :color_theme";
+        $updateFields[] = '"color_theme" = :color_theme';
         $params['color_theme'] = [
             'val' => $colorTheme,
             'type' => SQLITE3_TEXT

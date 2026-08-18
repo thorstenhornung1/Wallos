@@ -963,7 +963,7 @@ if ($budgetPeriodAnchorDate === '1970-01-01' || !preg_match('/^\d{4}-\d{2}-\d{2}
     </section>
 
     <?php
-    $sql = "SELECT * FROM categories WHERE user_id = :userId ORDER BY `order` ASC";
+    $sql = 'SELECT * FROM categories WHERE user_id = :userId ORDER BY "order" ASC';
     $stmt = $db->prepare($sql);
     $stmt->bindValue(':userId', $userId, SQLITE3_INTEGER);
     $result = $stmt->execute();
@@ -1488,7 +1488,7 @@ if ($budgetPeriodAnchorDate === '1970-01-01' || !preg_match('/^\d{4}-\d{2}-\d{2}
     </section>
 
     <?php
-    $sql = "SELECT * FROM payment_methods WHERE user_id = :userId ORDER BY `order` ASC";
+    $sql = 'SELECT * FROM payment_methods WHERE user_id = :userId ORDER BY "order" ASC';
     $stmt = $db->prepare($sql);
     $stmt->bindValue(':userId', $userId, SQLITE3_INTEGER);
     $result = $stmt->execute();

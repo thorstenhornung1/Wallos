@@ -51,6 +51,12 @@ $hasErrorMessage = false;
 $passwordsMismatch = false;
 $hideForm = false;
 
+// A reset token is good for one hour. The window is computed here rather than
+// with SQLite's datetime('now', '-1 hour'), which PostgreSQL does not have;
+// gmdate() rather than date() because created_at is written by the column's
+// CURRENT_TIMESTAMP default, which is UTC whatever timezone PHP is set to.
+$tokenValidAfter = gmdate('Y-m-d H:i:s', time() - 3600);
+
 if (isset($_POST['email']) && $_POST['email'] != "" && isset($_GET['submit']) && $_GET['submit'] && !(isset($_GET['token'])) && !(isset($_POST['token']))) {
     $requestMode = true;
     $resetMode = false;
@@ -81,10 +87,11 @@ if (isset($_GET['token']) && $_GET['token'] != "" && isset($_GET['email']) && $_
     $resetMode = true;
     $token = $_GET['token'];
     $email = $_GET['email'];
-    $matchCount = "SELECT COUNT(*) FROM password_resets WHERE token = :token AND email = :email AND created_at > datetime('now', '-1 hour')";
+    $matchCount = "SELECT COUNT(*) FROM password_resets WHERE token = :token AND email = :email AND created_at > :validAfter";
     $stmt = $db->prepare($matchCount);
     $stmt->bindValue(':token', $token, SQLITE3_TEXT);
     $stmt->bindValue(':email', $email, SQLITE3_TEXT);
+    $stmt->bindValue(':validAfter', $tokenValidAfter);
     $count = $stmt->execute()->fetchArray(SQLITE3_NUM);
     if ($count[0] == 0) {
         $hasErrorMessage = true;
@@ -99,10 +106,11 @@ if (isset($_POST['password']) && $_POST['password'] != "" && isset($_POST['confi
     $confirmPassword = $_POST['confirm_password'];
     $token = $_POST['token'];
     $email = $_POST['email'];
-    $resetQuery = "SELECT * FROM password_resets WHERE token = :token AND email = :email AND created_at > datetime('now', '-1 hour')";
+    $resetQuery = "SELECT * FROM password_resets WHERE token = :token AND email = :email AND created_at > :validAfter";
     $stmt = $db->prepare($resetQuery);
     $stmt->bindValue(':token', $token, SQLITE3_TEXT);
     $stmt->bindValue(':email', $email, SQLITE3_TEXT);
+    $stmt->bindValue(':validAfter', $tokenValidAfter);
     $reset = $stmt->execute()->fetchArray(SQLITE3_ASSOC);
 
     if ($reset) {

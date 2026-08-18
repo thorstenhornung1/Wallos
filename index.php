@@ -72,9 +72,18 @@ $result = $stmt->execute();
 $user = $result->fetchArray(SQLITE3_ASSOC);
 $first_name = $user['firstname'] ?? $user['username'] ?? '';
 
+// Today, as SQLite's date('now') answered it. next_payment is stored as
+// 'YYYY-MM-DD' text, so PostgreSQL cannot compare it against CURRENT_DATE and
+// has no portable expression to put here; the boundary is computed once and
+// bound instead. gmdate() rather than date() because SQLite answered this in
+// UTC whatever timezone PHP was configured with, and the comparison has to
+// land on the same day it landed on before.
+$today = gmdate('Y-m-d');
+
 // Fetch the next 3 enabled subscriptions up for payment
-$stmt = $db->prepare("SELECT id, logo, logo_text_color, logo_variant, name, price, currency_id, next_payment, inactive FROM subscriptions WHERE user_id = :userId AND next_payment >= date('now') AND inactive = 0 AND cycle != 5 ORDER BY next_payment ASC LIMIT 3");
+$stmt = $db->prepare("SELECT id, logo, logo_text_color, logo_variant, name, price, currency_id, next_payment, inactive FROM subscriptions WHERE user_id = :userId AND next_payment >= :today AND inactive = 0 AND cycle != 5 ORDER BY next_payment ASC LIMIT 3");
 $stmt->bindValue(':userId', $userId, SQLITE3_INTEGER);
+$stmt->bindValue(':today', $today);
 $result = $stmt->execute();
 $upcomingSubscriptions = [];
 while ($row = $result->fetchArray(SQLITE3_ASSOC)) {
@@ -82,8 +91,9 @@ while ($row = $result->fetchArray(SQLITE3_ASSOC)) {
 }
 
 // Fetch enabled subscriptions with manual renewal that are overdue
-$stmt = $db->prepare("SELECT id, logo, logo_text_color, logo_variant, name, price, currency_id, next_payment, inactive, auto_renew FROM subscriptions WHERE user_id = :userId AND next_payment < date('now') AND auto_renew = 0 AND inactive = 0 AND cycle != 5 ORDER BY next_payment ASC");
+$stmt = $db->prepare("SELECT id, logo, logo_text_color, logo_variant, name, price, currency_id, next_payment, inactive, auto_renew FROM subscriptions WHERE user_id = :userId AND next_payment < :today AND auto_renew = 0 AND inactive = 0 AND cycle != 5 ORDER BY next_payment ASC");
 $stmt->bindValue(':userId', $userId, SQLITE3_INTEGER);
+$stmt->bindValue(':today', $today);
 $result = $stmt->execute();
 $overdueSubscriptions = [];
 while ($row = $result->fetchArray(SQLITE3_ASSOC)) {

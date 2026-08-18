@@ -65,7 +65,10 @@ function wallos_grant_role($db, $userId, $role, $source)
         return false;
     }
 
-    $stmt = $db->prepare("INSERT OR IGNORE INTO user_roles (user_id, role, source) VALUES (:userId, :role, :source)");
+    // ON CONFLICT DO NOTHING rather than INSERT OR IGNORE: the UNIQUE
+    // (user_id, role, source) constraint is what makes a repeated grant a
+    // no-op, and both databases spell that this way.
+    $stmt = $db->prepare("INSERT INTO user_roles (user_id, role, source) VALUES (:userId, :role, :source) ON CONFLICT DO NOTHING");
     if ($stmt === false) {
         return false;
     }

@@ -148,7 +148,7 @@ function handleSortCategories($db, $userId, $i18n)
     $order = 2;
 
     foreach ($categories as $categoryId) {
-        $sql = "UPDATE categories SET `order` = :order WHERE id = :categoryId AND user_id = :userId";
+        $sql = 'UPDATE categories SET "order" = :order WHERE id = :categoryId AND user_id = :userId';
         $stmt = $db->prepare($sql);
         $stmt->bindParam(':order', $order, SQLITE3_INTEGER);
         $stmt->bindParam(':categoryId', $categoryId, SQLITE3_INTEGER);

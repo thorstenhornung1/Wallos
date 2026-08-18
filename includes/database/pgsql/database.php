@@ -45,6 +45,19 @@ class WallosPgsqlDatabase implements WallosDatabase
             // Real prepared statements, not client-side interpolation.
             PDO::ATTR_EMULATE_PREPARES => false,
         ]);
+
+        // SQLite's date('now') and datetime('now') are always UTC, and every
+        // comparison in the application is written against that. PostgreSQL
+        // resolves CURRENT_TIMESTAMP in the session time zone, which follows
+        // the container's TZ — Europe/Berlin in the dev environment, two hours
+        // out. A DEFAULT CURRENT_TIMESTAMP column would then be written in
+        // local time and compared against a UTC threshold, which shifts the
+        // password-reset window by the offset and, depending on the direction,
+        // either expires valid tokens or keeps expired ones alive.
+        //
+        // Pinning the session to UTC makes stored timestamps mean the same
+        // thing on both backends, which is what the queries already assume.
+        $this->pdo->exec("SET TIME ZONE 'UTC'");
     }
 
     public function driver()

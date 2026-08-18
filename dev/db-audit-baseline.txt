@@ -11,7 +11,7 @@
 #
 # Do not edit by hand — run dev/db-audit.sh --update and commit the diff.
 #
-# total: 1539 matches in 220 file(s)
+# total: 1558 matches in 222 file(s)
 admin.php	5
 api/admin/get_admin_settings.php	1
 api/admin/set_admin_settings.php	20
@@ -40,6 +40,7 @@ api/subscriptions/set_subscriptions.php	78
 api/users/get_user.php	1
 api/users/set_budget.php	7
 calendar.php	8
+dev/generate-pgsql-schema.php	14
 dev/seed.php	13
 dev/stress-seed.php	6
 dev/stress-verify.php	6
@@ -143,8 +144,9 @@ includes/oidc/diagnostics.php	2
 includes/oidc/handle_oidc_callback.php	8
 includes/oidc/oidc_create_user.php	29
 includes/oidc/oidc_login.php	4
-includes/oidc_settings.php	12
-includes/remember_me.php	7
+includes/oidc/session_guard.php	2
+includes/oidc_settings.php	11
+includes/remember_me.php	11
 includes/run_migrations.php	2
 includes/session_tokens.php	2
 includes/ssrf_helper.php	6

@@ -7,7 +7,7 @@ $paymentMethods = $_POST['paymentMethodIds'];
 $order = 1;
 
 foreach ($paymentMethods as $paymentMethodId) {
-    $sql = "UPDATE payment_methods SET `order` = :order WHERE id = :paymentMethodId and user_id = :userId";
+    $sql = 'UPDATE payment_methods SET "order" = :order WHERE id = :paymentMethodId and user_id = :userId';
     $stmt = $db->prepare($sql);
     $stmt->bindParam(':order', $order, SQLITE3_INTEGER);
     $stmt->bindParam(':paymentMethodId', $paymentMethodId, SQLITE3_INTEGER);
