@@ -132,8 +132,13 @@ function wallos_get_oidc_discovery_document($db, $issuer)
         return $cached !== null ? [$cached, null] : [null, $error];
     }
 
-    $stmt = $db->prepare('INSERT OR REPLACE INTO oidc_discovery_cache (issuer, document, fetched_at)
-                          VALUES (:issuer, :document, :fetchedAt)');
+    // An upsert on the issuer, which is the table's primary key. SQLite would
+    // spell this with a REPLACE, which PostgreSQL has no equivalent of and
+    // which deletes the row and inserts a new one rather than updating it.
+    $stmt = $db->prepare('INSERT INTO oidc_discovery_cache (issuer, document, fetched_at)
+                          VALUES (:issuer, :document, :fetchedAt)
+                          ON CONFLICT (issuer) DO UPDATE
+                          SET document = excluded.document, fetched_at = excluded.fetched_at');
     if ($stmt !== false) {
         $stmt->bindValue(':issuer', $issuer, SQLITE3_TEXT);
         $stmt->bindValue(':document', json_encode($document), SQLITE3_TEXT);
@@ -425,6 +430,12 @@ function wallos_save_oidc_settings($db, $submitted, $managedFields)
             continue;
         }
         if (isset($managedFields[$field])) {
+            continue;
+        }
+        // The secret field is rendered empty rather than pre-filled, so an
+        // empty submission means "unchanged", not "clear it". Every other field
+        // keeps the general rule that submitting empty clears the value.
+        if ($field === 'client_secret' && trim((string) $submitted[$field]) === '') {
             continue;
         }
 

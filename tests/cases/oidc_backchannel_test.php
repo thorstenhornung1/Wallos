@@ -13,6 +13,7 @@
 
 require_once WALLOS_ROOT . '/includes/oidc/jwt.php';
 require_once WALLOS_ROOT . '/includes/oidc/backchannel.php';
+require_once WALLOS_ROOT . '/includes/user_roles.php';
 
 /**
  * A signing key pair plus its JWKS entry, made once and reused.
@@ -388,14 +389,87 @@ wallos_test('a missing session table does not sign everybody out', function () {
 
 // ------------------------------------------------------------- wiring checks
 
-wallos_test('a running session is checked on every request', function () {
-    // Revocation has to reach a live PHP session, not only the remember-me
-    // token. Without this the browser stays signed in until the session would
-    // have expired anyway.
-    $source = file_get_contents(WALLOS_ROOT . '/includes/checksession.php');
+wallos_test('every authenticated entry point checks the session', function () {
+    // This case used to read the source of checksession.php and look for the
+    // string 'wallos_oidc_session_is_active'. It passed while 112 endpoints
+    // bootstrapping through connect_endpoint.php never checked at all — so
+    // after the provider ended a session the browser kept full API access,
+    // including user administration and database backup, until the PHP session
+    // expired up to thirty days later. Only navigating to an HTML page logged
+    // the user out.
+    //
+    // The test name claimed coverage the assertion did not provide, which is
+    // why nobody looked again. It now names the entry points and checks each.
+    foreach (['includes/checksession.php', 'includes/connect_endpoint.php'] as $path) {
+        $source = file_get_contents(WALLOS_ROOT . '/' . $path);
 
-    assert_true(strpos($source, 'wallos_oidc_session_is_active') !== false,
-        'checksession.php verifies the session is still current');
+        assert_true(
+            strpos($source, 'session_guard.php') !== false,
+            $path . ' must consult the session guard'
+        );
+    }
+});
+
+wallos_test('a revoked session is rejected, whichever way it arrives', function () {
+    // The behaviour itself, not the presence of a call.
+    $db = wallos_test_open_database();
+    backchannel_create_oidc_user($db, 1, 'subject-a');
+    wallos_oidc_register_session($db, 1, 'sid-1', 'php-session-1', 'token-1');
+
+    assert_true(wallos_oidc_session_is_active($db, 'php-session-1'), 'active to start with');
+
+    wallos_oidc_revoke_sessions($db, 'subject-a', 'sid-1');
+
+    assert_true(!wallos_oidc_session_is_active($db, 'php-session-1'), 'revoked');
+
+    $db->close();
+});
+
+wallos_test('revocation also removes the provider-derived admin role', function () {
+    // Back-channel logout is the provider saying this person is not coming
+    // back. Leaving the role until their next login means a de-privileged
+    // administrator keeps administering — and combined with a session that
+    // outlives the check, indefinitely.
+    $db = wallos_test_open_database();
+    backchannel_create_oidc_user($db, 1, 'subject-a');
+    wallos_grant_role($db, 1, WALLOS_ROLE_ADMIN, WALLOS_ROLE_SOURCE_OIDC);
+    wallos_oidc_register_session($db, 1, 'sid-1', 'php-session-1', '');
+
+    wallos_oidc_revoke_sessions($db, 'subject-a', 'sid-1');
+
+    assert_true(!wallos_user_is_admin($db, 1), 'the OIDC role went with the session');
+
+    $db->close();
+});
+
+wallos_test('revocation never removes a local admin role', function () {
+    // The rule the source column exists for, applied here too.
+    $db = wallos_test_open_database();
+    backchannel_create_oidc_user($db, 1, 'subject-a');
+    wallos_grant_role($db, 1, WALLOS_ROLE_ADMIN, WALLOS_ROLE_SOURCE_LOCAL);
+    wallos_grant_role($db, 1, WALLOS_ROLE_ADMIN, WALLOS_ROLE_SOURCE_OIDC);
+    wallos_oidc_register_session($db, 1, 'sid-1', 'php-session-1', '');
+
+    wallos_oidc_revoke_sessions($db, 'subject-a', 'sid-1');
+
+    assert_true(wallos_user_is_admin($db, 1), 'still an administrator');
+    assert_same(['local'], wallos_user_admin_sources($db, 1), 'by local grant only');
+
+    $db->close();
+});
+
+wallos_test('a restored remember-me session stays subject to revocation', function () {
+    // A PHP session is collected after ~24 minutes idle while the cookie lives
+    // 30 days, so most long-lived sessions come back through the remember-me
+    // path. It used not to restore from_oidc, which exempted the rebuilt
+    // session from the check permanently — and regenerating the session id left
+    // oidc_sessions pointing at a session that no longer existed.
+    $source = file_get_contents(WALLOS_ROOT . '/includes/remember_me.php');
+
+    assert_true(strpos($source, "from_oidc") !== false,
+        'the OIDC origin is restored');
+    assert_true(strpos($source, 'UPDATE oidc_sessions SET session_id') !== false,
+        'and the recorded session id follows the regenerated one');
 });
 
 wallos_test('signing in records the session', function () {

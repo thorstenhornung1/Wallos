@@ -54,6 +54,17 @@ if ($_SERVER["REQUEST_METHOD"] === "POST" || $_SERVER["REQUEST_METHOD"] === "GET
     $oidcConfiguration = wallos_get_effective_oidc_configuration($db);
     $oidc_settings = $oidcConfiguration['settings'];
 
+    // The client secret is a credential and does not leave the server. This
+    // endpoint used to read oauth_settings directly, where a secret supplied
+    // through OIDC_CLIENT_SECRET_FILE simply was not present; resolving the
+    // effective configuration made it present, and returning the whole array
+    // then handed a file-mounted secret to anyone with an admin API key.
+    //
+    // Presence is what a caller legitimately needs — whether it is configured,
+    // and from where. diagnostics.php has always reported it this way.
+    $oidc_settings['client_secret_set'] = trim((string) $oidc_settings['client_secret']) !== '';
+    unset($oidc_settings['client_secret']);
+
     $response = [
         "success" => true,
         "title" => "oidc_settings",

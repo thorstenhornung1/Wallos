@@ -26,6 +26,13 @@ if (session_status() === PHP_SESSION_NONE) {
 
 if (isset($_SESSION['loggedin']) && $_SESSION['loggedin'] === true) {
     $userId = $_SESSION['userId'];
+
+    // Every endpoint bootstraps through this file, so this is where a session
+    // the provider has ended has to stop working. checksession.php performs the
+    // same check for page loads; without it here, back-channel logout left the
+    // whole API reachable until the PHP session expired.
+    require_once __DIR__ . '/oidc/session_guard.php';
+    wallos_oidc_require_valid_session($db);
 } else {
     // The PHP session can be garbage-collected (default ~24 min) long before
     // the "remember me" cookie should expire (30 days). Fall back to it here,

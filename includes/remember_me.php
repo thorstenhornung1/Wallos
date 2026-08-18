@@ -71,6 +71,35 @@ function restoreSessionFromRememberMeCookie($db)
     $_SESSION['main_currency'] = $main_currency;
     $_SESSION['userId'] = $userId;
 
+    // A PHP session is collected after about 24 minutes idle while this cookie
+    // lives 30 days, so most long-lived sessions come back through here rather
+    // than through a login. Two things have to be carried across, or the
+    // rebuilt session is permanently exempt from back-channel logout:
+    //
+    //   from_oidc, because the revocation check only applies to OIDC sessions
+    //   and a session that has forgotten its origin is never checked again;
+    //
+    //   the new session id in oidc_sessions, because session_regenerate_id()
+    //   above just invalidated the recorded one — leaving revocation to delete
+    //   a row that belongs to a session that no longer exists.
+    $sessionStatement = $db->prepare('SELECT id FROM oidc_sessions WHERE login_token = :token LIMIT 1');
+    if ($sessionStatement !== false) {
+        $sessionStatement->bindValue(':token', $token, SQLITE3_TEXT);
+        $sessionResult = $sessionStatement->execute();
+        $sessionRow = $sessionResult === false ? false : $sessionResult->fetchArray(SQLITE3_ASSOC);
+
+        if ($sessionRow !== false) {
+            $_SESSION['from_oidc'] = true;
+
+            $update = $db->prepare('UPDATE oidc_sessions SET session_id = :sessionId WHERE id = :id');
+            if ($update !== false) {
+                $update->bindValue(':sessionId', session_id(), SQLITE3_TEXT);
+                $update->bindValue(':id', $sessionRow['id'], SQLITE3_INTEGER);
+                $update->execute();
+            }
+        }
+    }
+
     return $userData;
 }
 

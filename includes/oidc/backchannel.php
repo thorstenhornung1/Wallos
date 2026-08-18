@@ -174,13 +174,13 @@ function wallos_oidc_revoke_sessions($db, $sub, $sid)
     $rows = [];
 
     if ($sid !== null && $sid !== '') {
-        $stmt = $db->prepare('SELECT id, login_token FROM oidc_sessions WHERE sid = :sid');
+        $stmt = $db->prepare('SELECT id, user_id, login_token FROM oidc_sessions WHERE sid = :sid');
         if ($stmt === false) {
             return 0;
         }
         $stmt->bindValue(':sid', $sid, SQLITE3_TEXT);
     } else {
-        $stmt = $db->prepare('SELECT s.id, s.login_token FROM oidc_sessions s
+        $stmt = $db->prepare('SELECT s.id, s.user_id, s.login_token FROM oidc_sessions s
                               JOIN user u ON u.id = s.user_id
                               WHERE u.oidc_sub = :sub');
         if ($stmt === false) {
@@ -194,6 +194,8 @@ function wallos_oidc_revoke_sessions($db, $sub, $sid)
         $rows[] = $row;
     }
 
+    $affectedUsers = [];
+
     foreach ($rows as $row) {
         // The remember-me token has to go as well, or the next request signs
         // the browser straight back in.
@@ -201,9 +203,25 @@ function wallos_oidc_revoke_sessions($db, $sub, $sid)
             wallos_revoke_login_token($db, $row['login_token']);
         }
 
+        if (isset($row['user_id'])) {
+            $affectedUsers[(int) $row['user_id']] = true;
+        }
+
         $delete = $db->prepare('DELETE FROM oidc_sessions WHERE id = :id');
         $delete->bindValue(':id', $row['id'], SQLITE3_INTEGER);
         $delete->execute();
+    }
+
+    // The provider-derived admin role goes with the session.
+    //
+    // Otherwise an administrator removed from the admin group keeps the role
+    // until they next sign in — and back-channel logout is precisely the signal
+    // that says they are not going to. Source-scoped, so a local administrator
+    // is untouched, and the next successful login re-grants it if the claim is
+    // still there. That is the same rule the login-time sync follows.
+    require_once __DIR__ . '/../user_roles.php';
+    foreach (array_keys($affectedUsers) as $userId) {
+        wallos_revoke_role($db, $userId, WALLOS_ROLE_ADMIN, WALLOS_ROLE_SOURCE_OIDC);
     }
 
     return count($rows);

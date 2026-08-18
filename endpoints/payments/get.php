@@ -3,7 +3,7 @@
 require_once '../../includes/connect_endpoint.php';
 
 if (isset($_SESSION['loggedin']) && $_SESSION['loggedin'] === true) {
-    $paymentsInUseQuery = $db->prepare('SELECT id FROM payment_methods WHERE id IN (SELECT DISTINCT payment_method_id FROM subscriptions) AND user_id = :userId');
+    $paymentsInUseQuery = $db->prepare('SELECT id FROM payment_methods WHERE id IN (SELECT DISTINCT payment_method_id FROM subscriptions WHERE user_id = :userId) AND user_id = :userId');
     $paymentsInUseQuery->bindParam(':userId', $userId, SQLITE3_INTEGER);
     $result = $paymentsInUseQuery->execute();
 

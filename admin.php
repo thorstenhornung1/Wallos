@@ -270,8 +270,20 @@ $loginDisabledAllowed = $userCount == 1 && $settings['registrations_open'] == 0;
                     value="<?= htmlspecialchars($oidcSettings['client_id']) ?>" <?= oidc_input_attrs('client_id', $oidcManagedFields) ?> />
             </div>
             <div class="form-group">
-                <input type="text" id="oidcClientSecret" placeholder="Client Secret" autocomplete="off"
-                    value="<?= htmlspecialchars($oidcSettings['client_secret']) ?>" <?= oidc_input_attrs('client_secret', $oidcManagedFields) ?> />
+                <?php
+                // Rendered as an empty password field, never carrying the stored
+                // value. A pre-filled secret survives in the browser cache, in a
+                // saved page and in any screenshot of this screen — and with
+                // OIDC_CLIENT_SECRET_FILE it would put a secret deliberately kept
+                // out of the database into the HTML of every admin page load.
+                //
+                // Leaving it empty on save keeps the stored secret; see
+                // wallos_save_oidc_settings().
+                $secretIsSet = trim((string) ($oidcSettings['client_secret'] ?? '')) !== '';
+                ?>
+                <input type="password" id="oidcClientSecret" autocomplete="new-password"
+                    placeholder="<?= $secretIsSet ? translate('oidc_client_secret_set', $i18n) : 'Client Secret' ?>"
+                    value="" <?= oidc_input_attrs('client_secret', $oidcManagedFields) ?> />
             </div>
             <div class="form-group">
                 <input type="text" id="oidcAuthUrl" placeholder="Auth URL" autocomplete="off"

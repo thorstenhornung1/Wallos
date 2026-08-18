@@ -17,7 +17,8 @@ try {
 }
 
 if (PHP_SAPI !== 'cli') {
-    if ($userId !== 1) {
+    require_once __DIR__ . '/../../includes/user_roles.php';
+    if (!wallos_user_is_admin($db, $userId)) {
         http_response_code(403);
         die("Forbidden");
     }

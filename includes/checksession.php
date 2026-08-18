@@ -36,12 +36,10 @@ if (isset($_GET['code']) && isset($_GET['state'])) {
         // An OIDC session the provider has ended must stop working here too,
         // and it has to stop on the next request rather than whenever the
         // session would have expired. The row is what makes it current.
-        if (isset($_SESSION['from_oidc']) && $_SESSION['from_oidc'] === true) {
-            require_once __DIR__ . '/oidc/backchannel.php';
-            if (!wallos_oidc_session_is_active($db, session_id())) {
-                header('Location: logout.php');
-                exit();
-            }
+        require_once __DIR__ . '/oidc/session_guard.php';
+        if (!wallos_oidc_current_session_is_valid($db)) {
+            header('Location: logout.php');
+            exit();
         }
 
         if ($userData['avatar'] == "") {
