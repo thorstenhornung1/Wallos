@@ -54,7 +54,7 @@ PATTERN='SQLite3|SQLITE3_|querySingle|lastInsertRowID|busyTimeout|PRAGMA|sqlite_
 # .claude holds agent worktrees, which are full checkouts nested inside the
 # repository.  Scanning them counts the whole tree a second time and reports
 # every file as new, because the baseline stores root-relative paths.
-EXCLUDED_PATHS='libs includes/database/sqlite migrations/sqlite .claude'
+EXCLUDED_PATHS='libs includes/database migrations/sqlite .claude'
 
 # The comment block at the top of this file is the documentation, so print that
 # rather than keeping a second copy in sync with it.

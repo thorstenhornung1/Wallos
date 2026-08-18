@@ -1,9 +1,9 @@
 <?php
 
-$databaseFile = 'db/wallos.db';
+require_once __DIR__ . '/database/connection.php';
 
-$db = new SQLite3($databaseFile);
-$db->busyTimeout(5000);
+$databaseFile = wallos_database_path();
+$db = wallos_database_connect();
 
 if (!$db) {
     die('Connection to the database failed.');

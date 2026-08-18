@@ -1,11 +1,12 @@
 <?php
 
-$databaseFile = __DIR__ . '/../../db/wallos.db';
+require_once __DIR__ . '/../../includes/database/connection.php';
+
+$databaseFile = wallos_database_path();
 
 if (!file_exists($databaseFile)) {
     echo "Database does not exist. Creating it...\n";
-    $db = new SQLite3($databaseFile, SQLITE3_OPEN_CREATE | SQLITE3_OPEN_READWRITE);
-    $db->busyTimeout(5000);
+    $db = wallos_database_connect($databaseFile, SQLITE3_OPEN_CREATE | SQLITE3_OPEN_READWRITE);
 
     $db->exec('CREATE TABLE user (
         id INTEGER PRIMARY KEY,
@@ -238,7 +239,7 @@ if (!file_exists($databaseFile)) {
 } else {
     echo "Database already exist. Checking for upgrades...\n";
 
-    $db = new SQLite3($databaseFile);
+    $db = wallos_database_connect($databaseFile);
     $db->busyTimeout(5000);
 
     if (!$db) {

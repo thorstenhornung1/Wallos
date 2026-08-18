@@ -142,7 +142,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     unlink($setupTokenFile);
                 }
 
-                $db = new SQLite3('../../db/wallos.db');
+                require_once '../../includes/database/connection.php';
+                $db = wallos_database_connect();
                 $db->busyTimeout(5000);
                 ob_start();
                 require_once __DIR__ . '/../../includes/run_migrations.php';

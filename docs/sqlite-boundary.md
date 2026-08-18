@@ -33,13 +33,37 @@ and falls back to `grep -E` when it is not, because CI runners and developer
 machines differ. Both engines are given the identical file list and produce
 byte-identical output; the test suite asserts that.
 
-## Why it is a ratchet and not a wall
+## Where the boundary is
 
-The adapter boundary does not exist yet — issue #20 has to build it. Measured
-on this branch, the audit finds:
+Since #20 it exists, under `includes/database/`:
 
 ```
-1482 matches in 206 files
+includes/database/connection.php        backend-neutral: the interface and the factory
+includes/database/sqlite/database.php   the SQLite implementation
+```
+
+`wallos_database_connect()` is the only way application code opens a connection,
+and a test asserts that no file outside `includes/database/` still calls
+`new SQLite3(`.
+
+The implementation **extends** `SQLite3` rather than wrapping it. That is what
+lets fifteen hundred existing call sites keep working untouched — a boundary
+nobody can adopt gradually is a boundary that never gets adopted. Alongside the
+inherited methods it adds the operations whose SQLite spelling would otherwise
+stay scattered: `scalar()`, `tableExists()`, `columnExists()`, transactions,
+`lastInsertId()`, `driver()`.
+
+The whole directory is excluded from the audit, because dialect-specific code is
+exactly what belongs there. A second backend gets a directory beside
+`sqlite/`.
+
+## Why it is a ratchet and not a wall
+
+The boundary exists, but the call sites behind it still speak SQLite directly.
+Measured on this branch, the audit finds:
+
+```
+1534 matches in 217 files
 ```
 
 A gate that simply failed on those would be worthless. Nobody could act on it,
@@ -56,8 +80,8 @@ records the current count for every file:
 | a file's count shrinks, or the file is gone | passes, reported, asks for `--update` |
 | nothing changed | passes |
 
-The leakage therefore cannot grow while #20 proceeds, and every step of that
-work visibly shrinks a checked-in file. When the baseline is empty, the
+The leakage therefore cannot grow while the call sites migrate, and every step
+of that work visibly shrinks a checked-in file. When the baseline is empty, the
 confinement issue #41 asks for is proven, the gate has become the wall, and the
 baseline can be deleted.
 

@@ -13,6 +13,11 @@
 define('WALLOS_ROOT', dirname(__DIR__));
 define('WALLOS_TEST_TMP', sys_get_temp_dir() . '/wallos-tests');
 
+// At file scope on purpose: WallosCountingDatabase below extends
+// WallosSqliteDatabase, and a parent class loaded inside a function does not
+// exist yet when PHP parses the class declaration.
+require_once WALLOS_ROOT . '/includes/database/sqlite/database.php';
+
 $GLOBALS['wallos_tests'] = [];
 $GLOBALS['wallos_test_failures'] = [];
 $GLOBALS['wallos_test_assertions'] = 0;
@@ -189,13 +194,24 @@ function wallos_test_database()
             }
             copy(WALLOS_ROOT . '/endpoints/cronjobs/createdatabase.php', $sandbox . '/endpoints/cronjobs/createdatabase.php');
             copy(WALLOS_ROOT . '/includes/run_migrations.php', $sandbox . '/includes/run_migrations.php');
+            // createdatabase.php opens its connection through the boundary, so
+            // the sandbox needs to find it. Symlinked rather than copied: a copy
+            // is a second file to PHP, so require_once loads it again and the
+            // functions are declared twice.
+            mkdir($sandbox . '/includes/database', 0700, true);
+            symlink(WALLOS_ROOT . '/includes/database/connection.php', $sandbox . '/includes/database/connection.php');
+            mkdir($sandbox . '/includes/database/sqlite', 0700, true);
+            symlink(WALLOS_ROOT . '/includes/database/sqlite/database.php', $sandbox . '/includes/database/sqlite/database.php');
         }
 
         $databaseFile = $sandbox . '/db/wallos.db';
 
         if (!file_exists($databaseFile)) {
             // Both scripts print progress and resolve their paths from __DIR__,
-            // which is why they run inside the sandbox copy.
+            // which is why they run inside the sandbox copy. The boundary is
+            // symlinked, so __DIR__ inside it points at the real installation —
+            // WALLOS_DB_PATH is what keeps the fixture out of it.
+            putenv('WALLOS_DB_PATH=' . $databaseFile);
             ob_start();
             require $sandbox . '/endpoints/cronjobs/createdatabase.php';
             $db = new SQLite3($databaseFile);
@@ -203,6 +219,7 @@ function wallos_test_database()
             require $sandbox . '/includes/run_migrations.php';
             $db->close();
             ob_end_clean();
+            putenv('WALLOS_DB_PATH');
         }
 
         $template = $databaseFile;
@@ -221,17 +238,14 @@ function wallos_test_database()
  */
 function wallos_test_open_database()
 {
-    $db = new SQLite3(wallos_test_database());
-    $db->busyTimeout(5000);
-
-    return $db;
+    return wallos_database_connect(wallos_test_database());
 }
 
 /**
  * SQLite3 wrapper that counts statements, so tests can assert that a code path
  * does not issue one query per row.
  */
-class WallosCountingDatabase extends SQLite3
+class WallosCountingDatabase extends WallosSqliteDatabase
 {
     public $queryCount = 0;
 

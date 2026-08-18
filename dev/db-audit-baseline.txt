@@ -11,7 +11,7 @@
 #
 # Do not edit by hand — run dev/db-audit.sh --update and commit the diff.
 #
-# total: 1546 matches in 220 file(s)
+# total: 1548 matches in 218 file(s)
 admin.php	5
 api/admin/get_admin_settings.php	1
 api/admin/set_admin_settings.php	20
@@ -54,7 +54,7 @@ endpoints/ai/generate_recommendations.php	16
 endpoints/ai/save_settings.php	14
 endpoints/ai/translate_categories.php	7
 endpoints/categories/category.php	16
-endpoints/cronjobs/createdatabase.php	8
+endpoints/cronjobs/createdatabase.php	6
 endpoints/cronjobs/generaterecommendations.php	19
 endpoints/cronjobs/sendcancellationnotifications.php	13
 endpoints/cronjobs/sendnotifications.php	17
@@ -66,7 +66,7 @@ endpoints/cronjobs/updatenextpayment.php	3
 endpoints/currency/currency.php	17
 endpoints/currency/fixer_api_key.php	8
 endpoints/currency/update_exchange.php	1
-endpoints/db/import.php	3
+endpoints/db/import.php	2
 endpoints/db/migrate.php	1
 endpoints/household/household.php	11
 endpoints/logos/google_search.php	3
@@ -127,9 +127,6 @@ includes/checkredirect.php	2
 includes/checksession.php	2
 includes/checkuser.php	1
 includes/config_helper.php	2
-includes/connect.php	2
-includes/connect_endpoint.php	2
-includes/connect_endpoint_crontabs.php	2
 includes/currency_provider.php	17
 includes/currency_rates.php	4
 includes/getdbkeys.php	10
@@ -214,10 +211,11 @@ registration.php	36
 settings.php	49
 stats.php	2
 subscriptions.php	6
-tests/bootstrap.php	25
+tests/bootstrap.php	22
 tests/cases/currency_rates_test.php	4
 tests/cases/currency_refresh_test.php	13
 tests/cases/currency_scope_test.php	10
+tests/cases/database_boundary_test.php	14
 tests/cases/integration_config_test.php	1
 tests/cases/language_migration_test.php	5
 tests/cases/migration_test.php	20
