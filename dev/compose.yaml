@@ -50,6 +50,27 @@ services:
     depends_on:
       - mailpit
 
+  # PostgreSQL for the optional backend (#21). Wallos does not use it unless
+  # WALLOS_DB_DRIVER says so — dev/pgsql.sh switches a container over.
+  #
+  # The version here is the oldest one still supported upstream, because that is
+  # where "this uses a feature newer than our floor" shows up. CI runs the
+  # newest as well (#80).
+  postgres:
+    image: docker.io/library/postgres:14-alpine
+    container_name: wallos-dev-postgres
+    ports:
+      - "5433:5432"
+    environment:
+      POSTGRES_DB: wallos
+      POSTGRES_USER: wallos
+      POSTGRES_PASSWORD: wallos-dev
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U wallos -d wallos"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
   mailpit:
     image: docker.io/axllent/mailpit:latest
     container_name: wallos-dev-mailpit

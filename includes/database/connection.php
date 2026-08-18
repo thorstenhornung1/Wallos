@@ -89,19 +89,78 @@ function wallos_database_path()
 }
 
 /**
- * Open a connection.
+ * Open a connection to the configured backend.
  *
- * @param string|null $path  null for the configured location
+ * The $path and $flags arguments are SQLite-only and exist for the callers that
+ * legitimately name a specific file: the migration runner, the test harness,
+ * and createdatabase.php. Passing a path selects SQLite regardless of
+ * configuration, because a caller asking for a file means a file.
+ *
+ * @param string|null $path  null for the configured backend and location
  * @param int|null    $flags SQLite3 open flags
- * @return WallosSqliteDatabase
+ * @return WallosDatabase
  */
 function wallos_database_connect($path = null, $flags = null)
 {
-    $path = $path ?? wallos_database_path();
-
     require_once __DIR__ . '/sqlite/database.php';
 
-    return $flags === null
-        ? new WallosSqliteDatabase($path)
-        : new WallosSqliteDatabase($path, $flags);
+    if ($path !== null) {
+        return $flags === null
+            ? new WallosSqliteDatabase($path)
+            : new WallosSqliteDatabase($path, $flags);
+    }
+
+    require_once __DIR__ . '/configuration.php';
+    $configuration = wallos_database_configuration();
+
+    if ($configuration['error'] !== null) {
+        // Refusing outright rather than falling back. An instance that quietly
+        // starts on a different database than the operator configured comes up
+        // empty, and that is indistinguishable from data loss.
+        wallos_database_fail($configuration['error']);
+    }
+
+    if ($configuration['driver'] === 'pgsql') {
+        require_once __DIR__ . '/pgsql/database.php';
+
+        if (!in_array('pgsql', PDO::getAvailableDrivers(), true)) {
+            wallos_database_fail('WALLOS_DB_DRIVER is pgsql but the pdo_pgsql extension is not installed.');
+        }
+
+        try {
+            return new WallosPgsqlDatabase(
+                wallos_database_pgsql_dsn($configuration['pgsql']),
+                $configuration['pgsql']['user'],
+                $configuration['pgsql']['password']
+            );
+        } catch (PDOException $exception) {
+            // The message can contain the connection string but never the
+            // password, which PDO takes separately.
+            wallos_database_fail('Could not connect to PostgreSQL: ' . $exception->getMessage());
+        }
+    }
+
+    return new WallosSqliteDatabase($configuration['sqlite']['path']);
+}
+
+/**
+ * Stop, loudly, on a configuration that cannot be used.
+ *
+ * Everything else in Wallos assumes it has a database. There is no useful
+ * degraded mode: a page that renders without one shows an empty account.
+ *
+ * @param string $message
+ * @return void
+ */
+function wallos_database_fail($message)
+{
+    error_log('Wallos database configuration: ' . $message);
+
+    if (PHP_SAPI === 'cli') {
+        fwrite(STDERR, $message . "\n");
+        exit(1);
+    }
+
+    http_response_code(500);
+    die('Database configuration error. See the container log for details.');
 }
