@@ -51,6 +51,23 @@ interface WallosDatabase
     /** @return bool */
     public function columnExists($table, $column);
 
+    /**
+     * Every base table carrying a column of this name.
+     *
+     * It exists so that user deletion can ask the schema which tables hold rows
+     * for an account instead of keeping a list of them. The list Wallos used to
+     * keep was transcribed into two endpoints, and three tables were missing
+     * from both copies — a list that has to be updated by hand is a list that
+     * goes stale silently.
+     *
+     * Views are excluded: a view is not somewhere rows are stored, and deleting
+     * through one either fails or writes to the table underneath twice.
+     *
+     * @param string $column
+     * @return string[] table names, sorted
+     */
+    public function tablesWithColumn($column);
+
     /** @return bool */
     public function beginTransaction();
 

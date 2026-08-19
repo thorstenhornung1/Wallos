@@ -6,129 +6,39 @@ require_once '../../includes/validate_endpoint_admin.php';
 $postData = file_get_contents("php://input");
 $data = json_decode($postData, true);
 
-$userId = $data['userId'];
+$userIdToDelete = $data['userId'];
 
 // Deleting the last administrator would leave nobody able to administer the
 // installation. That, not a particular id, is what the previous guard on the
 // first account was really protecting.
 require_once '../../includes/user_roles.php';
 
-if (wallos_is_last_admin($db, $userId)) {
+// One deletion routine, shared with endpoints/settings/deleteaccount.php. The
+// hundred lines of DELETE statements that used to live here were a transcription
+// of the ones that live there, and the two copies had already drifted apart.
+require_once '../../includes/user_deletion.php';
+
+if (wallos_is_last_admin($db, $userIdToDelete)) {
     die(json_encode([
         "success" => false,
         "message" => translate('error', $i18n)
     ]));
-} else {
-    // Delete user
-    $stmt = $db->prepare('DELETE FROM "user" WHERE id = :id');
-    $stmt->bindValue(':id', $userId, SQLITE3_INTEGER);
-    $result = $stmt->execute();
-
-    // Delete subscriptions
-    $stmt = $db->prepare('DELETE FROM subscriptions WHERE user_id = :id');
-    $stmt->bindValue(':id', $userId, SQLITE3_INTEGER);
-    $result = $stmt->execute();
-
-    // Delete settings
-    $stmt = $db->prepare('DELETE FROM settings WHERE user_id = :id');
-    $stmt->bindValue(':id', $userId, SQLITE3_INTEGER);
-    $result = $stmt->execute();
-
-    // Delete fixer
-    $stmt = $db->prepare('DELETE FROM fixer WHERE user_id = :id');
-    $stmt->bindValue(':id', $userId, SQLITE3_INTEGER);
-    $result = $stmt->execute();
-
-    // Delete custom colors
-    $stmt = $db->prepare('DELETE FROM custom_colors WHERE user_id = :id');
-    $stmt->bindValue(':id', $userId, SQLITE3_INTEGER);
-    $result = $stmt->execute();
-
-    // Delete currencies
-    $stmt = $db->prepare('DELETE FROM currencies WHERE user_id = :id');
-    $stmt->bindValue(':id', $userId, SQLITE3_INTEGER);
-    $result = $stmt->execute();
-
-    // Delete categories
-    $stmt = $db->prepare('DELETE FROM categories WHERE user_id = :id');
-    $stmt->bindValue(':id', $userId, SQLITE3_INTEGER);
-    $result = $stmt->execute();
-
-    // Delete household
-    $stmt = $db->prepare('DELETE FROM household WHERE user_id = :id');
-    $stmt->bindValue(':id', $userId, SQLITE3_INTEGER);
-    $result = $stmt->execute();
-
-    // Delete payment methods
-    $stmt = $db->prepare('DELETE FROM payment_methods WHERE user_id = :id');
-    $stmt->bindValue(':id', $userId, SQLITE3_INTEGER);
-    $result = $stmt->execute();
-
-    // Delete email notifications
-    $stmt = $db->prepare('DELETE FROM email_notifications WHERE user_id = :id');
-    $stmt->bindValue(':id', $userId, SQLITE3_INTEGER);
-    $result = $stmt->execute();
-
-    // Delete telegram notifications
-    $stmt = $db->prepare('DELETE FROM telegram_notifications WHERE user_id = :id');
-    $stmt->bindValue(':id', $userId, SQLITE3_INTEGER);
-    $result = $stmt->execute();
-
-    // Delete webhook notifications
-    $stmt = $db->prepare('DELETE FROM webhook_notifications WHERE user_id = :id');
-    $stmt->bindValue(':id', $userId, SQLITE3_INTEGER);
-    $result = $stmt->execute();
-
-    // Delete gotify notifications
-    $stmt = $db->prepare('DELETE FROM gotify_notifications WHERE user_id = :id');
-    $stmt->bindValue(':id', $userId, SQLITE3_INTEGER);
-    $result = $stmt->execute();
-
-    // Delete pushover notifications
-    $stmt = $db->prepare('DELETE FROM pushover_notifications WHERE user_id = :id');
-    $stmt->bindValue(':id', $userId, SQLITE3_INTEGER);
-    $result = $stmt->execute();
-
-    // Dele notification settings
-    $stmt = $db->prepare('DELETE FROM notification_settings WHERE user_id = :id');
-    $stmt->bindValue(':id', $userId, SQLITE3_INTEGER);
-    $result = $stmt->execute();
-
-    // Delete last exchange update
-    $stmt = $db->prepare('DELETE FROM last_exchange_update WHERE user_id = :id');
-    $stmt->bindValue(':id', $userId, SQLITE3_INTEGER);
-    $result = $stmt->execute();
-
-    // Delete email verification
-    $stmt = $db->prepare('DELETE FROM email_verification WHERE user_id = :id');
-    $stmt->bindValue(':id', $userId, SQLITE3_INTEGER);
-    $result = $stmt->execute();
-
-    // Delete totp
-    $stmt = $db->prepare('DELETE FROM totp WHERE user_id = :id');
-    $stmt->bindValue(':id', $userId, SQLITE3_INTEGER);
-    $result = $stmt->execute();
-
-    // Delete total yearly cost
-    $stmt = $db->prepare('DELETE FROM total_yearly_cost WHERE user_id = :id');
-    $stmt->bindValue(':id', $userId, SQLITE3_INTEGER);
-    $result = $stmt->execute();
-
-    // Delete roles. The foreign key would cascade, but only if foreign key
-    // enforcement happens to be on for this connection; a stale admin role
-    // pointing at a deleted user is not something to leave to a pragma.
-    $stmt = $db->prepare('DELETE FROM user_roles WHERE user_id = :id');
-    $stmt->bindValue(':id', $userId, SQLITE3_INTEGER);
-    $result = $stmt->execute();
-
-    // Delete login tokens, so a deleted account cannot be logged back in.
-    $stmt = $db->prepare('DELETE FROM login_tokens WHERE user_id = :id');
-    $stmt->bindValue(':id', $userId, SQLITE3_INTEGER);
-    $result = $stmt->execute();
-
-    die(json_encode([
-        "success" => true,
-        "message" => translate('success', $i18n)
-    ]));
-
 }
+
+$deletion = wallos_delete_user($db, $userIdToDelete);
+
+if (!$deletion['success']) {
+    // The routine rolls its transaction back before answering false, so this
+    // reports an account that is still entirely there rather than a half
+    // dismantled one. The reason is in the container log; the administrator
+    // gets the translated message, not the name of a constraint.
+    die(json_encode([
+        "success" => false,
+        "message" => translate('error', $i18n)
+    ]));
+}
+
+die(json_encode([
+    "success" => true,
+    "message" => translate('success', $i18n)
+]));
