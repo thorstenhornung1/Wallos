@@ -44,6 +44,12 @@ $db->exec('CREATE TABLE IF NOT EXISTS notification_settings (
 $result = $db->query('SELECT COUNT(*) as count FROM notifications');
 $row = $result->fetchArray(SQLITE3_ASSOC);
 
+// Release the read before dropping the table it read from. SQLite refuses to
+// drop a table a statement still holds — "database table is locked" — and the
+// exec's result was not checked, so the migration was recorded as applied while
+// the old table survived every run.
+$result->finalize();
+
 if ($row['count'] > 0) {
     // Copy data from notifications to email_notifications
     $db->exec('INSERT INTO email_notifications (enabled, smtp_address, smtp_port, smtp_username, smtp_password, from_email, encryption)

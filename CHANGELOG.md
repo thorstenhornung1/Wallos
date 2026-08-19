@@ -1,5 +1,89 @@
 # Changelog
 
+## [5.8.1](https://github.com/thorstenhornung1/Wallos/releases/tag/v5.8.1) (2026-08-19)
+
+Failures that reported success. A security audit of the 5.8.0 fixes found the
+same shape in four more places — including one that needed no failure at all to
+exploit — and instrumenting the scheduled jobs found eleven more.
+
+### Security
+
+* **auth:** the TOTP replay guard was dead code. `totp.php` compared a submitted
+  code's time-step against `last_totp_used`, a column its `SELECT` never asked
+  for, so the value was always null and the comparison always ran against 0.
+  Since a time-step is a number in the tens of millions, no code was ever
+  rejected as reused: a code observed once — shoulder-surfed, relayed, captured
+  by a proxy — stayed valid for the whole leeway window, about seven and a half
+  minutes either side. This needed no failure of any kind to exploit, and
+  nothing in the code, the comments or the logs suggested the feature was not
+  working
+* **auth:** a backup code whose removal failed was still accepted, which turns a
+  single-use code into a permanent one. It now counts only once struck off
+* **auth:** `disable_totp.php` ran two unchecked writes and reported success
+  regardless, in two identical copies. If only one landed, the account was left
+  with `totp_enabled` set and no enrolment row — a state no credential can
+  satisfy, so every login attempt failed no matter what the user typed, having
+  just been told 2FA was switched off. Both writes are now one transaction
+* **oidc:** back-channel logout counted sessions whose remember-me token
+  survived. The session row could be deleted perfectly while its token lived on,
+  and the count returned to the identity provider included that session — which
+  the provider does not retry. The browser holding the cookie is signed back in,
+  into a session with no `oidc_sessions` row, permanently out of reach of any
+  future back-channel logout
+* **auth:** `logout.php` discarded the result of revoking the remember-me token,
+  so a failed revocation left the cookie working while the session was
+  destroyed. The user believes they have logged out; the next request signs them
+  back in
+* **auth:** the password reset request deleted any outstanding token, inserted a
+  new one, checked neither, and displayed "check your email" regardless. A
+  failed insert left the account with no way to reset at all, and retrying
+  reproduced it exactly. Issuing is now one transaction, so a failure leaves the
+  previous token working and says so — while an unregistered address still gets
+  the same response as a registered one, so the page cannot be used to find out
+  which addresses have accounts
+* **oidc:** the admin role sync reported `revoked` for a revocation that had not
+  happened — the case where a provider has just withdrawn someone's
+  administrator group
+
+### Fixed
+
+* **cron:** every scheduled job could fail silently. They exited 0 whatever
+  happened, wrote into per-job files nobody reads, and left no record the admin
+  page could show. Jobs now report failure through an exit status, the
+  container's own stderr, and a `cron_runs` row; a job that stops without
+  finishing is a failure rather than a quiet night. Instrumenting them surfaced
+  eleven failures nobody would have noticed, among them `cleanupresettokens`
+  printing "no expired tokens" precisely when the DELETE had failed,
+  `updateexchange` reporting a refused API key as "skipped",
+  `generaterecommendations` ending with `"success" => true` hardcoded, and
+  `sendnotifications` reporting every successful Mattermost delivery as an error
+* **cron:** a `TypeError` in `sendcancellationnotifications` on empty ntfy
+  headers, and an escaping PHPMailer exception in both notification jobs, each
+  ended the whole run at the first affected recipient
+* **startup:** a container whose database directory is not writable now refuses
+  to start and says which directory and why. Before, SQLite reported "attempt to
+  write a readonly database", every page still rendered, and the instance looked
+  healthy while every subscription, setting and rate refresh was silently
+  discarded. The message distinguishes wrong ownership from a read-only mount,
+  because they need opposite fixes
+* **startup:** dropped the recursive `chown` of `/tmp`. It was pointless —
+  `/tmp` is 1777 — and handed every file any other process left there to the web
+  server user
+* **db:** file backup, restore and import now refuse on PostgreSQL instead of
+  reporting success. `backup.php` produced an archive holding nothing the running
+  instance uses; on an instance migrated from SQLite the stale file is still on
+  disk, so the archive looked plausible and was months out of date. `import.php`
+  additionally consumed the setup token, leaving setup unfinishable
+
+### Internal
+
+* the database-boundary Semgrep rules can now be switched on: they produced 1119
+  findings of which 1118 were not violations, and two of them were broken in
+  ways that read as clean — a `\b` that let `PRAGMA` match only one-letter words,
+  and a rule that timed out on the largest file in the repo and so contributed
+  no findings at all
+* snapshot and benchmark tooling for repeating migration runs against real data
+
 ## [5.8.0](https://github.com/thorstenhornung1/Wallos/releases/tag/v5.8.0) (2026-08-19)
 
 PostgreSQL as an optional backend, and two security fixes found by auditing code
