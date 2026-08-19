@@ -627,7 +627,248 @@ To check it end to end: sign in through Authentik, then terminate that session
 in Authentik's admin interface, then reload any Wallos page. You should land on
 the login screen.
 
-## 8. Reset or remove
+### 7.5 The three fixes from 5.8.0, checked deliberately
+
+These were security defects in code that already had passing tests. Each one is
+worth confirming on your own instance rather than taking on trust.
+
+**Revocation reaches endpoints, not just pages.** Until 5.8.0 the check lived
+only on the path that renders HTML, so after Authentik ended a session the API
+stayed open for up to thirty days — including user administration and database
+backup. Loading a page is therefore *not* a sufficient test:
+
+```sh
+# Sign in through Authentik in a browser, then take the session cookie from
+# developer tools and use it directly against an endpoint.
+curl -s -o /dev/null -w '%{http_code}\n' \
+  -b "PHPSESSID=<the session cookie>" \
+  https://test.hornung-bn.de/endpoints/subscriptions/get.php
+```
+
+Before ending the session in Authentik: `200`. After: **`401`**. If you get a
+`200` after revocation, the running version is older than 5.8.0.
+
+Two things that will make this test lie to you:
+
+* **Send only `PHPSESSID`, not `wallos_login`.** The remember-me cookie rebuilds
+  a destroyed session, so including it produces a `200` that says nothing about
+  revocation. Copy one cookie, not the whole header.
+* **It has to be an OIDC session.** The guard only applies to sessions that came
+  from the provider — a password login has no provider to have ended it, and
+  correctly stays valid. Signing in with a local account and expecting a `401`
+  tests nothing.
+
+**The OIDC client secret does not reach the browser.** Section 5.2 checks this
+for the SMTP, currency and AI secrets. OIDC was not in that list, and that is
+exactly where the leak was — a secret supplied through
+`OIDC_CLIENT_SECRET_FILE` was returned by the admin API and rendered as an
+editable text field.
+
+```sh
+# With an administrator session:
+curl -s -b "$ADMIN_COOKIES" "$BASE/admin.php" | grep -c '<the secret value>'
+curl -s "$BASE/api/admin/get_oidc_settings.php?api_key=<admin key>" | grep -c '<the secret value>'
+```
+
+Expected: `0` from both. The API answers `client_secret_set: true` instead of
+the value. The field on the page is an empty password input — saving it empty
+keeps what is stored, so confirm that too: save the OIDC form without touching
+the secret, then sign in through Authentik again.
+
+**Account deletion removes every row.** Twelve tables were missing from both
+deletion paths, and two more from the self-service one — including
+`login_tokens`, so a self-deleted account left a working remember-me token
+behind.
+
+Create a throwaway account, configure as much as you can (2FA, several
+notification channels, a custom colour theme, a subscription), delete it, then:
+
+```sh
+$EXEC php -r '
+require "/var/www/html/includes/database/connection.php";
+$db = wallos_database_connect();
+$id = <the deleted account id>;
+foreach ($db->tablesWithColumn("user_id") as $table) {
+    $n = (int) $db->scalar("SELECT COUNT(*) FROM \"" . $table . "\" WHERE user_id = :id", [":id" => $id]);
+    if ($n > 0) { printf("%-32s %d row(s) left behind\n", $table, $n); }
+}
+echo "done\n";'
+```
+
+Expected: nothing but `done`. Note the account id before deleting it — after
+deletion there is nothing left to look it up by.
+
+## 8. PostgreSQL instead of SQLite
+
+Optional, and new in 5.8.0. SQLite remains the default and nothing below is
+needed to run the rest of this plan.
+
+Worth testing separately rather than as a variant of everything above: the
+failure modes are different, and a PostgreSQL instance enforces foreign keys
+that SQLite has never enforced, so it rejects writes SQLite accepted.
+
+### 8.1 A fresh PostgreSQL instance
+
+Add a database to the stack and point Wallos at it:
+
+```yaml
+  postgres:
+    image: postgres:18-alpine
+    environment:
+      POSTGRES_DB: wallos
+      POSTGRES_USER: wallos
+      POSTGRES_PASSWORD_FILE: /run/secrets/db_password
+    volumes:
+      - wallos_pgdata:/var/lib/postgresql/data
+    secrets:
+      - source: wallos_test_db_password
+        target: db_password
+    deploy:
+      placement:
+        constraints:
+          - node.hostname == docker-infra-3
+```
+
+and on the `wallos` service:
+
+```yaml
+      WALLOS_DB_DRIVER: pgsql
+      WALLOS_DB_HOST: postgres
+      WALLOS_DB_NAME: wallos
+      WALLOS_DB_USER: wallos
+      WALLOS_DB_PASSWORD_FILE: /run/secrets/db_password
+      WALLOS_DB_SSLMODE: prefer
+```
+
+There is no migration chain to wait for. A generated baseline carries the
+current schema with every historical migration already recorded, and it installs
+itself into an empty database on first start:
+
+```
+PostgreSQL database is empty. Applying the baseline schema...
+Baseline schema applied.
+```
+
+Confirm:
+
+```sh
+$EXEC php -r '
+require "/var/www/html/includes/database/connection.php";
+$db = wallos_database_connect();
+printf("driver:     %s\n", $db->driver());
+printf("tables:     %d\n", (int) $db->scalar("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = current_schema()"));
+printf("migrations: %d\n", (int) $db->scalar("SELECT COUNT(*) FROM migrations"));'
+```
+
+Expected: `pgsql`, 42 tables, 62 migrations. Then run sections 4 through 7
+unchanged — the whole plan applies, and any difference is a finding.
+
+### 8.2 Moving an existing instance across
+
+**Take a backup first, and keep the SQLite file.** The migration reads it
+read-only and never writes to it, but the point of a backup is that you do not
+have to trust that.
+
+```sh
+# Fingerprint the SQLite instance
+$EXEC php /var/www/html/dev/stress-verify.php > before.txt
+
+# Dry run: what would move, and what is in the way
+$EXEC php /var/www/html/dev/migrate-to-pgsql.php --dry-run
+```
+
+The dry run is where the interesting answer comes from. **It refuses by default
+if the source holds rows that violate a foreign key** — PostgreSQL enforces
+thirteen constraints that SQLite has never enforced, so a database that has been
+running for a while usually has some. The development database in this
+repository has 82 such rows across 7 constraints.
+
+It names the constraint, the count and sample rows. Decide per case: fix the
+data in SQLite first, or run with `--skip-orphans`, which counts what it leaves
+behind rather than reporting a clean run.
+
+```sh
+$EXEC php /var/www/html/dev/migrate-to-pgsql.php
+```
+
+Then switch `WALLOS_DB_DRIVER` to `pgsql`, redeploy, and compare:
+
+```sh
+$EXEC php /var/www/html/dev/stress-verify.php > after.txt
+diff <(tail -n +2 before.txt) <(tail -n +2 after.txt)
+```
+
+Line 1 names the backend and cannot match; everything else must be identical —
+row counts and a content hash over every column, with NULL and empty string
+rendered differently on purpose. **Any other difference is data loss and belongs
+in the report.**
+
+Finally the check the migration exists for: create a subscription, a category
+and a payment method through the interface. Copying rows with explicit ids
+leaves PostgreSQL's sequences at 1, so the first insert afterwards collides with
+a row that already exists — and the error names a constraint, not the import.
+The migrator sets every sequence and says so; this confirms it on your data.
+
+### 8.3 What to watch for
+
+* **Writes that used to succeed may now fail.** Foreign keys are enforced.
+  A subscription referencing a deleted category, a payment method id of 0 — both
+  were accepted by SQLite and are rejected here. That is the integrity
+  improvement working, but it will surface as an error message.
+* **Backup and restore do not work on PostgreSQL.** Sections `endpoints/db/`
+  operate on the SQLite file. They will report success and do nothing. Use
+  `pg_dump`.
+* **Prices come back as strings** from the API rather than as JSON numbers.
+  Harmless in PHP, visible to any client doing arithmetic on the response.
+
+## 9. Writing up what you find
+
+The point of this plan is the report, not the run. A test that passed is worth
+recording; a test that passed for the wrong reason is worth more, and only shows
+up if the write-up is specific.
+
+**Where.** One file per run, `docs/test-results-YYYY-MM-DD.md`, committed to
+this repository. The previous one is
+[test-results-2026-08-16.md](test-results-2026-08-16.md) — same shape.
+
+**What each entry needs**, in order of how often it is missing:
+
+1. **The evidence, pasted.** The command and its actual output, not a summary of
+   it. `curl` status codes, log lines, `EXPLAIN` output, the row counts. A claim
+   without its output cannot be re-checked by anyone including you.
+2. **The version.** Read it from the image tag, not from a file — the image no
+   longer ships `VERSION`:
+   `docker inspect --format '{{.Spec.TaskTemplate.ContainerSpec.Image}}' wallos-test_wallos`
+3. **Pass, fail, or not covered.** "Not covered" is a real answer and belongs in
+   the table. Section 5.2 was reported as passing for three pages when one of
+   them had returned a redirect, which proves nothing — that correction came
+   from the run's own author and is exactly the kind of honesty that makes a
+   report useful.
+4. **What you concluded, separately from what you observed.** Keep them apart.
+   The 5.7.2 benchmark run concluded that per-user cron cost "disappears against
+   process start-up"; the measurement had in fact returned zeros because BusyBox
+   does not support `date +%s%N`. The observation was fine, the conclusion was
+   not, and only the separation makes that visible afterwards.
+
+**A finding that belongs to Wallos becomes an issue.** Link it from the report,
+so the report stays a record of what happened and the issue carries the work:
+
+```sh
+gh issue create --repo thorstenhornung1/Wallos --title "..." --body "..."
+```
+
+**A finding that belongs somewhere else stays in the report,** with the cause.
+The `Logout successful` page in section 7.3 is authentik's, not Wallos's — the
+report names the file and the branch in authentik's source, which is what makes
+it useful to the next person rather than a dead end.
+
+**If the plan itself was wrong, fix the plan in the same pull request.** Three
+corrections in the 2026-08-16 run came from the run: the placement constraint
+that was a label rather than a hostname, section 5.2 needing an administrator
+session, and the benchmark's broken cron timing. All three are now in this
+document because they were written down while they were still fresh.
+
+## 10. Reset or remove
 
 Start from an empty database without redeploying:
 
