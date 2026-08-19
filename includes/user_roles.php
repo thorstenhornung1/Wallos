@@ -106,7 +106,13 @@ function wallos_revoke_role($db, $userId, $role, $source)
     $stmt->bindValue(':userId', $userId, SQLITE3_INTEGER);
     $stmt->bindValue(':role', $role, SQLITE3_TEXT);
     $stmt->bindValue(':source', $source, SQLITE3_TEXT);
-    $stmt->execute();
+
+    // As in session_tokens.php: changes() survives a failed statement on both
+    // backends, so a revocation that did not run would report the previous
+    // statement's row count as its own.
+    if ($stmt->execute() === false) {
+        return 0;
+    }
 
     return $db->changes();
 }

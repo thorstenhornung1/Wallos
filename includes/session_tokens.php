@@ -29,7 +29,15 @@ function wallos_revoke_login_token($db, $token)
         return 0;
     }
     $stmt->bindValue(':token', $token, SQLITE3_TEXT);
-    $stmt->execute();
+
+    // The execute result, not changes(), decides whether this worked. Neither
+    // backend resets the change counter after a failed statement — measured on
+    // both — so a DELETE that never ran would otherwise report the row count of
+    // whatever ran before it. For a function whose answer is "how many sessions
+    // did I just end", that is the wrong way to be wrong.
+    if ($stmt->execute() === false) {
+        return 0;
+    }
 
     return $db->changes();
 }
@@ -55,7 +63,10 @@ function wallos_revoke_user_login_tokens($db, $userId)
         return 0;
     }
     $stmt->bindValue(':userId', $userId, SQLITE3_INTEGER);
-    $stmt->execute();
+
+    if ($stmt->execute() === false) {
+        return 0;
+    }
 
     return $db->changes();
 }

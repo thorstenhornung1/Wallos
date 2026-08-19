@@ -58,20 +58,34 @@ class WallosPgsqlStatement
      */
     public function execute()
     {
-        foreach ($this->bindings as $parameter => $binding) {
-            [$value, $type] = $binding;
-            $this->statement->bindValue($parameter, $this->coerce($value, $type), $this->pdoType($value, $type));
-        }
-
         try {
+            // Binding is inside the try because it throws too. PDO rejects a
+            // parameter the statement does not declare, where SQLite3 returns
+            // false with a warning — so an uncaught bind failure escaped the
+            // boundary as a fatal error rather than the false this contract
+            // promises. api/subscriptions/get_ical_feed.php does exactly that:
+            // it binds :inactive to a statement whose SQL hardcodes the value.
+            foreach ($this->bindings as $parameter => $binding) {
+                [$value, $type] = $binding;
+                $this->statement->bindValue($parameter, $this->coerce($value, $type), $this->pdoType($value, $type));
+            }
+
             $this->statement->execute();
         } catch (PDOException $exception) {
             $this->database->recordError($exception->getMessage());
+            $this->database->recordAffected(0);
 
             return false;
         }
 
-        $this->database->recordStatement($this->statement);
+        // The affected-row count is recorded here rather than by remembering
+        // the statement, because SQLite3::changes() belongs to the connection
+        // and only ever counts writes. Remembering statements made a SELECT
+        // overwrite the count, made exec() and a prepared statement disagree,
+        // and — worst — left the previous count in place after a failure, so
+        // wallos_revoke_login_token() reported rows removed for a DELETE that
+        // never ran.
+        $this->database->recordAffected($this->statement->rowCount());
 
         return new WallosPgsqlResult($this->statement);
     }
@@ -127,12 +141,20 @@ class WallosPgsqlStatement
      */
     private function coerce($value, $type)
     {
-        if (is_bool($value)) {
-            return $value;
-        }
-
+        // The declared type wins over the PHP type, and the order matters.
+        //
+        // This used to test is_bool() first, on the reasoning that PostgreSQL
+        // rejects an integer where a boolean belongs. The baseline schema maps
+        // every BOOLEAN column to INTEGER on purpose — Wallos compares == 1
+        // everywhere — so there is no boolean column to protect, and the
+        // check created the hazard it was written to prevent: a PHP false
+        // bound with SQLITE3_INTEGER became 'f' and PostgreSQL refused it.
         if ($type === SQLITE3_INTEGER && $value !== null) {
             return (int) $value;
+        }
+
+        if (is_bool($value)) {
+            return $value ? 1 : 0;
         }
 
         if ($type === SQLITE3_FLOAT && $value !== null) {
@@ -152,10 +174,9 @@ class WallosPgsqlStatement
         if ($value === null) {
             return PDO::PARAM_NULL;
         }
-        if (is_bool($value)) {
-            return PDO::PARAM_BOOL;
-        }
-        if ($type === SQLITE3_INTEGER || is_int($value)) {
+        // Same ordering as coerce(): the schema has no boolean columns, so a
+        // bool is on its way into an integer one.
+        if ($type === SQLITE3_INTEGER || is_int($value) || is_bool($value)) {
             return PDO::PARAM_INT;
         }
 

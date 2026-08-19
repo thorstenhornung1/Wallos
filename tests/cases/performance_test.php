@@ -21,8 +21,8 @@ require_once WALLOS_ROOT . '/includes/integration_config.php';
 function performance_seed_subscriptions($db, $userId, $count)
 {
     $stmt = $db->prepare('INSERT INTO subscriptions
-        (name, price, currency_id, next_payment, cycle, frequency, payer_user_id, category_id, notify, inactive, user_id, auto_renew)
-        VALUES (:name, :price, :currency, :next, 3, 1, :payer, :category, :payment, 0, :userId, 1)');
+        (name, price, currency_id, next_payment, cycle, frequency, payer_user_id, category_id, payment_method_id, notify, inactive, user_id, auto_renew)
+        VALUES (:name, :price, :currency, :next, 3, 1, :payer, :category, :payment, 0, 0, :userId, 1)');
 
     // Real ids from the fixture rather than a hardcoded 1. PostgreSQL enforces
     // the foreign keys SQLite never has, and payer_user_id references

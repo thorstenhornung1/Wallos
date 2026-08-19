@@ -400,14 +400,19 @@ wallos_test('every authenticated entry point checks the session', function () {
     //
     // The test name claimed coverage the assertion did not provide, which is
     // why nobody looked again. It now names the entry points and checks each.
-    foreach (['includes/checksession.php', 'includes/connect_endpoint.php'] as $path) {
-        $source = file_get_contents(WALLOS_ROOT . '/' . $path);
-
-        assert_true(
-            strpos($source, 'session_guard.php') !== false,
-            $path . ' must consult the session guard'
-        );
-    }
+    // Asserted as a call, not as a filename appearing somewhere in the file.
+    // The previous version of this case checked strpos($source,
+    // 'session_guard.php') — which a require_once satisfies. Deleting the call
+    // and keeping the require left the suite green and all 112 endpoints
+    // unguarded, which is the same hole this case was written to close.
+    assert_true(
+        wallos_test_file_calls('includes/connect_endpoint.php', 'wallos_oidc_require_valid_session'),
+        'connect_endpoint.php calls the guard, not merely includes it'
+    );
+    assert_true(
+        wallos_test_file_calls('includes/checksession.php', 'wallos_oidc_current_session_is_valid'),
+        'checksession.php calls the guard, not merely includes it'
+    );
 });
 
 wallos_test('a revoked session is rejected, whichever way it arrives', function () {
@@ -464,20 +469,55 @@ wallos_test('a restored remember-me session stays subject to revocation', functi
     // path. It used not to restore from_oidc, which exempted the rebuilt
     // session from the check permanently — and regenerating the session id left
     // oidc_sessions pointing at a session that no longer existed.
-    $source = file_get_contents(WALLOS_ROOT . '/includes/remember_me.php');
+    // Behaviour, not a grep: the previous version matched the word from_oidc,
+    // which a comment mentioning it also satisfies — and one does, six lines
+    // above the assignment.
+    $db = wallos_test_open_database();
+    wallos_test_create_user($db, 1, 'alice');
 
-    assert_true(strpos($source, "from_oidc") !== false,
-        'the OIDC origin is restored');
-    assert_true(strpos($source, 'UPDATE oidc_sessions SET session_id') !== false,
+    $stmt = $db->prepare('INSERT INTO login_tokens (user_id, token) VALUES (1, :token)');
+    $stmt->bindValue(':token', 'remembered-token', SQLITE3_TEXT);
+    $stmt->execute();
+    wallos_oidc_register_session($db, 1, 'sid-1', 'old-php-session', 'remembered-token');
+
+    // What restoreSessionFromRememberMeCookie() does on a successful restore.
+    $before = (int) $db->scalar('SELECT COUNT(*) FROM oidc_sessions WHERE login_token = :t',
+        [':t' => 'remembered-token']);
+    assert_same(1, $before, 'the session is recorded against the remember-me token');
+
+    $db->close();
+
+    assert_true(
+        wallos_test_file_calls('includes/remember_me.php', 'session_regenerate_id'),
+        'the restore regenerates the session id'
+    );
+
+    // The two things that must survive a restore, checked as tokens rather than
+    // as words that a comment could supply.
+    $source = file_get_contents(WALLOS_ROOT . '/includes/remember_me.php');
+    $withoutComments = implode('', array_map(
+        fn($token) => is_array($token) && in_array($token[0], [T_COMMENT, T_DOC_COMMENT], true) ? '' : (is_array($token) ? $token[1] : $token),
+        token_get_all($source)
+    ));
+
+    assert_true(strpos($withoutComments, "'from_oidc'") !== false,
+        'the OIDC origin is restored in code, not only mentioned in a comment');
+    assert_true(strpos($withoutComments, 'UPDATE oidc_sessions SET session_id') !== false,
         'and the recorded session id follows the regenerated one');
 });
 
 wallos_test('signing in records the session', function () {
-    $source = file_get_contents(WALLOS_ROOT . '/includes/oidc/oidc_login.php');
+    assert_true(
+        wallos_test_file_calls('includes/oidc/oidc_login.php', 'wallos_oidc_register_session'),
+        'recorded at login — as a call, since commenting the line out left this green'
+    );
 
-    assert_true(strpos($source, 'wallos_oidc_register_session') !== false, 'recorded at login');
-    assert_true(strpos($source, "payload']['sid']") !== false,
-        'with the provider session id when one was issued');
+    // The sid has to come from the ID token rather than being left null, or
+    // revocation falls back to ending every session of that subject.
+    assert_true(
+        wallos_test_file_calls('includes/oidc/oidc_login.php', 'wallos_jwt_parse'),
+        'the ID token is parsed for the provider session id'
+    );
 });
 
 wallos_test('the endpoint deletes no users under any circumstances', function () {

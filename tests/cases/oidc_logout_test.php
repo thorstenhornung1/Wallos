@@ -159,7 +159,12 @@ wallos_test('local logout completes before any redirect', function () {
     // misconfigured must not be able to leave somebody logged in here.
     $source = file_get_contents(WALLOS_ROOT . '/logout.php');
 
-    $revoke = strpos($source, 'wallos_revoke_login_token');
+    // As a call: a comment naming the function used to satisfy both this and
+    // the ordering check below, while logout revoked nothing.
+    assert_true(wallos_test_file_calls('logout.php', 'wallos_revoke_login_token'),
+        'logout revokes the token');
+
+    $revoke = strpos($source, 'wallos_revoke_login_token($db, $sessionToken)');
     $destroy = strpos($source, 'session_destroy');
     $redirect = strpos($source, "header('Location: ' . wallos_oidc_build_end_session_url");
 
@@ -175,9 +180,15 @@ wallos_test('the ID token stays server side', function () {
     foreach (['logout.php', 'login.php', 'includes/oidc/oidc_login.php'] as $path) {
         $source = file_get_contents(WALLOS_ROOT . '/' . $path);
 
-        assert_true(strpos($source, "setcookie('oidc_id_token") === false, $path . ': not a cookie');
-        assert_true(strpos($source, 'echo $idToken') === false, $path . ': not rendered');
-        assert_true(strpos($source, 'error_log($idToken') === false, $path . ': not logged');
+        // Matched without regard to quote style, because forbidding one exact
+        // spelling forbids nothing: switching to double quotes put the bearer
+        // token into a cookie and the log with this case still green.
+        assert_true(preg_match('/setcookie\s*\(\s*["\']oidc_id_token/', $source) !== 1,
+            $path . ': not a cookie');
+        assert_true(preg_match('/(echo|print)\s+\$idToken/', $source) !== 1,
+            $path . ': not rendered');
+        assert_true(preg_match('/error_log\s*\([^)]*\$idToken/', $source) !== 1,
+            $path . ': not logged');
     }
 
     $login = file_get_contents(WALLOS_ROOT . '/includes/oidc/oidc_login.php');

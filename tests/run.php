@@ -54,6 +54,7 @@ foreach ($GLOBALS['wallos_tests'] as $test) {
 
     $GLOBALS['wallos_test_current'] = $test['name'];
     $before = count($GLOBALS['wallos_test_failures']);
+    $assertionsBefore = $GLOBALS['wallos_test_assertions'];
 
     try {
         wallos_test_reset_env();
@@ -64,6 +65,19 @@ foreach ($GLOBALS['wallos_tests'] as $test) {
     }
 
     $newFailures = array_slice($GLOBALS['wallos_test_failures'], $before);
+
+    // A case that asserted nothing is not a passing case, it is a case that did
+    // not run. This catches the shape where a loop iterates zero times — a glob
+    // that matches no files, a query that returns no rows — and the case prints
+    // green having checked nothing at all. Skipped cases are exempt, because
+    // skipping is a decision rather than an accident.
+    $assertedNothing = $GLOBALS['wallos_test_assertions'] === $assertionsBefore
+        && !in_array($test['name'], array_column($GLOBALS['wallos_test_skipped'], 'test'), true);
+
+    if ($assertedNothing) {
+        wallos_test_fail('the case made no assertions — it did not test anything');
+        $newFailures = array_slice($GLOBALS['wallos_test_failures'], $before);
+    }
 
     if ($newFailures === []) {
         $passed++;
@@ -115,7 +129,10 @@ if (wallos_test_driver() !== 'sqlite') {
 }
 
 if (count($GLOBALS['wallos_test_skipped']) > 0) {
-    echo sprintf("\033[33m%d case(s) skipped\033[0m — SQLite-specific behaviour\n",
+    // Cases skip in both directions now — some test SQLite itself, others need a
+    // PostgreSQL server to connect to — so the summary no longer names one of
+    // them as the only reason.
+    echo sprintf("\033[33m%d case(s) skipped\033[0m — behaviour this backend does not have\n",
         count($GLOBALS['wallos_test_skipped']));
 }
 

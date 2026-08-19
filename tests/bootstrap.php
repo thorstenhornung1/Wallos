@@ -171,6 +171,68 @@ function wallos_test_secret_file($name, $contents)
 }
 
 /**
+ * Whether a file really calls a function.
+ *
+ * Not `strpos`. A test suite full of `strpos($source, 'wallos_do_the_thing')`
+ * is satisfied by a comment mentioning the function, by a string containing its
+ * name, and by a `require_once` of the file that defines it — all of which
+ * happened here. The case named "a running session is checked on every request"
+ * asserted a filename appeared in one file while 112 endpoints went unguarded,
+ * and its replacement asserted a different filename and had exactly the same
+ * hole: deleting the call left the suite green.
+ *
+ * PHP's own tokeniser knows the difference between a call, a comment and a
+ * string, so this asks it.
+ *
+ * @param string $path relative to the repository root
+ * @param string $function
+ * @return bool
+ */
+function wallos_test_file_calls($path, $function)
+{
+    $source = @file_get_contents(WALLOS_ROOT . '/' . $path);
+    if ($source === false) {
+        return false;
+    }
+
+    $tokens = token_get_all($source);
+
+    foreach ($tokens as $index => $token) {
+        if (!is_array($token) || $token[0] !== T_STRING || $token[1] !== $function) {
+            continue;
+        }
+
+        // The next token that is not whitespace has to be an opening bracket,
+        // otherwise this is the name appearing somewhere that is not a call —
+        // a definition, a string index, a callable passed by name.
+        for ($next = $index + 1; $next < count($tokens); $next++) {
+            $candidate = $tokens[$next];
+            if (is_array($candidate) && $candidate[0] === T_WHITESPACE) {
+                continue;
+            }
+            if ($candidate === '(') {
+                // A definition is `function name(`, so look backwards too.
+                for ($previous = $index - 1; $previous >= 0; $previous--) {
+                    $before = $tokens[$previous];
+                    if (is_array($before) && $before[0] === T_WHITESPACE) {
+                        continue;
+                    }
+                    if (is_array($before) && $before[0] === T_FUNCTION) {
+                        break 2;
+                    }
+                    break;
+                }
+
+                return true;
+            }
+            break;
+        }
+    }
+
+    return false;
+}
+
+/**
  * Which backend this run exercises.
  *
  * The suite runs on SQLite by default, because that is what an installation
@@ -284,6 +346,32 @@ function wallos_test_pgsql_cleanup()
 function wallos_test_skip_unless_sqlite($reason)
 {
     if (wallos_test_driver() === 'sqlite') {
+        return false;
+    }
+
+    $GLOBALS['wallos_test_skipped'][] = [
+        'test' => $GLOBALS['wallos_test_current'],
+        'reason' => $reason,
+    ];
+
+    return true;
+}
+
+/**
+ * Marks a case as needing a real PostgreSQL server.
+ *
+ * The mirror image of the helper above, and it exists for a different reason:
+ * not that the behaviour is PostgreSQL-specific, but that exercising it needs a
+ * server to connect to. dev/test.sh runs in a throwaway container with no route
+ * to the database, so these cases have to say so and stand aside rather than
+ * fail for want of a network.
+ *
+ * @param string $reason
+ * @return bool whether the case should stop
+ */
+function wallos_test_skip_unless_pgsql($reason)
+{
+    if (wallos_test_driver() === 'pgsql') {
         return false;
     }
 
@@ -433,17 +521,30 @@ function wallos_test_open_counting_database()
  */
 function wallos_test_create_user($db, $id, $username)
 {
-    $stmt = $db->prepare("INSERT INTO \"user\" (id, username, email, password, main_currency) VALUES (:id, :username, :email, 'x', 1)");
+    // main_currency is NOT NULL and references currencies, so the account has to
+    // point at a row that exists at insert time. Hardcoding 1 worked until the
+    // fixture started clearing the seeded currencies: the first account took
+    // currency 1 with it, and every later account failed the foreign key.
+    // Whatever currency is there right now is good enough — the UPDATE below
+    // moves it to this account's own fixture currency.
+    $anyCurrency = (int) $db->scalar('SELECT MIN(id) FROM currencies');
+    $stmt = $db->prepare("INSERT INTO \"user\" (id, username, email, password, main_currency) VALUES (:id, :username, :email, 'x', :currency)");
+    $stmt->bindValue(':currency', $anyCurrency > 0 ? $anyCurrency : 1, SQLITE3_INTEGER);
     $stmt->bindValue(':id', $id, SQLITE3_INTEGER);
     $stmt->bindValue(':username', $username, SQLITE3_TEXT);
     $stmt->bindValue(':email', $username . '@example.com', SQLITE3_TEXT);
     $stmt->execute();
 
-    // createdatabase.php seeds a default currency list; the fixture replaces it
-    // so a test can reason about exactly two rows per user.
-    $stmt = $db->prepare('DELETE FROM currencies WHERE user_id = :userId');
-    $stmt->bindValue(':userId', $id, SQLITE3_INTEGER);
-    $stmt->execute();
+    // The fixture replaces the seeded currency list so a case can reason about
+    // exactly two rows per user.
+    //
+    // The insert comes first and the delete second, because user.main_currency
+    // references currencies: deleting the seeded rows while the account still
+    // points at one of them violates the foreign key. SQLite never enforced it
+    // and the failure went unnoticed — the return value was not checked either
+    // — so on PostgreSQL every case ran against 36 currencies where SQLite gave
+    // it 2. Nothing asserted a count, which is the only reason 272 cases passed
+    // on both backends against materially different fixtures.
 
     foreach ([['EUR', 'Euro', 1.0], ['USD', 'US Dollar', 1.1]] as $index => $currency) {
         $stmt = $db->prepare('INSERT INTO currencies (id, name, symbol, code, rate, user_id) VALUES (:id, :name, :symbol, :code, :rate, :userId)');
@@ -460,6 +561,13 @@ function wallos_test_create_user($db, $id, $username)
     $stmt->bindValue(':currencyId', wallos_test_currency_id($id, 0), SQLITE3_INTEGER);
     $stmt->bindValue(':id', $id, SQLITE3_INTEGER);
     $stmt->execute();
+
+    // Now that the account points at a fixture currency, the seeded list can go.
+    $stmt = $db->prepare('DELETE FROM currencies WHERE user_id = :userId AND id < 9000');
+    $stmt->bindValue(':userId', $id, SQLITE3_INTEGER);
+    if ($stmt->execute() === false) {
+        throw new RuntimeException('fixture could not clear the seeded currencies: ' . $db->lastErrorMsg());
+    }
 
     // A household member, a category and a payment method, because a
     // subscription references all three and PostgreSQL enforces that where

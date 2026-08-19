@@ -381,10 +381,12 @@ wallos_test('nothing is configured by default', function () {
 });
 
 wallos_test('the login path synchronises the role', function () {
-    $source = file_get_contents(WALLOS_ROOT . '/includes/oidc/oidc_login.php');
-
+    // As a call. Commenting out the two lines in oidc_login.php used to leave
+    // this green — and with them commented out no OIDC session is ever
+    // recorded, so back-channel logout has nothing to revoke and a demoted
+    // administrator keeps the role forever.
     assert_true(
-        strpos($source, 'wallos_sync_oidc_admin_role') !== false,
+        wallos_test_file_calls('includes/oidc/oidc_login.php', 'wallos_sync_oidc_admin_role'),
         'every OIDC sign-in path passes through oidc_login.php, so the sync belongs there'
     );
 });

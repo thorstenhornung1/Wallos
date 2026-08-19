@@ -22,11 +22,26 @@ class WallosPgsqlDatabase implements WallosDatabase
     /** @var PDO */
     private $pdo;
 
-    /** @var PDOStatement|null The most recent statement, for changes(). */
-    private $lastStatement = null;
-
     /** @var string */
     private $lastError = '';
+
+    /**
+     * Whether a statement has failed since the transaction began.
+     *
+     * PostgreSQL aborts an entire transaction on the first error: every later
+     * statement fails with 25P02, and COMMIT on an aborted transaction quietly
+     * performs a ROLLBACK and reports success. PDO sees no error, so commit()
+     * answered true for a transaction that wrote nothing.
+     *
+     * SQLite has no aborted-transaction state, so nothing in the application
+     * expects this. currency_provider.php wraps a rate refresh in a
+     * transaction, checks some statements and not others, and returns
+     * success — which would have told the user rates were updated while the
+     * database was untouched.
+     *
+     * @var bool
+     */
+    private $failedInTransaction = false;
 
     /**
      * @param string $dsn
@@ -94,7 +109,9 @@ class WallosPgsqlDatabase implements WallosDatabase
             return false;
         }
 
-        $this->recordStatement($statement);
+        // Deliberately not recording an affected count: SQLite3::changes()
+        // ignores reads entirely, and a SELECT overwriting the count is what
+        // made the two backends disagree.
 
         return new WallosPgsqlResult($statement);
     }
@@ -112,11 +129,17 @@ class WallosPgsqlDatabase implements WallosDatabase
             $affected = $this->pdo->exec($sql);
         } catch (PDOException $exception) {
             $this->recordError($exception->getMessage());
+            // Zero, not the previous count. SQLite actually keeps the old value
+            // here — measured — so this is a deliberate divergence rather than
+            // a match: a revocation that reports rows removed because an
+            // earlier statement removed some is worse than an honest zero, and
+            // two of the six changes() call sites revoke sessions and roles.
+            $this->recordAffected(0);
 
             return false;
         }
 
-        $this->lastAffected = $affected === false ? 0 : (int) $affected;
+        $this->recordAffected($affected === false ? 0 : (int) $affected);
 
         return $affected !== false;
     }
@@ -189,18 +212,71 @@ class WallosPgsqlDatabase implements WallosDatabase
         );
     }
 
+    public function tablesWithColumn($column)
+    {
+        // Joined against information_schema.tables rather than reading
+        // information_schema.columns alone, because that view lists the columns
+        // of views as well, and a view is not somewhere rows are stored.
+        $statement = $this->prepare(
+            "SELECT c.table_name
+             FROM information_schema.columns c
+             JOIN information_schema.tables t
+               ON t.table_schema = c.table_schema AND t.table_name = c.table_name
+             WHERE c.table_schema = current_schema()
+               AND t.table_type = 'BASE TABLE'
+               AND c.column_name = :column
+             ORDER BY c.table_name"
+        );
+
+        if ($statement === false) {
+            return [];
+        }
+
+        $statement->bindValue(':column', $column);
+        $result = $statement->execute();
+
+        if ($result === false) {
+            return [];
+        }
+
+        $names = [];
+        while ($row = $result->fetchArray(SQLITE3_ASSOC)) {
+            $names[] = $row['table_name'];
+        }
+
+        return $names;
+    }
+
     public function beginTransaction()
     {
+        $this->failedInTransaction = false;
+
         return $this->pdo->inTransaction() ? true : $this->pdo->beginTransaction();
     }
 
     public function commit()
     {
-        return $this->pdo->inTransaction() ? $this->pdo->commit() : true;
+        if (!$this->pdo->inTransaction()) {
+            return !$this->failedInTransaction;
+        }
+
+        if ($this->failedInTransaction) {
+            // PostgreSQL has already discarded the work; COMMIT here would
+            // report success for a transaction that wrote nothing. Roll back
+            // explicitly and say so.
+            $this->pdo->rollBack();
+            $this->failedInTransaction = false;
+
+            return false;
+        }
+
+        return $this->pdo->commit();
     }
 
     public function rollBack()
     {
+        $this->failedInTransaction = false;
+
         return $this->pdo->inTransaction() ? $this->pdo->rollBack() : true;
     }
 
@@ -242,11 +318,18 @@ class WallosPgsqlDatabase implements WallosDatabase
      */
     public function changes()
     {
-        if ($this->lastStatement !== null) {
-            return $this->lastStatement->rowCount();
-        }
-
         return $this->lastAffected;
+    }
+
+    /**
+     * Records how many rows the most recent write touched.
+     *
+     * @param int $rows
+     * @internal
+     */
+    public function recordAffected($rows)
+    {
+        $this->lastAffected = (int) $rows;
     }
 
     /** @return string */
@@ -271,19 +354,9 @@ class WallosPgsqlDatabase implements WallosDatabase
     /** @return bool */
     public function close()
     {
-        $this->lastStatement = null;
         $this->pdo = null;
 
         return true;
-    }
-
-    /**
-     * @param PDOStatement $statement
-     * @internal
-     */
-    public function recordStatement($statement)
-    {
-        $this->lastStatement = $statement;
     }
 
     /**
@@ -293,5 +366,9 @@ class WallosPgsqlDatabase implements WallosDatabase
     public function recordError($message)
     {
         $this->lastError = $message;
+
+        if ($this->pdo !== null && $this->pdo->inTransaction()) {
+            $this->failedInTransaction = true;
+        }
     }
 }
