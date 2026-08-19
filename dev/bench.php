@@ -379,12 +379,12 @@ function bench_cleanup($db)
  * eleven minutes in the run that produced issue #91, and the figure it would
  * eventually have printed was the network timeout rather than the code.
  *
- * @param string $script  absolute path
- * @param float  $seconds
- * @param bool   $capture whether the output is wanted
+ * @param string[] $command the interpreter and its arguments
+ * @param float    $seconds
+ * @param bool     $capture whether the output is wanted
  * @return array{ms: float, timedOut: bool, exit: int, output: string}
  */
-function bench_run_bounded($script, $seconds, $capture = false)
+function bench_run_bounded($command, $seconds, $capture = false)
 {
     $descriptors = [
         0 => ['file', '/dev/null', 'r'],
@@ -400,10 +400,10 @@ function bench_run_bounded($script, $seconds, $capture = false)
     // handle would refer to a shell and terminating it would leave the PHP
     // process behind it still waiting on the provider — which is the failure
     // this function exists to prevent.
-    $process = @proc_open([PHP_BINARY, $script], $descriptors, $pipes);
+    $process = @proc_open($command, $descriptors, $pipes);
 
     if (!is_resource($process)) {
-        bench_fail('could not start ' . $script);
+        bench_fail('could not start ' . implode(' ', $command));
     }
 
     $output = '';
@@ -494,7 +494,20 @@ function bench_rates_preflight($seconds)
         ];
     }
 
-    $run = bench_run_bounded(dirname(__DIR__) . '/endpoints/cronjobs/updateexchange.php', $seconds, true);
+    // The probe asks the function the cron job asks, and reads its return
+    // value. Reading the job's own output instead means matching a sentence:
+    // this did, on "Exchange rates update skipped.", and stopped working the
+    // day that sentence became "Exchange rates update failed." — after which a
+    // provider that cannot be reached was reported as one worth measuring.
+    $probe = 'require ' . var_export(dirname(__DIR__) . '/includes/database/connection.php', true) . ';'
+        . 'require ' . var_export(dirname(__DIR__) . '/includes/integration_config.php', true) . ';'
+        . 'require ' . var_export(dirname(__DIR__) . '/includes/currency_provider.php', true) . ';'
+        . '$db = wallos_database_connect();'
+        . '$id = (int) $db->scalar(\'SELECT MIN(id) FROM "user"\');'
+        . '$result = wallos_update_exchange_rates_for_user($db, $id);'
+        . 'echo $result["success"] ? "SUCCESS" : "FAILURE " . $result["message"];';
+
+    $run = bench_run_bounded([PHP_BINARY, '-r', $probe], $seconds, true);
 
     if ($run['timedOut']) {
         return [
@@ -504,11 +517,8 @@ function bench_rates_preflight($seconds)
         ];
     }
 
-    if (stripos($run['output'], 'update skipped') !== false) {
-        $message = '';
-        if (preg_match('/Exchange rates update skipped\.\s*([^<\n]*)/i', $run['output'], $matches) === 1) {
-            $message = trim($matches[1]);
-        }
+    if (strpos($run['output'], 'SUCCESS') === false) {
+        $message = trim(str_replace('FAILURE', '', strip_tags($run['output'])));
 
         return [
             'verdict' => 'refused',
@@ -581,7 +591,7 @@ switch ($command) {
 
         $times = [];
         for ($i = 0; $i < $runs; $i++) {
-            $run = bench_run_bounded($script, $seconds);
+            $run = bench_run_bounded([PHP_BINARY, $script], $seconds);
 
             if ($run['timedOut']) {
                 // One bounded run is enough to know the rest would be the same,

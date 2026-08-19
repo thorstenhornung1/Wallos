@@ -203,8 +203,9 @@ printf '\n  baseline is an empty script: interpreter start-up, included in every
 if [ "$RATES_VERDICT" = "ok" ]; then
     printf '  rates measured against a live provider — each run spends provider quota.\n'
 else
-    printf '  rates not measured (%s): %s.\n' "$RATES_VERDICT" "$RATES_NOTE"
-    printf '  A run against a provider that never answers measures the timeout, not the job.\n'
+    printf '  rates not measured (%s): %s\n' "$RATES_VERDICT" "$RATES_NOTE"
+    printf '  A figure taken from a provider that refuses or never answers is the failure\n'
+    printf '  path and the network, not the job.\n'
 fi
 
 printf '\nRemoving seeded data\n'
