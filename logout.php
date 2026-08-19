@@ -35,14 +35,24 @@ if ($fromOidc) {
 
 // Local logout happens first and completely. A provider that is unreachable,
 // misconfigured or slow must never be able to leave the user logged in here.
-wallos_revoke_login_token($db, $sessionToken);
+//
+// The token surviving is the one failure that undoes the logout: the session is
+// destroyed and the cookie cleared, but the row it names is still valid, so any
+// browser still holding that cookie — the shared machine the user just walked
+// away from — is signed straight back in.
+if (wallos_revoke_login_token($db, $sessionToken) === false) {
+    error_log('Wallos: logout could not revoke the remember-me token; '
+        . 'any browser still holding it stays signed in');
+}
 
 // Drop the back-channel session row as well, so a provider ending a session
 // that already ended finds nothing to do rather than a stale row.
 $stmt = $db->prepare('DELETE FROM oidc_sessions WHERE session_id = :sessionId');
 if ($stmt !== false) {
     $stmt->bindValue(':sessionId', session_id(), SQLITE3_TEXT);
-    $stmt->execute();
+    if ($stmt->execute() === false) {
+        error_log('Wallos: logout left a stale OIDC session row: ' . $db->lastErrorMsg());
+    }
 }
 
 $_SESSION = array();

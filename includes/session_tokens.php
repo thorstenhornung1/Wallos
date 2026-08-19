@@ -16,7 +16,14 @@
  * Scoping the delete by user as well is only sound when the user is genuinely
  * known, and getting that wrong silently deletes nothing at all.
  *
- * @return int number of tokens removed
+ * A failed delete is distinguishable from a token that was not there. Both
+ * remove nothing, but only one of them means a browser is still holding a
+ * credential the caller believes it has revoked — and the callers act on that
+ * difference: logout warns, back-channel logout refuses to count the session as
+ * revoked. Returning 0 for both is what let a live session be reported to the
+ * identity provider as ended.
+ *
+ * @return int|false tokens removed, or false when the delete did not run
  */
 function wallos_revoke_login_token($db, $token)
 {
@@ -26,7 +33,7 @@ function wallos_revoke_login_token($db, $token)
 
     $stmt = $db->prepare("DELETE FROM login_tokens WHERE token = :token");
     if ($stmt === false) {
-        return 0;
+        return false;
     }
     $stmt->bindValue(':token', $token, SQLITE3_TEXT);
 
@@ -36,7 +43,7 @@ function wallos_revoke_login_token($db, $token)
     // whatever ran before it. For a function whose answer is "how many sessions
     // did I just end", that is the wrong way to be wrong.
     if ($stmt->execute() === false) {
-        return 0;
+        return false;
     }
 
     return $db->changes();
@@ -49,7 +56,7 @@ function wallos_revoke_login_token($db, $token)
  * provider signalling logout, or an administrator ending a session. Removing
  * one device's token would leave the others usable.
  *
- * @return int number of tokens removed
+ * @return int|false tokens removed, or false when the delete did not run
  */
 function wallos_revoke_user_login_tokens($db, $userId)
 {
@@ -60,12 +67,12 @@ function wallos_revoke_user_login_tokens($db, $userId)
 
     $stmt = $db->prepare("DELETE FROM login_tokens WHERE user_id = :userId");
     if ($stmt === false) {
-        return 0;
+        return false;
     }
     $stmt->bindValue(':userId', $userId, SQLITE3_INTEGER);
 
     if ($stmt->execute() === false) {
-        return 0;
+        return false;
     }
 
     return $db->changes();

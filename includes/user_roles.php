@@ -90,7 +90,7 @@ function wallos_grant_role($db, $userId, $role, $source)
  * @param int     $userId
  * @param string  $role
  * @param string  $source
- * @return int rows removed
+ * @return int|false rows removed, or false when the delete did not run
  */
 function wallos_revoke_role($db, $userId, $role, $source)
 {
@@ -101,7 +101,7 @@ function wallos_revoke_role($db, $userId, $role, $source)
 
     $stmt = $db->prepare("DELETE FROM user_roles WHERE user_id = :userId AND role = :role AND source = :source");
     if ($stmt === false) {
-        return 0;
+        return false;
     }
     $stmt->bindValue(':userId', $userId, SQLITE3_INTEGER);
     $stmt->bindValue(':role', $role, SQLITE3_TEXT);
@@ -109,9 +109,10 @@ function wallos_revoke_role($db, $userId, $role, $source)
 
     // As in session_tokens.php: changes() survives a failed statement on both
     // backends, so a revocation that did not run would report the previous
-    // statement's row count as its own.
+    // statement's row count as its own. And false rather than 0, so a caller
+    // can tell "they did not hold this role" from "the role is still held".
     if ($stmt->execute() === false) {
-        return 0;
+        return false;
     }
 
     return $db->changes();

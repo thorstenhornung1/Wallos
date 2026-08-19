@@ -115,14 +115,27 @@ function wallos_sync_oidc_admin_role($db, $userId, $claims, $settings)
     $held = in_array(WALLOS_ROLE_SOURCE_OIDC, wallos_user_admin_sources($db, $userId), true);
     $shouldHold = wallos_oidc_claim_grants_admin($claims, $claimName, $expected);
 
+    // Both branches report what they did, so neither may report a write it did
+    // not make. The revocation is the one with teeth: it runs when the provider
+    // has just said this account is no longer an administrator, and nothing
+    // else will try again until the next sign-in.
     if ($shouldHold && !$held) {
-        wallos_grant_role($db, $userId, WALLOS_ROLE_ADMIN, WALLOS_ROLE_SOURCE_OIDC);
+        if (wallos_grant_role($db, $userId, WALLOS_ROLE_ADMIN, WALLOS_ROLE_SOURCE_OIDC) === false) {
+            error_log('Wallos OIDC: could not grant the admin role to user ' . (int) $userId);
+
+            return 'error';
+        }
 
         return 'granted';
     }
 
     if (!$shouldHold && $held) {
-        wallos_revoke_role($db, $userId, WALLOS_ROLE_ADMIN, WALLOS_ROLE_SOURCE_OIDC);
+        if (wallos_revoke_role($db, $userId, WALLOS_ROLE_ADMIN, WALLOS_ROLE_SOURCE_OIDC) === false) {
+            error_log('Wallos OIDC: user ' . (int) $userId
+                . ' keeps the provider-granted admin role their claim no longer supports');
+
+            return 'error';
+        }
 
         return 'revoked';
     }

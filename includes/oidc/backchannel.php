@@ -218,8 +218,20 @@ function wallos_oidc_revoke_sessions($db, $sub, $sid)
     foreach ($rows as $row) {
         // The remember-me token has to go as well, or the next request signs
         // the browser straight back in.
+        //
+        // And it is checked, because this is the failure that matters most
+        // here: the session row can be deleted perfectly while the token
+        // survives, and the browser holding that cookie is then signed back in
+        // — into a session with no oidc_sessions row, which no future
+        // back-channel logout can reach. The provider, meanwhile, was told the
+        // session ended and does not retry a success.
         if (($row['login_token'] ?? '') !== '') {
-            wallos_revoke_login_token($db, $row['login_token']);
+            if (wallos_revoke_login_token($db, $row['login_token']) === false) {
+                error_log('Wallos OIDC revocation: the remember-me token for session '
+                    . $row['id'] . ' survived; not counting the session as revoked: '
+                    . $db->lastErrorMsg());
+                continue;
+            }
         }
 
         // Both results checked, and the count taken from what was deleted
@@ -259,7 +271,14 @@ function wallos_oidc_revoke_sessions($db, $sub, $sid)
     // still there. That is the same rule the login-time sync follows.
     require_once __DIR__ . '/../user_roles.php';
     foreach (array_keys($affectedUsers) as $userId) {
-        wallos_revoke_role($db, $userId, WALLOS_ROLE_ADMIN, WALLOS_ROLE_SOURCE_OIDC);
+        if (wallos_revoke_role($db, $userId, WALLOS_ROLE_ADMIN, WALLOS_ROLE_SOURCE_OIDC) === false) {
+            // The session is gone either way, so this does not change the count
+            // reported to the provider. But an administrator whose group
+            // membership was withdrawn keeps the role until it is revoked, and
+            // nothing else will try again.
+            error_log('Wallos OIDC revocation: could not revoke the provider-granted admin role for user '
+                . $userId . ': ' . $db->lastErrorMsg());
+        }
     }
 
     return $revoked;

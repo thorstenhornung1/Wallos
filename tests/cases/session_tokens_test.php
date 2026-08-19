@@ -107,3 +107,109 @@ wallos_test('logout.php no longer binds an undefined user id', function () {
         'logout should revoke through the shared helper'
     );
 });
+
+// ------------------------------------------ telling failure apart from absence
+
+wallos_test('a delete that could not run is not reported as nothing to delete', function () {
+    // Both remove no rows, but only one of them means a browser is still
+    // holding a working credential. Reporting 0 for both is what let
+    // back-channel logout count a live session as revoked and answer the
+    // identity provider HTTP 200 — which no provider retries.
+    wallos_test_skip_unless_sqlite('needs a RAISE(ABORT) trigger');
+
+    $db = wallos_test_open_database();
+    wallos_test_create_user($db, 1, 'alice');
+    $db->exec("INSERT INTO login_tokens (user_id, token) VALUES (1, 'alice-token')");
+
+    $db->exec('CREATE TRIGGER block_token_delete BEFORE DELETE ON login_tokens
+               BEGIN SELECT RAISE(ABORT, \'blocked\'); END');
+
+    assert_true(@wallos_revoke_login_token($db, 'alice-token') === false,
+        'a failed delete says so');
+    assert_true(@wallos_revoke_user_login_tokens($db, 1) === false,
+        'and so does the per-user one');
+
+    $db->exec('DROP TRIGGER block_token_delete');
+
+    assert_same(1, (int) $db->scalar('SELECT COUNT(*) FROM login_tokens'),
+        'the token is indeed still there');
+
+    $db->close();
+});
+
+wallos_test('an absent token is still nothing, not a failure', function () {
+    // The other half of the distinction: this must stay 0, or every ordinary
+    // logout of a session without a remember-me token looks like an error.
+    $db = wallos_test_open_database();
+    wallos_test_create_user($db, 1, 'alice');
+
+    assert_same(0, wallos_revoke_login_token($db, 'never-issued'), 'nothing to remove');
+    assert_same(0, wallos_revoke_user_login_tokens($db, 1), 'none for this user');
+
+    $db->close();
+});
+
+wallos_test('back-channel logout does not count a session whose token survived', function () {
+    // The session row and the token are two writes. Deleting the row while the
+    // token lives leaves the browser able to sign back in — into a session with
+    // no oidc_sessions row, which no later back-channel logout can reach. The
+    // provider, meanwhile, was told the session ended, and does not retry a
+    // success.
+    //
+    // Driven rather than read: an earlier version of this case asserted that
+    // the token check appeared before the counter in the source, which stayed
+    // true when the `continue` was deleted and the session counted anyway.
+    wallos_test_skip_unless_sqlite('needs a RAISE(ABORT) trigger');
+
+    require_once WALLOS_ROOT . '/includes/oidc/backchannel.php';
+
+    $db = wallos_test_open_database();
+    wallos_test_create_user($db, 1, 'alice');
+    $db->exec("UPDATE \"user\" SET oidc_sub = 'sub-alice' WHERE id = 1");
+    $db->exec("INSERT INTO login_tokens (user_id, token) VALUES (1, 'alice-token')");
+    $db->exec("INSERT INTO oidc_sessions (user_id, sid, session_id, login_token)
+               VALUES (1, 'sid-1', 'php-session-1', 'alice-token')");
+
+    $db->exec('CREATE TRIGGER block_token_delete BEFORE DELETE ON login_tokens
+               BEGIN SELECT RAISE(ABORT, \'blocked\'); END');
+
+    $revoked = @wallos_oidc_revoke_sessions($db, null, 'sid-1');
+
+    assert_same(0, $revoked, 'a session whose token survived is not counted as revoked');
+
+    $db->exec('DROP TRIGGER block_token_delete');
+
+    assert_same(1, (int) $db->scalar('SELECT COUNT(*) FROM login_tokens'),
+        'the token really did survive');
+
+    $db->close();
+});
+
+wallos_test('back-channel logout counts a session it fully revoked', function () {
+    // The other side, so the case above cannot pass by always returning 0.
+    wallos_test_skip_unless_sqlite('driven through SQLite fixtures');
+
+    require_once WALLOS_ROOT . '/includes/oidc/backchannel.php';
+
+    $db = wallos_test_open_database();
+    wallos_test_create_user($db, 1, 'alice');
+    $db->exec("UPDATE \"user\" SET oidc_sub = 'sub-alice' WHERE id = 1");
+    $db->exec("INSERT INTO login_tokens (user_id, token) VALUES (1, 'alice-token')");
+    $db->exec("INSERT INTO oidc_sessions (user_id, sid, session_id, login_token)
+               VALUES (1, 'sid-1', 'php-session-1', 'alice-token')");
+
+    $revoked = wallos_oidc_revoke_sessions($db, null, 'sid-1');
+
+    assert_same(1, $revoked, 'counted');
+    assert_same(0, (int) $db->scalar('SELECT COUNT(*) FROM login_tokens'), 'the token is gone');
+    assert_same(0, (int) $db->scalar('SELECT COUNT(*) FROM oidc_sessions'), 'and so is the session');
+
+    $db->close();
+});
+
+wallos_test('logout notices a token it could not revoke', function () {
+    $source = file_get_contents(WALLOS_ROOT . '/logout.php');
+
+    assert_true(strpos($source, 'wallos_revoke_login_token($db, $sessionToken) === false') !== false,
+        'the result is checked rather than discarded');
+});
