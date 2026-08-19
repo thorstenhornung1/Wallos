@@ -18,6 +18,10 @@ define('WALLOS_TEST_TMP', sys_get_temp_dir() . '/wallos-tests');
 // exist yet when PHP parses the class declaration.
 require_once WALLOS_ROOT . '/includes/database/sqlite/database.php';
 
+// The boundary itself, because every fixture below opens its database through
+// wallos_database_connect() rather than constructing a connection of its own.
+require_once WALLOS_ROOT . '/includes/database/connection.php';
+
 $GLOBALS['wallos_tests'] = [];
 $GLOBALS['wallos_test_failures'] = [];
 $GLOBALS['wallos_test_skipped'] = [];
@@ -137,6 +141,12 @@ function wallos_test_reset_env()
         'WALLOS_DB_DRIVER', 'WALLOS_DB_HOST', 'WALLOS_DB_PORT', 'WALLOS_DB_NAME',
         'WALLOS_DB_USER', 'WALLOS_DB_PASSWORD', 'WALLOS_DB_PASSWORD_FILE',
         'WALLOS_DB_SSLMODE', 'WALLOS_DB_PATH',
+        // Not read by Wallos but by libpq underneath it: the PostgreSQL fixture
+        // puts the case's own schema in here so that a connection opened by the
+        // code under test lands in the same isolation as the fixture's own.
+        // Left standing between cases it would point at a schema that has been
+        // dropped.
+        'PGOPTIONS',
     ];
 
     foreach ($variables as $name) {
@@ -267,12 +277,49 @@ function wallos_test_pgsql_settings()
 }
 
 /**
+ * Puts the PostgreSQL test settings into the environment, the way a deployment
+ * selects a backend.
+ *
+ * The fixture configures the environment instead of handing a connection its
+ * settings directly, because that is the only input the application has. A test
+ * that constructs its own connection object is testing a connection nobody in
+ * production ever holds.
+ *
+ * @param string $schema the case's own schema
+ * @return void
+ */
+function wallos_test_pgsql_env($schema)
+{
+    $settings = wallos_test_pgsql_settings();
+
+    putenv('WALLOS_DB_DRIVER=pgsql');
+    putenv('WALLOS_DB_HOST=' . $settings['host']);
+    putenv('WALLOS_DB_PORT=' . $settings['port']);
+    putenv('WALLOS_DB_NAME=' . $settings['name']);
+    putenv('WALLOS_DB_USER=' . $settings['user']);
+    putenv('WALLOS_DB_PASSWORD=' . $settings['password']);
+    putenv('WALLOS_DB_SSLMODE=' . $settings['sslmode']);
+
+    // libpq reads PGOPTIONS when it opens a connection, so every connection
+    // built from this environment starts in the case's own schema — including
+    // one the code under test opens for itself, which would otherwise land in
+    // public and see another case's rows. The fixture's own connection sets
+    // search_path explicitly as well; this covers the ones it never sees.
+    putenv('PGOPTIONS=-c search_path=' . $schema);
+}
+
+/**
  * A PostgreSQL database with the baseline applied, isolated per case.
  *
  * Each case gets its own schema rather than its own database: creating a schema
  * and loading the baseline costs about 120ms where a database costs far more,
  * and search_path makes the isolation complete as far as the application can
  * tell.
+ *
+ * The object itself comes from wallos_database_connect(), so a case holds what
+ * a request holds. When the fixture built its own WallosPgsqlDatabase the two
+ * were the same class by coincidence rather than by construction, and the
+ * coincidence hid nothing here only because it happened to hold.
  *
  * @return WallosDatabase
  */
@@ -287,21 +334,64 @@ function wallos_test_open_pgsql_database()
         $baseline = file_get_contents(WALLOS_ROOT . '/includes/database/pgsql/schema.sql');
     }
 
-    $settings = wallos_test_pgsql_settings();
-    $db = new WallosPgsqlDatabase(
-        wallos_database_pgsql_dsn($settings),
-        $settings['user'],
-        $settings['password']
-    );
-
     $schema = 'wallos_test_' . str_replace('.', '', uniqid('', true));
-    $GLOBALS['wallos_test_pgsql_schemas'][] = $schema;
+    wallos_test_pgsql_env($schema);
+    wallos_test_pgsql_reachable();
+
+    $db = wallos_database_connect();
 
     $db->exec('CREATE SCHEMA ' . $schema);
     $db->exec('SET search_path TO ' . $schema);
     $db->exec($baseline);
 
+    // Recorded only once the schema exists, so the cleanup at the end of the
+    // run never tries to drop a name that was never created.
+    $GLOBALS['wallos_test_pgsql_schemas'][] = $schema;
+
     return $db;
+}
+
+/**
+ * Checks once per run that the configured PostgreSQL server answers.
+ *
+ * wallos_database_connect() is the application's front door, and the
+ * application's response to an unusable database is wallos_database_fail():
+ * a line on stderr and exit(1). That is right for a request and wrong for a
+ * test run, which would stop mid-suite with no failing case and no summary. So
+ * the first connection of the run is made here, in a try, and turned into an
+ * exception the runner reports against the case that asked for a database.
+ *
+ * @return void
+ */
+function wallos_test_pgsql_reachable()
+{
+    static $checked = false;
+
+    if ($checked) {
+        return;
+    }
+
+    $settings = wallos_test_pgsql_settings();
+
+    try {
+        $probe = new WallosPgsqlDatabase(
+            wallos_database_pgsql_dsn($settings),
+            $settings['user'],
+            $settings['password']
+        );
+        $probe->close();
+    } catch (PDOException $exception) {
+        throw new RuntimeException(sprintf(
+            'WALLOS_TEST_DRIVER=pgsql but %s:%d/%s is not reachable as %s: %s',
+            $settings['host'],
+            $settings['port'],
+            $settings['name'],
+            $settings['user'],
+            $exception->getMessage()
+        ));
+    }
+
+    $checked = true;
 }
 
 /**
@@ -317,6 +407,11 @@ function wallos_test_pgsql_cleanup()
 
     require_once WALLOS_ROOT . '/includes/database/pgsql/database.php';
     require_once WALLOS_ROOT . '/includes/database/configuration.php';
+
+    // Deliberately not through the environment: PGOPTIONS still names the last
+    // case's schema, and a connection that cannot resolve its search_path is a
+    // poor place from which to drop schemas.
+    putenv('PGOPTIONS');
 
     $settings = wallos_test_pgsql_settings();
     $db = new WallosPgsqlDatabase(
@@ -455,7 +550,19 @@ function wallos_test_database()
 /**
  * Opens a fresh database with the full application schema.
  *
- * @return SQLite3
+ * The one fixture every case uses, and it hands over what the application would
+ * be handed: wallos_database_connect() with no arguments, resolving the backend
+ * from the environment exactly as index.php does. The fixture's job is to make
+ * the environment point at a throwaway database, not to build a connection of
+ * its own.
+ *
+ * This matters beyond tidiness. A fixture that constructs its own object can
+ * construct one the application never has — and a signature like
+ * computeAmountNeededInPeriod(..., SQLite3 $database) then goes on rejecting
+ * the real PostgreSQL connection in production while the suite, holding
+ * something else, stays green (issue #90).
+ *
+ * @return WallosDatabase
  */
 function wallos_test_open_database()
 {
@@ -463,7 +570,17 @@ function wallos_test_open_database()
         return wallos_test_open_pgsql_database();
     }
 
-    return wallos_database_connect(wallos_test_database());
+    // The path goes into the environment rather than into the argument, because
+    // the argument is the SQLite-only branch of the boundary: passing a file
+    // selects SQLite whatever the configuration says, so a case would keep
+    // getting a SQLite connection even under WALLOS_TEST_DRIVER=pgsql. Setting
+    // WALLOS_DB_PATH takes the same branch a SQLite installation takes, and
+    // leaves it standing for the duration of the case so that code opening its
+    // own connection reaches the fixture instead of the developer's real
+    // db/wallos.db. wallos_test_reset_env() clears it before the next case.
+    putenv('WALLOS_DB_PATH=' . wallos_test_database());
+
+    return wallos_database_connect();
 }
 
 /**
@@ -502,6 +619,11 @@ class WallosCountingDatabase extends WallosSqliteDatabase
 }
 
 /**
+ * The one fixture that does not come from wallos_database_connect(), because
+ * counting statements means overriding them: the subclass is the measurement.
+ * It extends WallosSqliteDatabase, so it is still the class the boundary hands
+ * out on SQLite, and the cases that use it are SQLite-only for that reason.
+ *
  * @return WallosCountingDatabase
  */
 function wallos_test_open_counting_database()
