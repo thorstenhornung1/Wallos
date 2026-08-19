@@ -49,6 +49,7 @@ if (!wallos_get_instance_smtp_config($db)['valid'] || $settings['server_url'] ==
 $hasSuccessMessage = false;
 $hasErrorMessage = false;
 $passwordsMismatch = false;
+$resetFailed = false;
 $hideForm = false;
 
 // A reset token is good for one hour. The window is computed here rather than
@@ -120,17 +121,47 @@ if (isset($_POST['password']) && $_POST['password'] != "" && isset($_POST['confi
         $user = $result->fetchArray(SQLITE3_ASSOC);
         
         if ($password == $confirmPassword) {
+            // The new password is written first and checked, and the token is
+            // only consumed once that succeeded.
+            //
+            // Both statements used to be unchecked with the success message set
+            // unconditionally afterwards. A failed UPDATE told the user the
+            // reset had worked while their old password — the one they came
+            // here because they had forgotten — still applied, and the token was
+            // spent, so requesting a new link produced the same outcome again.
             $passwordHash = password_hash($password, PASSWORD_DEFAULT);
             $stmt = $db->prepare("UPDATE \"user\" SET password = :password WHERE id = :id");
-            $stmt->bindValue(':password', $passwordHash, SQLITE3_TEXT);
-            $stmt->bindValue(':id', $user['id'], SQLITE3_INTEGER);
-            $stmt->execute();
+            $passwordChanged = false;
 
-            $stmt = $db->prepare("DELETE FROM password_resets WHERE token = :token");
-            $stmt->bindValue(':token', $token, SQLITE3_TEXT);
-            $stmt->execute();
-            $hasSuccessMessage = true;
-            $hideForm = true;
+            if ($stmt !== false) {
+                $stmt->bindValue(':password', $passwordHash, SQLITE3_TEXT);
+                $stmt->bindValue(':id', $user['id'], SQLITE3_INTEGER);
+                $passwordChanged = $stmt->execute() !== false && $db->changes() > 0;
+            }
+
+            if (!$passwordChanged) {
+                error_log('Wallos password reset: the password was not changed for user '
+                    . $user['id'] . ': ' . $db->lastErrorMsg());
+                $hasErrorMessage = true;
+                $resetFailed = true;
+            } else {
+                // Only now is the token spent. A token that survives a failed
+                // reset can be used again; one consumed by a failed reset
+                // cannot, and the user has no way to tell which happened.
+                $stmt = $db->prepare("DELETE FROM password_resets WHERE token = :token");
+                if ($stmt !== false) {
+                    $stmt->bindValue(':token', $token, SQLITE3_TEXT);
+                    if ($stmt->execute() === false) {
+                        // The password did change, so this is not a failure the
+                        // user can act on — but the token now outlives its use.
+                        error_log('Wallos password reset: the used token was not cleared: '
+                            . $db->lastErrorMsg());
+                    }
+                }
+
+                $hasSuccessMessage = true;
+                $hideForm = true;
+            }
         } else {
             $hasErrorMessage = true;
             $passwordsMismatch = true;

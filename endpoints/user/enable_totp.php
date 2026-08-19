@@ -94,26 +94,73 @@ if ($action === 'verify') {
                 $backupCodes[] = $backupCode;
             }
 
-            // Remove old TOTP data
+            // All three writes in one transaction, every result checked.
+            //
+            // These used to be three unchecked statements followed by a
+            // hardcoded success. If the INSERT failed while the UPDATE
+            // succeeded, the account was left with totp_enabled = 1 and no
+            // secret: login.php sends it to totp.php, totp.php finds nothing to
+            // verify against, and the account cannot be signed into by any code
+            // or backup code — while the user had just been shown backup codes
+            // and told to write them down. The mirror case is quieter and no
+            // better: the user believes 2FA is on and it is not.
+            $db->beginTransaction();
+
+            $failure = null;
+
             $stmt = $db->prepare("DELETE FROM totp WHERE user_id = :user_id");
-            $stmt->bindValue(':user_id', $userId, SQLITE3_INTEGER);
-            $stmt->execute();
+            if ($stmt === false || ($stmt->bindValue(':user_id', $userId, SQLITE3_INTEGER) && $stmt->execute() === false)) {
+                $failure = 'clearing the previous secret';
+            }
 
-            $stmt = $db->prepare("INSERT INTO totp (user_id, totp_secret, backup_codes, last_totp_used) VALUES (:user_id, :totp_secret, :backup_codes, :last_totp_used)");
-            $stmt->bindValue(':user_id', $userId, SQLITE3_INTEGER);
-            $stmt->bindValue(':totp_secret', $secret, SQLITE3_TEXT);
-            $stmt->bindValue(':backup_codes', json_encode($backupCodes), SQLITE3_TEXT);
-            // Store the current TOTP time-step (not a raw timestamp): the code
-            // just verified above counts as used, so it cannot be replayed as the
-            // first login code. totp.php compares against this same step counter.
-            $stmt->bindValue(':last_totp_used', intdiv(time(), 30), SQLITE3_INTEGER);
-            $stmt->execute();
+            if ($failure === null) {
+                $stmt = $db->prepare("INSERT INTO totp (user_id, totp_secret, backup_codes, last_totp_used) VALUES (:user_id, :totp_secret, :backup_codes, :last_totp_used)");
+                if ($stmt === false) {
+                    $failure = 'storing the secret';
+                } else {
+                    $stmt->bindValue(':user_id', $userId, SQLITE3_INTEGER);
+                    $stmt->bindValue(':totp_secret', $secret, SQLITE3_TEXT);
+                    $stmt->bindValue(':backup_codes', json_encode($backupCodes), SQLITE3_TEXT);
+                    // Store the current TOTP time-step (not a raw timestamp): the code
+                    // just verified above counts as used, so it cannot be replayed as the
+                    // first login code. totp.php compares against this same step counter.
+                    $stmt->bindValue(':last_totp_used', intdiv(time(), 30), SQLITE3_INTEGER);
+                    if ($stmt->execute() === false) {
+                        $failure = 'storing the secret';
+                    }
+                }
+            }
 
-            // Update user totp_enabled
+            if ($failure === null) {
+                $stmt = $db->prepare("UPDATE \"user\" SET totp_enabled = 1 WHERE id = :user_id");
+                if ($stmt === false) {
+                    $failure = 'enabling two-factor authentication';
+                } else {
+                    $stmt->bindValue(':user_id', $userId, SQLITE3_INTEGER);
+                    if ($stmt->execute() === false) {
+                        $failure = 'enabling two-factor authentication';
+                    }
+                }
+            }
 
-            $stmt = $db->prepare("UPDATE \"user\" SET totp_enabled = 1 WHERE id = :user_id");
-            $stmt->bindValue(':user_id', $userId, SQLITE3_INTEGER);
-            $stmt->execute();
+            if ($failure !== null) {
+                $db->rollBack();
+                error_log('Wallos 2FA enrolment failed while ' . $failure . ': ' . $db->lastErrorMsg());
+
+                die(json_encode([
+                    "success" => false,
+                    "message" => translate('error', $i18n)
+                ]));
+            }
+
+            if ($db->commit() === false) {
+                error_log('Wallos 2FA enrolment could not be committed: ' . $db->lastErrorMsg());
+
+                die(json_encode([
+                    "success" => false,
+                    "message" => translate('error', $i18n)
+                ]));
+            }
 
             die(json_encode([
                 "success" => true,

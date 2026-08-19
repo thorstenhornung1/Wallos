@@ -124,7 +124,14 @@ function wallos_oidc_register_session($db, $userId, $sid, $sessionId, $loginToke
     $stmt->bindValue(':sid', $sid === null ? '' : $sid, SQLITE3_TEXT);
     $stmt->bindValue(':sessionId', $sessionId, SQLITE3_TEXT);
     $stmt->bindValue(':loginToken', $loginToken === null ? '' : $loginToken, SQLITE3_TEXT);
-    $stmt->execute();
+
+    // Checked, because a session with no row here can never be revoked — the
+    // guard reads the row's absence as "not an OIDC session" and lets it
+    // through forever.
+    if ($stmt->execute() === false) {
+        error_log('Wallos OIDC: the session was not recorded and cannot be revoked later: '
+            . $db->lastErrorMsg());
+    }
 }
 
 /**
@@ -206,6 +213,7 @@ function wallos_oidc_revoke_sessions($db, $sub, $sid)
     }
 
     $affectedUsers = [];
+    $revoked = 0;
 
     foreach ($rows as $row) {
         // The remember-me token has to go as well, or the next request signs
@@ -214,13 +222,32 @@ function wallos_oidc_revoke_sessions($db, $sub, $sid)
             wallos_revoke_login_token($db, $row['login_token']);
         }
 
+        // Both results checked, and the count taken from what was deleted
+        // rather than from what was found.
+        //
+        // This function used to return count($rows) — the size of the SELECT
+        // above — with the DELETE's prepare and execute both discarded. It was
+        // therefore structurally incapable of noticing the delete failing, and
+        // answered the identity provider with a number of sessions it had not
+        // revoked. The provider does not retry a successful response.
+        //
+        // That is defect #45 living inside the function written to fix it:
+        // a statement whose failure is reported as success.
+        $delete = $db->prepare('DELETE FROM oidc_sessions WHERE id = :id');
+        if ($delete === false) {
+            error_log('Wallos OIDC revocation: could not prepare the session delete: ' . $db->lastErrorMsg());
+            continue;
+        }
+        $delete->bindValue(':id', $row['id'], SQLITE3_INTEGER);
+        if ($delete->execute() === false) {
+            error_log('Wallos OIDC revocation: session ' . $row['id'] . ' was not revoked: ' . $db->lastErrorMsg());
+            continue;
+        }
+
+        $revoked++;
         if (isset($row['user_id'])) {
             $affectedUsers[(int) $row['user_id']] = true;
         }
-
-        $delete = $db->prepare('DELETE FROM oidc_sessions WHERE id = :id');
-        $delete->bindValue(':id', $row['id'], SQLITE3_INTEGER);
-        $delete->execute();
     }
 
     // The provider-derived admin role goes with the session.
@@ -235,7 +262,7 @@ function wallos_oidc_revoke_sessions($db, $sub, $sid)
         wallos_revoke_role($db, $userId, WALLOS_ROLE_ADMIN, WALLOS_ROLE_SOURCE_OIDC);
     }
 
-    return count($rows);
+    return $revoked;
 }
 
 /**
