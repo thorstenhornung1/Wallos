@@ -12,9 +12,15 @@ PGID=${PGID:-82}
 # Change the www-data user id and group id to be the user-specified ones
 groupmod -o -g "$PGID" www-data
 usermod -o -u "$PUID" www-data
-chown -R www-data:www-data /var/www/html
+# Only the two mount points, not the whole tree.
+#
+# The Dockerfile already set ownership at build time, so a recursive chown here
+# changes nothing — but every chown() against an overlayfs lower file forces a
+# full copy-up, which wrote 14MB into the container's writable layer on every
+# start before a single request was served. The two directories below are the
+# only ones that can arrive with foreign ownership, because they are volumes.
+chown -R www-data:www-data /var/www/html/db /var/www/html/images/uploads /var/www/html/.tmp 2>/dev/null || true
 chown -R www-data:www-data /tmp
-chmod -R 770 /tmp
 
 # PIDs we’ll track
 PHP_FPM_PID=
@@ -75,9 +81,6 @@ mkdir -p /var/www/html/images/uploads/logos/avatars
 # Change permissions on the logos directory
 chmod -R 755 /var/www/html/images/uploads/logos
 chown -R www-data:www-data /var/www/html/images/uploads/logos
-
-# Remove crontab for the user
-crontab -d -u root
 
 # Run updatenextpayment.php and wait for it to finish
 /usr/local/bin/php /var/www/html/endpoints/cronjobs/updatenextpayment.php

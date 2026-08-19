@@ -31,7 +31,18 @@ RUN dos2unix /etc/cron.d/cronjobs && \
     chmod 0644 /etc/cron.d/cronjobs && \
     /usr/bin/crontab /etc/cron.d/cronjobs && \
     mkdir /var/log/cron && \
-    chown -R www-data:www-data /var/www/html && \
+    # The application code belongs to root; only the data belongs to www-data.
+    #
+    # Both halves matter. The base image leaves /var/www/html at mode 1777, so
+    # any process could drop a file in the docroot for nginx to serve. And a
+    # blanket chown to www-data made the cron job scripts writable by the user
+    # php-fpm runs as — the user any PHP-level flaw reaches — while root
+    # executes those same scripts every two minutes. Either alone is a bug;
+    # together they are a two-minute path from code execution to container root.
+    chown -R root:root /var/www/html && \
+    chmod 0755 /var/www/html && \
+    mkdir -p /var/www/html/db /var/www/html/images/uploads/logos/avatars /var/www/html/.tmp && \
+    chown -R www-data:www-data /var/www/html/db /var/www/html/images/uploads /var/www/html/.tmp && \
     chmod +x /var/www/html/startup.sh && \
     echo 'pm.max_children = 15' >> /usr/local/etc/php-fpm.d/zz-docker.conf && \
     echo 'pm.max_requests = 500' >> /usr/local/etc/php-fpm.d/zz-docker.conf
