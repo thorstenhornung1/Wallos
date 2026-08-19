@@ -1,6 +1,18 @@
 <?php
 require_once '../../includes/connect_endpoint.php';
 require_once '../../includes/validate_endpoint_admin.php';
+require_once __DIR__ . '/backend_guard.php';
+
+// Refuse before the upload is touched. What follows replaces db/wallos.db and
+// answers success — on PostgreSQL, having replaced a file the running instance
+// never reads, so the backup reaches nothing.
+if (!wallos_db_file_backup_supported($db)) {
+    http_response_code(501);
+    die(json_encode([
+        "success" => false,
+        "message" => wallos_db_file_backup_refusal('restore', $db)
+    ]));
+}
 
 function emptyRestoreFolder()
 {

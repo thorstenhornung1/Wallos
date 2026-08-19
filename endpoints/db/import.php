@@ -20,6 +20,21 @@ if ($storedToken === '' || !hash_equals($storedToken, $submittedToken)) {
     ]));
 }
 
+// After the token check, and before anything is moved. On PostgreSQL what
+// follows replaces db/wallos.db, deletes the setup token, reconnects to
+// PostgreSQL and reports success — leaving an empty database and no token to
+// try again with. Refusing here keeps the token, which is the difference
+// between an install that can still be finished and one that cannot.
+require_once __DIR__ . '/backend_guard.php';
+
+if (!wallos_db_file_backup_supported($db)) {
+    http_response_code(501);
+    die(json_encode([
+        "success" => false,
+        "message" => wallos_db_file_backup_refusal('import', $db)
+    ]));
+}
+
 function emptyRestoreFolder() {
     $files = new RecursiveIteratorIterator(
         new RecursiveDirectoryIterator('../../.tmp', RecursiveDirectoryIterator::SKIP_DOTS),

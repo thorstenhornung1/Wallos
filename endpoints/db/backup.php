@@ -1,6 +1,18 @@
 <?php
 require_once '../../includes/connect_endpoint.php';
 require_once '../../includes/validate_endpoint_admin.php';
+require_once __DIR__ . '/backend_guard.php';
+
+// Refuse before anything is built. On PostgreSQL db/ holds only setup_token.db,
+// so what follows would stream a valid archive with no data in it and call that
+// a success.
+if (!wallos_db_file_backup_supported($db)) {
+    http_response_code(501);
+    die(json_encode([
+        "success" => false,
+        "message" => wallos_db_file_backup_refusal('backup', $db)
+    ]));
+}
 
 function addFolderToZip($dir, $zipArchive, $zipdir = '')
 {
