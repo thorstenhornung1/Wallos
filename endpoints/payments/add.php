@@ -234,7 +234,7 @@ if ($iconUrl !== "") {
 }
 
 // Get the maximum existing ID
-$stmt = $db->prepare("SELECT MAX(id) as maxID FROM payment_methods");
+$stmt = $db->prepare("SELECT MAX(id) as \"maxID\" FROM payment_methods");
 $result = $stmt->execute();
 $row = $result->fetchArray(SQLITE3_ASSOC);
 $maxID = $row['maxID'];

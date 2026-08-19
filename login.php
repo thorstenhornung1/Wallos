@@ -295,7 +295,7 @@ if (!$password_login_disabled) {
     if ($registrationsOpen == 1 && $maxUsers == 0) {
         $registrations = true;
     } else if ($registrationsOpen == 1 && $maxUsers > 0) {
-        $userCountQuery = "SELECT COUNT(id) as userCount FROM \"user\"";
+        $userCountQuery = "SELECT COUNT(id) as \"userCount\" FROM \"user\"";
         $userCountResult = $db->query($userCountQuery);
         $userCountRow = $userCountResult->fetchArray(SQLITE3_ASSOC);
         $userCount = $userCountRow['userCount'];

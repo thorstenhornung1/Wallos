@@ -28,7 +28,7 @@ if (!file_exists('images/uploads/logos')) {
 }
 
 // If there's already a user on the database, redirect to login page if registrations are closed or maxn users is reached
-$stmt = $db->prepare('SELECT COUNT(*) as userCount FROM "user"');
+$stmt = $db->prepare('SELECT COUNT(*) as "userCount" FROM "user"');
 $result = $stmt->execute();
 $userCountResult = $result->fetchArray(SQLITE3_ASSOC);
 $userCount = $userCountResult['userCount'];

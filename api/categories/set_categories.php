@@ -89,7 +89,7 @@ switch ($action) {
         $name = validate($name);
 
         // Get next order sequence
-        $stmtOrder = $db->prepare('SELECT MAX("order") as maxOrder FROM categories WHERE user_id = :userId');
+        $stmtOrder = $db->prepare('SELECT MAX("order") as "maxOrder" FROM categories WHERE user_id = :userId');
         $stmtOrder->bindParam(':userId', $userId, SQLITE3_INTEGER);
         $resultOrder = $stmtOrder->execute();
         $rowOrder = $resultOrder->fetchArray(SQLITE3_ASSOC);

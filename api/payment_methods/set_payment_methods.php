@@ -298,7 +298,7 @@ switch ($action) {
         }
 
         // Get the maximum existing ID
-        $stmtMax = $db->prepare("SELECT MAX(id) as maxID FROM payment_methods");
+        $stmtMax = $db->prepare("SELECT MAX(id) as \"maxID\" FROM payment_methods");
         $resultMax = $stmtMax->execute();
         $rowMax = $resultMax->fetchArray(SQLITE3_ASSOC);
         $maxID = $rowMax['maxID'] ?? 0;

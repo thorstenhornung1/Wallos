@@ -25,7 +25,7 @@ switch ($action) {
 
 function handleAddCategory($db, $userId, $i18n)
 {
-    $stmt = $db->prepare('SELECT MAX("order") as maxOrder FROM categories WHERE user_id = :userId');
+    $stmt = $db->prepare('SELECT MAX("order") as "maxOrder" FROM categories WHERE user_id = :userId');
     $stmt->bindParam(':userId', $userId, SQLITE3_INTEGER);
     $result = $stmt->execute();
     $row = $result->fetchArray(SQLITE3_ASSOC);

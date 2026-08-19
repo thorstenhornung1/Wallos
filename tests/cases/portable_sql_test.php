@@ -306,3 +306,75 @@ wallos_test('no application query is written in a dialect only SQLite accepts', 
 
     assert_true($scanned > 100, 'the scan found the application (only ' . $scanned . ' files)');
 });
+
+wallos_test('no SQL alias relies on the database preserving its case', function () {
+    // PostgreSQL folds an unquoted identifier to lower case, so `as userCount`
+    // comes back as `usercount` and every read of $row['userCount'] finds
+    // nothing. SQLite preserves the case, so the defect is invisible there.
+    //
+    // Seven sites had this. The reading side needs no change — quoting the
+    // alias works on both backends.
+    //
+    // Asserting the key rather than the value matters here: a test written as
+    // $row['userCount'] ?? $row['usercount'] passes on both backends and hides
+    // the defect permanently.
+    $offenders = [];
+    $scanned = 0;
+
+    $paths = array_merge(
+        glob(WALLOS_ROOT . '/*.php'),
+        glob(WALLOS_ROOT . '/includes/*.php'),
+        glob(WALLOS_ROOT . '/includes/*/*.php'),
+        glob(WALLOS_ROOT . '/endpoints/*/*.php'),
+        glob(WALLOS_ROOT . '/api/*/*.php')
+    );
+
+    foreach ($paths as $path) {
+        $scanned++;
+        $source = file_get_contents($path);
+
+        // ` as camelCase` with no quote before the alias.
+        if (preg_match_all('/\bas\s+(?![\'"\\\\])([a-z]+[A-Z][a-zA-Z]*)/', $source, $matches) === 0) {
+            continue;
+        }
+
+        foreach ($matches[1] as $alias) {
+            $offenders[] = str_replace(WALLOS_ROOT . '/', '', $path) . ': as ' . $alias;
+        }
+    }
+
+    assert_true($scanned > 100, 'the scan reached the application, not an empty glob');
+    assert_same([], $offenders, 'every mixed-case alias is quoted');
+});
+
+wallos_test('no function signature names a backend instead of the boundary', function () {
+    // A SQLite3 type hint rejects the PostgreSQL connection with a TypeError
+    // before the function body runs. Two functions had one, and between them
+    // they killed sendnotifications — which nobody watches — plus stats.php and
+    // get_period_budget.php.
+    $offenders = [];
+    $scanned = 0;
+
+    $paths = array_merge(
+        glob(WALLOS_ROOT . '/*.php'),
+        glob(WALLOS_ROOT . '/includes/*.php'),
+        glob(WALLOS_ROOT . '/includes/*/*.php'),
+        glob(WALLOS_ROOT . '/endpoints/*/*.php'),
+        glob(WALLOS_ROOT . '/api/*/*.php')
+    );
+
+    foreach ($paths as $path) {
+        // The SQLite implementation may name its own type.
+        if (strpos($path, '/includes/database/sqlite/') !== false) {
+            continue;
+        }
+
+        $scanned++;
+        if (preg_match('/function\s+\w+\s*\([^)]*\bSQLite3\s+\$/', file_get_contents($path)) === 1) {
+            $offenders[] = str_replace(WALLOS_ROOT . '/', '', $path);
+        }
+    }
+
+    assert_true($scanned > 100, 'the scan reached the application');
+    assert_same([], $offenders, 'type hints name WallosDatabase, not an implementation');
+});
