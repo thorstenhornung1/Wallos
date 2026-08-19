@@ -10,8 +10,8 @@ For 'add' and 'edit' actions (all optional for 'edit'):
 - name: the name of the subscription.
 - price: the price of the subscription (float).
 - currency_id: the currency ID of the subscription (integer).
-- frequency: the payment frequency (integer).
-- cycle: the payment cycle (integer: 1-days, 2-weeks, 3-months, 4-years).
+- frequency: how many cycles apart the payments are (integer, 1 to 366).
+- cycle: the payment cycle (integer: 1-days, 2-weeks, 3-months, 4-years, 5-one-time).
 - next_payment: the next payment date (YYYY-MM-DD).
 - start_date: the start date of the subscription (YYYY-MM-DD).
 - auto_renew: whether the subscription auto renews (1 or 0, default 1).
@@ -46,6 +46,7 @@ Example response:
 error_reporting(E_ERROR | E_PARSE);
 require_once '../../includes/connect_endpoint.php';
 require_once '../../includes/inputvalidation.php';
+require_once '../../includes/reference_validation.php';
 require_once '../../includes/ssrf_helper.php';
 require_once '../../includes/logo_theme_variant.php';
 
@@ -395,18 +396,6 @@ switch ($action) {
 
         $name = validate($name);
         $price = floatval($price);
-        $currencyId = intval($currencyId);
-        $frequency = intval($frequency);
-        $cycle = intval($cycle);
-
-        if (!in_array($cycle, [1, 2, 3, 4], true)) {
-            echo json_encode([
-                'success' => false,
-                'title' => 'Invalid parameter',
-                'message' => 'Parameter "cycle" must be 1 (Days), 2 (Weeks), 3 (Months), or 4 (Years).'
-            ]);
-            exit;
-        }
 
         // Validate Dates
         if (!validateDate($nextPayment)) {
@@ -434,71 +423,35 @@ switch ($action) {
             exit;
         }
 
-        // Validate Foreign Keys
-        // Currency
-        $currStmt = $db->prepare("SELECT id FROM currencies WHERE id = :id AND user_id = :userId");
-        $currStmt->bindValue(':id', $currencyId, SQLITE3_INTEGER);
-        $currStmt->bindValue(':userId', $userId, SQLITE3_INTEGER);
-        $currRes = $currStmt->execute()->fetchArray();
-        if (!$currRes) {
+        // Validate the ids, the cycle and the frequency in one place, shared
+        // with endpoints/subscription/add.php. This branch used to check four
+        // of the six here and forget the frequency, while the form endpoint
+        // checked none of them, so the two paths disagreed about what a valid
+        // subscription is (issue #82).
+        $references = wallos_validate_subscription_input($db, $userId, [
+            'currency_id' => $currencyId,
+            'category_id' => $categoryId,
+            'payer_user_id' => $payerUserId,
+            'payment_method_id' => $paymentMethodId,
+            'cycle' => $cycle,
+            'frequency' => $frequency,
+        ]);
+
+        if (!$references['valid']) {
             echo json_encode([
                 'success' => false,
-                'title' => 'Invalid currency ID',
-                'message' => 'The specified currency does not exist or does not belong to you.'
+                'title' => $references['title'],
+                'message' => $references['message']
             ]);
             exit;
         }
 
-        // Category
-        if ($categoryId !== null) {
-            $categoryId = intval($categoryId);
-            $catStmt = $db->prepare("SELECT id FROM categories WHERE id = :id AND user_id = :userId");
-            $catStmt->bindValue(':id', $categoryId, SQLITE3_INTEGER);
-            $catStmt->bindValue(':userId', $userId, SQLITE3_INTEGER);
-            $catRes = $catStmt->execute()->fetchArray();
-            if (!$catRes) {
-                echo json_encode([
-                    'success' => false,
-                    'title' => 'Invalid category ID',
-                    'message' => 'The specified category does not exist or does not belong to you.'
-                ]);
-                exit;
-            }
-        }
-
-        // Payer user
-        if ($payerUserId !== null) {
-            $payerUserId = intval($payerUserId);
-            $payerStmt = $db->prepare("SELECT id FROM household WHERE id = :id AND user_id = :userId");
-            $payerStmt->bindValue(':id', $payerUserId, SQLITE3_INTEGER);
-            $payerStmt->bindValue(':userId', $userId, SQLITE3_INTEGER);
-            $payerRes = $payerStmt->execute()->fetchArray();
-            if (!$payerRes) {
-                echo json_encode([
-                    'success' => false,
-                    'title' => 'Invalid payer ID',
-                    'message' => 'The specified household member does not exist or does not belong to you.'
-                ]);
-                exit;
-            }
-        }
-
-        // Payment Method
-        if ($paymentMethodId !== null) {
-            $paymentMethodId = intval($paymentMethodId);
-            $pmStmt = $db->prepare("SELECT id FROM payment_methods WHERE id = :id AND (user_id = :userId OR user_id = 0 OR user_id IS NULL)");
-            $pmStmt->bindValue(':id', $paymentMethodId, SQLITE3_INTEGER);
-            $pmStmt->bindValue(':userId', $userId, SQLITE3_INTEGER);
-            $pmRes = $pmStmt->execute()->fetchArray();
-            if (!$pmRes) {
-                echo json_encode([
-                    'success' => false,
-                    'title' => 'Invalid payment method ID',
-                    'message' => 'The specified payment method does not exist or does not belong to you.'
-                ]);
-                exit;
-            }
-        }
+        $currencyId = $references['values']['currency_id'];
+        $categoryId = $references['values']['category_id'];
+        $payerUserId = $references['values']['payer_user_id'];
+        $paymentMethodId = $references['values']['payment_method_id'];
+        $cycle = $references['values']['cycle'];
+        $frequency = $references['values']['frequency'];
 
         // Replacement Subscription
         if ($replacementSubscriptionId !== null) {
@@ -683,15 +636,6 @@ switch ($action) {
             exit;
         }
 
-        if (!in_array($cycle, [1, 2, 3, 4], true)) {
-            echo json_encode([
-                'success' => false,
-                'title' => 'Invalid cycle',
-                'message' => 'Parameter "cycle" must be 1 (Days), 2 (Weeks), 3 (Months), or 4 (Years).'
-            ]);
-            exit;
-        }
-
         // Validate Dates
         if (!validateDate($nextPayment)) {
             echo json_encode([
@@ -718,68 +662,36 @@ switch ($action) {
             exit;
         }
 
-        // Validate Foreign Keys
-        // Currency
-        $currStmt = $db->prepare("SELECT id FROM currencies WHERE id = :id AND user_id = :userId");
-        $currStmt->bindValue(':id', $currencyId, SQLITE3_INTEGER);
-        $currStmt->bindValue(':userId', $userId, SQLITE3_INTEGER);
-        $currRes = $currStmt->execute()->fetchArray();
-        if (!$currRes) {
+        // The same shared validation the 'add' branch runs. The values here are
+        // already merged with the stored row, so an edit that names none of
+        // them re-validates what the subscription carries today rather than
+        // trusting it — a row written before issue #82 can hold another
+        // account's category, and this is where that stops being carried
+        // forward silently.
+        $references = wallos_validate_subscription_input($db, $userId, [
+            'currency_id' => $currencyId,
+            'category_id' => $categoryId,
+            'payer_user_id' => $payerUserId,
+            'payment_method_id' => $paymentMethodId,
+            'cycle' => $cycle,
+            'frequency' => $frequency,
+        ]);
+
+        if (!$references['valid']) {
             echo json_encode([
                 'success' => false,
-                'title' => 'Invalid currency ID',
-                'message' => 'The specified currency does not exist or does not belong to you.'
+                'title' => $references['title'],
+                'message' => $references['message']
             ]);
             exit;
         }
 
-        // Category
-        if ($categoryId !== null) {
-            $catStmt = $db->prepare("SELECT id FROM categories WHERE id = :id AND user_id = :userId");
-            $catStmt->bindValue(':id', $categoryId, SQLITE3_INTEGER);
-            $catStmt->bindValue(':userId', $userId, SQLITE3_INTEGER);
-            $catRes = $catStmt->execute()->fetchArray();
-            if (!$catRes) {
-                echo json_encode([
-                    'success' => false,
-                    'title' => 'Invalid category ID',
-                    'message' => 'The specified category does not exist or does not belong to you.'
-                ]);
-                exit;
-            }
-        }
-
-        // Payer
-        if ($payerUserId !== null) {
-            $payerStmt = $db->prepare("SELECT id FROM household WHERE id = :id AND user_id = :userId");
-            $payerStmt->bindValue(':id', $payerUserId, SQLITE3_INTEGER);
-            $payerStmt->bindValue(':userId', $userId, SQLITE3_INTEGER);
-            $payerRes = $payerStmt->execute()->fetchArray();
-            if (!$payerRes) {
-                echo json_encode([
-                    'success' => false,
-                    'title' => 'Invalid payer ID',
-                    'message' => 'The specified household member does not exist or does not belong to you.'
-                ]);
-                exit;
-            }
-        }
-
-        // Payment Method
-        if ($paymentMethodId !== null) {
-            $pmStmt = $db->prepare("SELECT id FROM payment_methods WHERE id = :id AND (user_id = :userId OR user_id = 0 OR user_id IS NULL)");
-            $pmStmt->bindValue(':id', $paymentMethodId, SQLITE3_INTEGER);
-            $pmStmt->bindValue(':userId', $userId, SQLITE3_INTEGER);
-            $pmRes = $pmStmt->execute()->fetchArray();
-            if (!$pmRes) {
-                echo json_encode([
-                    'success' => false,
-                    'title' => 'Invalid payment method ID',
-                    'message' => 'The specified payment method does not exist or does not belong to you.'
-                ]);
-                exit;
-            }
-        }
+        $currencyId = $references['values']['currency_id'];
+        $categoryId = $references['values']['category_id'];
+        $payerUserId = $references['values']['payer_user_id'];
+        $paymentMethodId = $references['values']['payment_method_id'];
+        $cycle = $references['values']['cycle'];
+        $frequency = $references['values']['frequency'];
 
         // Replacement Subscription
         if ($replacementSubscriptionId !== null) {

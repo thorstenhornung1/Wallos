@@ -1,6 +1,7 @@
 <?php
 require_once '../../includes/connect_endpoint.php';
 require_once '../../includes/inputvalidation.php';
+require_once '../../includes/reference_validation.php';
 require_once '../../includes/validate_endpoint.php';
 
 if (!file_exists('../../images/uploads/logos')) {
@@ -238,7 +239,22 @@ if (
     }
 
     $avatar = filter_var($_POST['avatar'], FILTER_SANITIZE_URL);
-    $main_currency = $_POST['main_currency'];
+    // main_currency is a foreign key into the caller's own currency rows, and
+    // the only thing asked of it was that the field was not empty. "abc"
+    // reached the statement layer as 0, which PostgreSQL rejects with a
+    // constraint name and SQLite stores as an id no currency has, and another
+    // account's currency id passed unnoticed on both.
+    if (!wallos_is_integer_input($_POST['main_currency'])
+        || !wallos_reference_is_owned($db, 'currencies', (int) $_POST['main_currency'], $userId)) {
+        $response = [
+            "success" => false,
+            "message" => translate('invalid_currency', $i18n)
+        ];
+        echo json_encode($response);
+        exit();
+    }
+
+    $main_currency = (int) $_POST['main_currency'];
     $language = wallos_resolve_language($_POST['language'] ?? null);
 
     if (!empty($_FILES['profile_pic']["name"])) {

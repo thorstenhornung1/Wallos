@@ -192,12 +192,25 @@ if ($result) {
         $result = $stmt->execute();
         $currency = $result->fetchArray(SQLITE3_ASSOC);
 
-        // Update user main currency
-        $query = "UPDATE \"user\" SET main_currency = :main_currency WHERE id = :user_id";
-        $stmt = $db->prepare($query);
-        $stmt->bindValue(':main_currency', $currency['id'], SQLITE3_INTEGER);
-        $stmt->bindValue(':user_id', $newUserId, SQLITE3_INTEGER);
-        $stmt->execute();
+        // The code came from the administrator's own main currency, which they
+        // may well have renamed or added themselves, so it need not appear in
+        // the fixed list the loop above inserted. Reading ['id'] off a lookup
+        // that found nothing yields NULL, and main_currency is NOT NULL with a
+        // foreign key on it: the new account's first currency is the fallback,
+        // because an account without a main currency cannot be used at all.
+        $mainCurrencyId = $currency
+            ? $currency['id']
+            : $db->scalar('SELECT id FROM currencies WHERE user_id = :user_id ORDER BY id LIMIT 1',
+                [':user_id' => $newUserId]);
+
+        if ($mainCurrencyId !== null) {
+            // Update user main currency
+            $query = "UPDATE \"user\" SET main_currency = :main_currency WHERE id = :user_id";
+            $stmt = $db->prepare($query);
+            $stmt->bindValue(':main_currency', $mainCurrencyId, SQLITE3_INTEGER);
+            $stmt->bindValue(':user_id', $newUserId, SQLITE3_INTEGER);
+            $stmt->execute();
+        }
 
         // Add settings for that user
         $query = "INSERT INTO settings (dark_theme, monthly_price, convert_currency, remove_background, color_theme, hide_disabled, user_id, disabled_to_bottom, show_original_price, mobile_nav, week_starts_sunday) 

@@ -58,11 +58,14 @@ check "the migration chain is fully applied" \
 check "startup produced no PHP errors" "$(absent "$LOGS" 'PHP \(Fatal\|Parse\|Warning\)')"
 
 # --- account ---------------------------------------------------------------
+# main_currency is a currency code, not an id: the select on the form is built
+# from codes. "1" used to slip through as EUR because array_search() returned
+# false and PHP read that as index 0; registration rejects it now (issue #82).
 curl -fsS -c "$JAR" "$BASE/registration.php" -o /dev/null
 curl -fsS -b "$JAR" -c "$JAR" -X POST "$BASE/registration.php" \
     --data-urlencode "username=e2e" --data-urlencode "email=e2e@example.com" \
     --data-urlencode "password=E2ePass123!" --data-urlencode "confirm_password=E2ePass123!" \
-    --data-urlencode "main_currency=1" --data-urlencode "language=en" -o /dev/null || true
+    --data-urlencode "main_currency=EUR" --data-urlencode "language=en" -o /dev/null || true
 
 rm -f "$JAR"; JAR=$(mktemp)
 curl -fsS -c "$JAR" "$BASE/login.php" -o /dev/null
@@ -87,7 +90,7 @@ curl -fsS -c "$JAR2" "$BASE/registration.php" -o /dev/null
 curl -fsS -b "$JAR2" -c "$JAR2" -X POST "$BASE/registration.php" \
     --data-urlencode "username=e2e2" --data-urlencode "email=e2e2@example.com" \
     --data-urlencode "password=E2ePass123!" --data-urlencode "confirm_password=E2ePass123!" \
-    --data-urlencode "main_currency=1" --data-urlencode "language=en" -o /dev/null || true
+    --data-urlencode "main_currency=EUR" --data-urlencode "language=en" -o /dev/null || true
 rm -f "$JAR2"; JAR2=$(mktemp)
 curl -fsS -c "$JAR2" "$BASE/login.php" -o /dev/null
 curl -fsS -b "$JAR2" -c "$JAR2" -X POST "$BASE/login.php" \

@@ -3,6 +3,7 @@ error_reporting(E_ERROR | E_PARSE);
 require_once '../../includes/connect_endpoint.php';
 require_once '../../includes/validate_endpoint.php';
 require_once '../../includes/inputvalidation.php';
+require_once '../../includes/reference_validation.php';
 require_once '../../includes/getsettings.php';
 require_once '../../includes/ssrf_helper.php';
 require_once '../../includes/logo_theme_variant.php';
@@ -224,15 +225,9 @@ function resizeAndUploadLogo($uploadedFile, $uploadDir, $name, $settings)
 $isEdit = isset($_POST['id']) && $_POST['id'] != "";
 $name = validate($_POST["name"]);
 $price = $_POST['price'];
-$currencyId = $_POST["currency_id"];
-$frequency = $_POST["frequency"];
-$cycle = $_POST["cycle"];
 $nextPayment = $_POST["next_payment"];
 $autoRenew = isset($_POST['auto_renew']) ? true : false;
 $startDate = $_POST["start_date"];
-$paymentMethodId = $_POST["payment_method_id"];
-$payerUserId = $_POST["payer_user_id"];
-$categoryId = $_POST['category_id'];
 $notes = validate($_POST["notes"]);
 $url = validate($_POST['url']);
 $logoUrl = validate($_POST['logo-url']);
@@ -243,6 +238,33 @@ $notifyDaysBefore = $_POST['notify_days_before'];
 $inactive = isset($_POST['inactive']) ? true : false;
 $cancellationDate = $_POST['cancellation_date'] ?? null;
 $replacementSubscriptionId = $_POST['replacement_subscription_id'];
+
+// Every id this form submits is a reference into the caller's own rows, and
+// until issue #82 nothing here checked that: $_POST went straight into the
+// insert. A tampered form could name another account's category, payment
+// method or household member, and the row was written pointing at it. SQLite
+// never noticed, and the guarded deletes elsewhere count referencing
+// subscriptions for the owner only, so a category a stranger's subscription
+// points at looks unused and can be deleted. The check runs here, before the
+// logo is fetched, so an invalid request costs no outbound request.
+$references = wallos_validate_subscription_input($db, $userId, $_POST);
+
+if (!$references['valid']) {
+    header('Content-Type: application/json');
+    echo json_encode([
+        'status' => 'Error',
+        'field' => $references['field'],
+        'message' => translate($references['translation'], $i18n)
+    ]);
+    exit();
+}
+
+$currencyId = $references['values']['currency_id'];
+$frequency = $references['values']['frequency'];
+$cycle = $references['values']['cycle'];
+$paymentMethodId = $references['values']['payment_method_id'];
+$payerUserId = $references['values']['payer_user_id'];
+$categoryId = $references['values']['category_id'];
 
 if ($replacementSubscriptionId == 0 || $inactive == 0) {
     $replacementSubscriptionId = null;

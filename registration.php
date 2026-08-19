@@ -147,6 +147,7 @@ $payment_methods = [
 $passwordMismatch = false;
 $usernameExists = false;
 $emailExists = false;
+$invalidCurrency = false;
 $registrationFailed = false;
 $hasErrors = false;
 if (isset($_POST['username'])) {
@@ -156,9 +157,21 @@ if (isset($_POST['username'])) {
     $email = validate($_POST['email']);
     $password = $_POST['password'];
     $confirm_password = $_POST['confirm_password'];
+    // The form offers the codes from the list above and nothing else. A code
+    // outside it made array_search() return false, which PHP reads as index 0,
+    // so registration silently continued with the wrong currency — and the
+    // lookup further down then found nothing and wrote NULL into
+    // main_currency, a NOT NULL column with a foreign key on it.
     $main_currency = $_POST['main_currency'];
-    $main_currency_index = array_search($main_currency, array_column($currencies, 'code'));
-    $main_currency_id = $currencies[$main_currency_index]['id'];
+    $main_currency_index = array_search($main_currency, array_column($currencies, 'code'), true);
+    $main_currency_id = null;
+
+    if ($main_currency_index === false) {
+        $invalidCurrency = true;
+        $hasErrors = true;
+    } else {
+        $main_currency_id = $currencies[$main_currency_index]['id'];
+    }
     $language = wallos_resolve_language($_POST['language'] ?? null);
     $avatar = "images/avatars/0.svg";
 
@@ -261,12 +274,25 @@ if (isset($_POST['username'])) {
                 $result = $stmt->execute();
                 $currency = $result->fetchArray(SQLITE3_ASSOC);
 
-                // Update user main currency
-                $query = "UPDATE \"user\" SET main_currency = :main_currency WHERE id = :user_id";
-                $stmt = $db->prepare($query);
-                $stmt->bindValue(':main_currency', $currency['id'], SQLITE3_INTEGER);
-                $stmt->bindValue(':user_id', $userId, SQLITE3_INTEGER);
-                $stmt->execute();
+                // The account's own copy of the chosen currency was inserted by
+                // the loop above, so this normally finds it. Reading ['id'] off
+                // a lookup that found nothing yields NULL, though, and
+                // main_currency is NOT NULL with a foreign key: falling back to
+                // the account's first currency leaves a usable account behind
+                // rather than a half-finished registration.
+                $mainCurrencyId = $currency
+                    ? $currency['id']
+                    : $db->scalar('SELECT id FROM currencies WHERE user_id = :user_id ORDER BY id LIMIT 1',
+                        [':user_id' => $userId]);
+
+                if ($mainCurrencyId !== null) {
+                    // Update user main currency
+                    $query = "UPDATE \"user\" SET main_currency = :main_currency WHERE id = :user_id";
+                    $stmt = $db->prepare($query);
+                    $stmt->bindValue(':main_currency', $mainCurrencyId, SQLITE3_INTEGER);
+                    $stmt->bindValue(':user_id', $userId, SQLITE3_INTEGER);
+                    $stmt->execute();
+                }
 
                 // Add settings for that user
                 $query = "INSERT INTO settings (dark_theme, monthly_price, convert_currency, remove_background, color_theme, hide_disabled, user_id, disabled_to_bottom, show_original_price, mobile_nav, week_starts_sunday) 
@@ -434,6 +460,14 @@ if (isset($_POST['username'])) {
                         if ($emailExists) {
                             ?>
                             <li><i class="fa-solid fa-triangle-exclamation"></i><?= translate('email_exists', $i18n) ?></li>
+                            <?php
+                        }
+                        ?>
+                        <?php
+                        if ($invalidCurrency) {
+                            ?>
+                            <li><i class="fa-solid fa-triangle-exclamation"></i><?= translate('invalid_currency_code', $i18n) ?>
+                            </li>
                             <?php
                         }
                         ?>

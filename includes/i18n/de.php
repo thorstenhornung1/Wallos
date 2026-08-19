@@ -342,6 +342,18 @@ $i18n = [
     "fill_all_fields" => "Bitte alle Felder ausfüllen",
     "fill_mandatory_fields" => "Bitte alle Pflichtfelder ausfüllen",
     "error" => "Fehler",
+    // Abgelehnte Referenzen: ein Abonnement darf nur auf Zeilen des eigenen
+    // Kontos zeigen, und die Häufigkeit ist ein Faktor, den das Formular von
+    // 1 bis 366 anbietet. Jede Meldung deckt alle Fehlerfälle ihres Feldes ab —
+    // fehlend, keine Zahl oder eine ID, die jemand anderem gehört — weil das
+    // vor dem Formular alles dasselbe bedeutet.
+    "invalid_currency" => "Bitte eine Währung aus der eigenen Liste wählen",
+    "invalid_category" => "Bitte eine Kategorie aus der eigenen Liste wählen",
+    "invalid_payment_method" => "Bitte eine Zahlungsmethode aus der eigenen Liste wählen",
+    "invalid_payer" => "Bitte ein Haushaltsmitglied aus der eigenen Liste wählen",
+    "invalid_cycle" => "Bitte einen Zahlungszyklus aus der Liste wählen",
+    "invalid_frequency" => "Die Häufigkeit muss eine ganze Zahl zwischen 1 und 366 sein",
+    "invalid_currency_code" => "Bitte eine Währung aus der Liste wählen",
     // Category
     "failed_add_category" => "Kategorie konnte nicht hinzugefügt werden",
     "failed_edit_category" => "Kategorie konnte nicht editiert werden",

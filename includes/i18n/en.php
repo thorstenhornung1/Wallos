@@ -371,6 +371,18 @@ $i18n = [
     "fill_all_fields" => "Please fill all fields",
     "fill_mandatory_fields" => "Please fill all mandatory fields",
     "error" => "Error",
+    // Rejected references: a subscription may only point at rows of the account
+    // that owns it, and the frequency is a multiplier the form offers 1..366 of.
+    // Each message covers every way its field can be wrong — absent, not a
+    // number, or an id belonging to somebody else — because all three mean the
+    // same thing to the person looking at the form.
+    "invalid_currency" => "Please choose a currency from your own list",
+    "invalid_category" => "Please choose a category from your own list",
+    "invalid_payment_method" => "Please choose a payment method from your own list",
+    "invalid_payer" => "Please choose a household member from your own list",
+    "invalid_cycle" => "Please choose a payment cycle from the list",
+    "invalid_frequency" => "The frequency must be a whole number between 1 and 366",
+    "invalid_currency_code" => "Please choose a currency from the list",
     // Category
     "failed_add_category" => "Failed to add category",
     "failed_edit_category" => "Failed to edit category",
