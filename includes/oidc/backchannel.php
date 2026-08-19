@@ -141,11 +141,22 @@ function wallos_oidc_register_session($db, $userId, $sid, $sessionId, $loginToke
  */
 function wallos_oidc_session_is_active($db, $sessionId)
 {
+    // The table is missing when the migration has not run. Treating that as
+    // "revoked" would sign every OIDC user out; this check exists to add a way
+    // to end sessions, not to become one itself.
+    //
+    // Asked explicitly rather than inferred from a failed prepare, because the
+    // two backends fail at different moments: SQLite refuses to prepare a
+    // statement against a table that does not exist, PostgreSQL prepares it
+    // happily and fails at execute. Reading only the prepare result was correct
+    // on SQLite and inverted the behaviour on PostgreSQL — every OIDC session
+    // would have been treated as revoked.
+    if (!$db->tableExists('oidc_sessions')) {
+        return true;
+    }
+
     $stmt = $db->prepare('SELECT 1 FROM oidc_sessions WHERE session_id = :sessionId LIMIT 1');
     if ($stmt === false) {
-        // The table is missing, which means the migration has not run. Treating
-        // that as "revoked" would sign every OIDC user out; this check exists to
-        // add a way to end sessions, not to become one itself.
         return true;
     }
     $stmt->bindValue(':sessionId', $sessionId, SQLITE3_TEXT);
@@ -181,7 +192,7 @@ function wallos_oidc_revoke_sessions($db, $sub, $sid)
         $stmt->bindValue(':sid', $sid, SQLITE3_TEXT);
     } else {
         $stmt = $db->prepare('SELECT s.id, s.user_id, s.login_token FROM oidc_sessions s
-                              JOIN user u ON u.id = s.user_id
+                              JOIN "user" u ON u.id = s.user_id
                               WHERE u.oidc_sub = :sub');
         if ($stmt === false) {
             return 0;

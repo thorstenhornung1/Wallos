@@ -41,7 +41,7 @@ function roles_make_oidc_admin($db, $userId)
  */
 function roles_set_api_key($db, $userId, $key)
 {
-    $stmt = $db->prepare('UPDATE user SET api_key = :key WHERE id = :id');
+    $stmt = $db->prepare('UPDATE "user" SET api_key = :key WHERE id = :id');
     $stmt->bindValue(':key', $key, SQLITE3_TEXT);
     $stmt->bindValue(':id', $userId, SQLITE3_INTEGER);
     $stmt->execute();
@@ -50,6 +50,10 @@ function roles_set_api_key($db, $userId, $key)
 // ---------------------------------------------------------------- migration
 
 wallos_test('the migration gives an existing user 1 the local admin role', function () {
+    if (wallos_test_skip_unless_sqlite('replays a SQLite migration')) {
+        return;
+    }
+
     // The fixture database runs createdatabase.php and every migration, and
     // createdatabase.php seeds no users — so migration 000058 had nobody to
     // promote. Running it again against a database that does have user 1 is
@@ -67,6 +71,10 @@ wallos_test('the migration gives an existing user 1 the local admin role', funct
 });
 
 wallos_test('the role migration can run twice', function () {
+    if (wallos_test_skip_unless_sqlite('replays a SQLite migration')) {
+        return;
+    }
+
     $db = wallos_test_open_database();
     wallos_test_create_user($db, 1, 'alice');
 
@@ -79,6 +87,10 @@ wallos_test('the role migration can run twice', function () {
 });
 
 wallos_test('a fresh install does not hand the role to whoever is first', function () {
+    if (wallos_test_skip_unless_sqlite('replays a SQLite migration')) {
+        return;
+    }
+
     // No user rows at all: the migration must not create a role pointing at an
     // account that does not exist, and the first account to appear afterwards —
     // an OIDC login, say — must not inherit the installation.
@@ -117,6 +129,10 @@ wallos_test('the second account does not take the role', function () {
 });
 
 wallos_test('an installation whose first account was deleted keeps an administrator', function () {
+    if (wallos_test_skip_unless_sqlite('replays a SQLite migration')) {
+        return;
+    }
+
     // The realistic upgrade trap. Delete the original account, sign in through
     // OIDC, and the new account gets id 7 — SQLite never reuses ids. Migration
     // 000058 then finds no user 1 and gives the role to nobody, leaving the
@@ -136,6 +152,10 @@ wallos_test('an installation whose first account was deleted keeps an administra
 });
 
 wallos_test('the repair never overrides an existing administrator', function () {
+    if (wallos_test_skip_unless_sqlite('replays a SQLite migration')) {
+        return;
+    }
+
     $db = wallos_test_open_database();
     wallos_test_create_user($db, 3, 'carol');
     wallos_test_create_user($db, 9, 'dave');
@@ -151,6 +171,10 @@ wallos_test('the repair never overrides an existing administrator', function () 
 });
 
 wallos_test('the repair does nothing on an empty installation', function () {
+    if (wallos_test_skip_unless_sqlite('replays a SQLite migration')) {
+        return;
+    }
+
     $db = wallos_test_open_database();
 
     require WALLOS_ROOT . '/migrations/000062.php';

@@ -42,7 +42,7 @@ if (empty($sets)) {
     exit;
 }
 
-$sql = "UPDATE user SET " . implode(', ', $sets) . " WHERE id = :userId";
+$sql = "UPDATE \"user\" SET " . implode(', ', $sets) . " WHERE id = :userId";
 $stmt = $db->prepare($sql);
 foreach ($binds as $key => $bind) {
     $stmt->bindValue($key, $bind['value'], $bind['type']);

@@ -26,7 +26,7 @@ function restoreSessionFromRememberMeCookie($db)
     }
     [$username, $token, $main_currency] = $cookie;
 
-    $sql = "SELECT * FROM user WHERE username = :username";
+    $sql = "SELECT * FROM \"user\" WHERE username = :username";
     $stmt = $db->prepare($sql);
     $stmt->bindValue(':username', $username, SQLITE3_TEXT);
     $result = $stmt->execute();

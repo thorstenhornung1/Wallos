@@ -41,7 +41,7 @@ if (!$transport['success']) {
 
 $mail = $transport['mailer'];
 
-$getUser = "SELECT username, email FROM user WHERE id = :userId";
+$getUser = "SELECT username, email FROM \"user\" WHERE id = :userId";
 $stmt = $db->prepare($getUser);
 $stmt->bindValue(':userId', $userId, SQLITE3_INTEGER);
 $result = $stmt->execute();

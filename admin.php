@@ -43,7 +43,7 @@ function oidc_input_attrs($field, $managedFields)
 
 // get user accounts, and who among them administers this installation
 require_once __DIR__ . '/includes/user_roles.php';
-$stmt = $db->prepare('SELECT id, username, email FROM user ORDER BY id ASC');
+$stmt = $db->prepare('SELECT id, username, email FROM "user" ORDER BY id ASC');
 $result = $stmt->execute();
 
 $users = [];

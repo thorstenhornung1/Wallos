@@ -70,7 +70,7 @@ while ($row = $result->fetchArray(SQLITE3_ASSOC)) {
 }
 
 // User language
-$stmt = $db->prepare("SELECT language FROM user WHERE id = :user_id");
+$stmt = $db->prepare("SELECT language FROM \"user\" WHERE id = :user_id");
 $stmt->bindValue(':user_id', $userId, SQLITE3_INTEGER);
 $result = $stmt->execute();
 $userLanguage = $result->fetchArray(SQLITE3_ASSOC)['language'] ?? 'en';

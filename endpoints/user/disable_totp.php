@@ -13,7 +13,7 @@ if (!function_exists('trigger_deprecation')) {
     }
 }
 
-$statement = $db->prepare('SELECT totp_enabled FROM user WHERE id = :id');
+$statement = $db->prepare('SELECT totp_enabled FROM "user" WHERE id = :id');
 $statement->bindValue(':id', $userId, SQLITE3_INTEGER);
 $result = $statement->execute();
 $row = $result->fetchArray(SQLITE3_ASSOC);
@@ -62,7 +62,7 @@ if (isset($data['totpCode']) && $data['totpCode'] != "") {
     $totp->setPeriod(30);
 
     if ($totp->verify($totp_code, null, 15)) {
-        $statement = $db->prepare('UPDATE user SET totp_enabled = 0 WHERE id = :id');
+        $statement = $db->prepare('UPDATE "user" SET totp_enabled = 0 WHERE id = :id');
         $statement->bindValue(':id', $userId, SQLITE3_INTEGER);
         $statement->execute();
 
@@ -89,7 +89,7 @@ if (isset($data['totpCode']) && $data['totpCode'] != "") {
         // Search for the normalized code
         if (($key = array_search($totp_code, $normalizedBackupCodes)) !== false) {
             // Match found, disable TOTP
-            $statement = $db->prepare('UPDATE user SET totp_enabled = 0 WHERE id = :id');
+            $statement = $db->prepare('UPDATE "user" SET totp_enabled = 0 WHERE id = :id');
             $statement->bindValue(':id', $userId, SQLITE3_INTEGER);
             $statement->execute();
 

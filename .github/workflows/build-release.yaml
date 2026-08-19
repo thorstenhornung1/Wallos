@@ -31,6 +31,54 @@ jobs:
       - name: Run the test suite
         run: php tests/run.php
 
+  # The same cases against PostgreSQL. Issue #80 asks which versions Wallos
+  # works with, and the honest answer is whichever ones CI runs — so the matrix
+  # carries the oldest upstream still supports and the newest released. The ends
+  # are where the failures are: the oldest catches a feature newer than our
+  # floor, the newest catches a deprecation. A middle version costs minutes and
+  # finds what the ends already found.
+  #
+  # This is not decoration. Until it existed the suite ran only on SQLite, and
+  # five defects that made the PostgreSQL schema unusable at runtime — three
+  # columns whose declared type was not the type they held, a foreign key that
+  # rejected an ordinary form value, and a baseline nothing applied — survived
+  # to a review rather than being caught here.
+  test-pgsql:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        postgres: ["14", "18"]
+    services:
+      postgres:
+        image: postgres:${{ matrix.postgres }}-alpine
+        env:
+          POSTGRES_DB: wallos
+          POSTGRES_USER: wallos
+          POSTGRES_PASSWORD: wallos-ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U wallos -d wallos"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: "8.3"
+          extensions: sqlite3, pdo_pgsql
+      - name: Run the test suite against PostgreSQL ${{ matrix.postgres }}
+        env:
+          WALLOS_TEST_DRIVER: pgsql
+          WALLOS_TEST_DB_HOST: 127.0.0.1
+          WALLOS_TEST_DB_NAME: wallos
+          WALLOS_TEST_DB_USER: wallos
+          WALLOS_TEST_DB_PASSWORD: wallos-ci
+        run: php tests/run.php
+
   # Issue #41: SQLite-specific APIs must stay inside the database adapter
   # boundary. That boundary is still being built (issue #20), so the audit
   # ratchets against dev/db-audit-baseline.txt instead of demanding zero: the

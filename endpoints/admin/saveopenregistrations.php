@@ -32,7 +32,7 @@ if ($disableLogin == 1) {
         die();
     }
 
-    $sql = "SELECT COUNT(*) as userCount FROM user";
+    $sql = "SELECT COUNT(*) as userCount FROM \"user\"";
     $stmt = $db->prepare($sql);
     $result = $stmt->execute();
     $row = $result->fetchArray(SQLITE3_ASSOC);

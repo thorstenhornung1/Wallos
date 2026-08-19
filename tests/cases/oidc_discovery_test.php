@@ -37,8 +37,14 @@ function discovery_store_settings($db, $settings)
  */
 function discovery_prime_cache($db, $issuer, $document, $age = 0)
 {
-    $stmt = $db->prepare('INSERT OR REPLACE INTO oidc_discovery_cache (issuer, document, fetched_at)
-                          VALUES (:issuer, :document, :fetchedAt)');
+    // ON CONFLICT rather than INSERT OR REPLACE: the fixture has to run on both
+    // backends, and OR REPLACE is SQLite-only. This is the same rewrite the
+    // application code got — a fixture written in a dialect the code no longer
+    // uses tests the wrong thing.
+    $stmt = $db->prepare('INSERT INTO oidc_discovery_cache (issuer, document, fetched_at)
+                          VALUES (:issuer, :document, :fetchedAt)
+                          ON CONFLICT (issuer) DO UPDATE
+                          SET document = excluded.document, fetched_at = excluded.fetched_at');
     $stmt->bindValue(':issuer', $issuer, SQLITE3_TEXT);
     $stmt->bindValue(':document', json_encode($document), SQLITE3_TEXT);
     $stmt->bindValue(':fetchedAt', time() - $age, SQLITE3_INTEGER);

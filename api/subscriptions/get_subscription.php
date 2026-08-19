@@ -67,7 +67,7 @@ if ($_SERVER["REQUEST_METHOD"] === "POST" || $_SERVER["REQUEST_METHOD"] === "GET
     $subscriptionId = intval($subscriptionId);
 
     // Authenticate user
-    $sql = "SELECT * FROM user WHERE api_key = :apiKey";
+    $sql = "SELECT * FROM \"user\" WHERE api_key = :apiKey";
     $stmt = $db->prepare($sql);
     $stmt->bindValue(':apiKey', $apiKey, SQLITE3_TEXT);
     $result = $stmt->execute();

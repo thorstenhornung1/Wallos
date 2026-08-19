@@ -22,7 +22,12 @@ function performance_seed_subscriptions($db, $userId, $count)
 {
     $stmt = $db->prepare('INSERT INTO subscriptions
         (name, price, currency_id, next_payment, cycle, frequency, payer_user_id, category_id, notify, inactive, user_id, auto_renew)
-        VALUES (:name, :price, :currency, :next, 3, 1, :payer, 1, 1, 0, :userId, 1)');
+        VALUES (:name, :price, :currency, :next, 3, 1, :payer, :category, :payment, 0, :userId, 1)');
+
+    // Real ids from the fixture rather than a hardcoded 1. PostgreSQL enforces
+    // the foreign keys SQLite never has, and payer_user_id references
+    // household(id) — not user(id), whatever its name suggests.
+    $references = wallos_test_user_references($db, $userId);
 
     for ($i = 0; $i < $count; $i++) {
         $stmt->bindValue(':name', 'Subscription ' . $i, SQLITE3_TEXT);
@@ -30,7 +35,9 @@ function performance_seed_subscriptions($db, $userId, $count)
         // Alternate between the user's two currencies so conversion is required.
         $stmt->bindValue(':currency', wallos_test_currency_id($userId, $i % 2), SQLITE3_INTEGER);
         $stmt->bindValue(':next', date('Y-m-d', strtotime('+' . ($i % 28) . ' days')), SQLITE3_TEXT);
-        $stmt->bindValue(':payer', $userId, SQLITE3_INTEGER);
+        $stmt->bindValue(':payer', $references['household'], SQLITE3_INTEGER);
+        $stmt->bindValue(':category', $references['category'], SQLITE3_INTEGER);
+        $stmt->bindValue(':payment', $references['payment_method'], SQLITE3_INTEGER);
         $stmt->bindValue(':userId', $userId, SQLITE3_INTEGER);
         $stmt->execute();
         $stmt->reset();

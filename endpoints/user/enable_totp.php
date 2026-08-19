@@ -70,7 +70,7 @@ if ($action === 'verify') {
         $totp_code = $data['totpCode'];
 
         // Check if user already has TOTP enabled
-        $stmt = $db->prepare("SELECT totp_enabled FROM user WHERE id = :user_id");
+        $stmt = $db->prepare("SELECT totp_enabled FROM \"user\" WHERE id = :user_id");
         $stmt->bindValue(':user_id', $userId, SQLITE3_INTEGER);
         $result = $stmt->execute();
         $row = $result->fetchArray(SQLITE3_ASSOC);
@@ -111,7 +111,7 @@ if ($action === 'verify') {
 
             // Update user totp_enabled
 
-            $stmt = $db->prepare("UPDATE user SET totp_enabled = 1 WHERE id = :user_id");
+            $stmt = $db->prepare("UPDATE \"user\" SET totp_enabled = 1 WHERE id = :user_id");
             $stmt->bindValue(':user_id', $userId, SQLITE3_INTEGER);
             $stmt->execute();
 

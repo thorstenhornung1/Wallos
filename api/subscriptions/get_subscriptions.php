@@ -115,7 +115,7 @@ if ($_SERVER["REQUEST_METHOD"] === "POST" || $_SERVER["REQUEST_METHOD"] === "GET
     }
 
     // Get user from API key
-    $sql = "SELECT * FROM user WHERE api_key = :apiKey";
+    $sql = "SELECT * FROM \"user\" WHERE api_key = :apiKey";
     $stmt = $db->prepare($sql);
     $stmt->bindValue(':apiKey', $apiKey);
     $result = $stmt->execute();
@@ -307,13 +307,13 @@ if ($_SERVER["REQUEST_METHOD"] === "POST" || $_SERVER["REQUEST_METHOD"] === "GET
         $userNameCol = $db->columnExists('user', 'username') ? 'username' : null;
         $userEmailCol = $db->columnExists('user', 'email') ? 'email' : null;
         if ($userNameCol && $userEmailCol) {
-            $sql = "SELECT id, $userNameCol as name, $userEmailCol as email FROM user";
+            $sql = "SELECT id, $userNameCol as name, $userEmailCol as email FROM \"user\"";
         } elseif ($userNameCol) {
-            $sql = "SELECT id, $userNameCol as name FROM user";
+            $sql = "SELECT id, $userNameCol as name FROM \"user\"";
         } elseif ($userEmailCol) {
-            $sql = "SELECT id, $userEmailCol as email FROM user";
+            $sql = "SELECT id, $userEmailCol as email FROM \"user\"";
         } else {
-            $sql = "SELECT id FROM user";
+            $sql = "SELECT id FROM \"user\"";
         }
         $stmt = $db->prepare($sql);
         $result = $stmt->execute();

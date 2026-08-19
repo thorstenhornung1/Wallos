@@ -6,7 +6,7 @@ require_once 'includes/logo_theme_variant.php';
 // Get code of main currency to display on statistics
 $query = "SELECT c.code
           FROM currencies c
-          INNER JOIN user u ON c.id = u.main_currency
+          INNER JOIN \"user\" u ON c.id = u.main_currency
           WHERE u.id = :userId";
 $stmt = $db->prepare($query);
 $stmt->bindValue(':userId', $userId, SQLITE3_INTEGER);

@@ -36,7 +36,7 @@ if (isset($input['avatar'])) {
         exit;
     }
 
-    $sql = "SELECT avatar FROM user WHERE id = :userId";
+    $sql = "SELECT avatar FROM \"user\" WHERE id = :userId";
     $stmt = $db->prepare($sql);
     $stmt->bindValue(':userId', $userId, SQLITE3_INTEGER);
     $result = $stmt->execute();

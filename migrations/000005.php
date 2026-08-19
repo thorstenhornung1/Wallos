@@ -6,5 +6,5 @@ $columnRequired = $columnQuery->fetchArray(SQLITE3_ASSOC) === false;
 
 if ($columnRequired) {
     $db->exec("ALTER TABLE user ADD COLUMN language TEXT DEFAULT 'en'");
-    $db->exec("UPDATE user SET language = 'en'");
+    $db->exec("UPDATE \"user\" SET language = 'en'");
 }

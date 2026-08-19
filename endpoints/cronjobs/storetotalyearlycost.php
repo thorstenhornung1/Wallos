@@ -38,7 +38,7 @@ function getPriceConverted($price, $currency, $database, $userId)
 
 // Get all users
 
-$query = "SELECT id, main_currency FROM user";
+$query = "SELECT id, main_currency FROM \"user\"";
 $stmt = $db->prepare($query);
 $result = $stmt->execute();
 

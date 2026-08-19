@@ -102,7 +102,7 @@ if (!$userInfo || !isset($userInfo[$oidcSettings['user_identifier_field']])) {
 $oidcSub = $userInfo[$oidcSettings['user_identifier_field']];
 
 // Check if sub matches an existing user
-$stmt = $db->prepare('SELECT * FROM user WHERE oidc_sub = :oidcSub');
+$stmt = $db->prepare('SELECT * FROM "user" WHERE oidc_sub = :oidcSub');
 $stmt->bindValue(':oidcSub', $oidcSub, SQLITE3_TEXT);
 $result = $stmt->execute();
 $userData = $result->fetchArray(SQLITE3_ASSOC);
@@ -129,13 +129,13 @@ if ($userData) {
         exit();
     }
 
-    $stmt = $db->prepare('SELECT * FROM user WHERE email = :email');
+    $stmt = $db->prepare('SELECT * FROM "user" WHERE email = :email');
     $stmt->bindValue(':email', $email, SQLITE3_TEXT);
     $result = $stmt->execute();
     $userData = $result->fetchArray(SQLITE3_ASSOC);
     if ($userData) {
         // Update existing user with OIDC sub
-        $stmt = $db->prepare('UPDATE user SET oidc_sub = :oidcSub WHERE id = :userId');
+        $stmt = $db->prepare('UPDATE "user" SET oidc_sub = :oidcSub WHERE id = :userId');
         $stmt->bindValue(':oidcSub', $oidcSub, SQLITE3_TEXT);
         $stmt->bindValue(':userId', $userData['id'], SQLITE3_INTEGER);
         $stmt->execute();
@@ -153,7 +153,7 @@ if ($userData) {
             $attempt = 1;
 
             while (true) {
-                $stmt = $db->prepare('SELECT COUNT(*) as count FROM user WHERE username = :username');
+                $stmt = $db->prepare('SELECT COUNT(*) as count FROM "user" WHERE username = :username');
                 $stmt->bindValue(':username', $username, SQLITE3_TEXT);
                 $result = $stmt->execute();
                 $row = $result->fetchArray(SQLITE3_ASSOC);

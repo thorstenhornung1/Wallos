@@ -28,7 +28,7 @@ if (!file_exists('images/uploads/logos')) {
 }
 
 // If there's already a user on the database, redirect to login page if registrations are closed or maxn users is reached
-$stmt = $db->prepare('SELECT COUNT(*) as userCount FROM user');
+$stmt = $db->prepare('SELECT COUNT(*) as userCount FROM "user"');
 $result = $stmt->execute();
 $userCountResult = $result->fetchArray(SQLITE3_ASSOC);
 $userCount = $userCountResult['userCount'];
@@ -167,7 +167,7 @@ if (isset($_POST['username'])) {
         $hasErrors = true;
     }
 
-    $emailQuery = "SELECT * FROM user WHERE email = :email";
+    $emailQuery = "SELECT * FROM \"user\" WHERE email = :email";
     $stmtEmail = $db->prepare($emailQuery);
     $stmtEmail->bindValue(':email', $email, SQLITE3_TEXT);
     $resultEmail = $stmtEmail->execute();
@@ -177,7 +177,7 @@ if (isset($_POST['username'])) {
         $hasErrors = true;
     }
 
-    $usernameQuery = "SELECT * FROM user WHERE username = :username";
+    $usernameQuery = "SELECT * FROM \"user\" WHERE username = :username";
     $stmtUsername = $db->prepare($usernameQuery);
     $stmtUsername->bindValue(':username', $username, SQLITE3_TEXT);
     $resultUsername = $stmtUsername->execute();
@@ -190,7 +190,7 @@ if (isset($_POST['username'])) {
     $requireValidation = false;
 
     if ($hasErrors == false) {
-        $query = "INSERT INTO user (username, firstname, lastname, email, password, main_currency, avatar, language, budget, api_key) VALUES (:username, :firstname, :lastname, :email, :password, :main_currency, :avatar, :language, :budget, :api_key)";
+        $query = "INSERT INTO \"user\" (username, firstname, lastname, email, password, main_currency, avatar, language, budget, api_key) VALUES (:username, :firstname, :lastname, :email, :password, :main_currency, :avatar, :language, :budget, :api_key)";
         $stmt = $db->prepare($query);
         $hashedPassword = password_hash($password, PASSWORD_DEFAULT);
         $stmt->bindValue(':username', $username, SQLITE3_TEXT);
@@ -262,7 +262,7 @@ if (isset($_POST['username'])) {
                 $currency = $result->fetchArray(SQLITE3_ASSOC);
 
                 // Update user main currency
-                $query = "UPDATE user SET main_currency = :main_currency WHERE id = :user_id";
+                $query = "UPDATE \"user\" SET main_currency = :main_currency WHERE id = :user_id";
                 $stmt = $db->prepare($query);
                 $stmt->bindValue(':main_currency', $currency['id'], SQLITE3_INTEGER);
                 $stmt->bindValue(':user_id', $userId, SQLITE3_INTEGER);

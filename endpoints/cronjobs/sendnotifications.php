@@ -22,7 +22,7 @@ if (php_sapi_name() == 'cli') {
 }
 
 // Get all user ids
-$query = "SELECT id, username FROM user";
+$query = "SELECT id, username FROM \"user\"";
 $stmt = $db->prepare($query);
 $usersToNotify = $stmt->execute();
 
@@ -228,7 +228,7 @@ while ($userToNotify = $usersToNotify->fetchArray(SQLITE3_ASSOC)) {
 
         $currentDate = new DateTime('now');
 
-        $query = "SELECT main_currency, period_budget, budget_period_type, budget_period_anchor_date FROM user WHERE id = :userId";
+        $query = "SELECT main_currency, period_budget, budget_period_type, budget_period_anchor_date FROM \"user\" WHERE id = :userId";
         $stmt = $db->prepare($query);
         $stmt->bindValue(':userId', $userId, SQLITE3_INTEGER);
         $result = $stmt->execute();
@@ -314,7 +314,7 @@ while ($userToNotify = $usersToNotify->fetchArray(SQLITE3_ASSOC)) {
 
             // Email notifications if enabled
             if ($emailNotificationsEnabled) {
-                $stmt = $db->prepare('SELECT * FROM user WHERE id = :user_id');
+                $stmt = $db->prepare('SELECT * FROM "user" WHERE id = :user_id');
                 $stmt->bindValue(':user_id', $userId, SQLITE3_INTEGER);
                 $result = $stmt->execute();
                 $defaultUser = $result->fetchArray(SQLITE3_ASSOC);

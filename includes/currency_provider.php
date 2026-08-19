@@ -133,7 +133,7 @@ function wallos_update_exchange_rates_for_user($db, $userId)
         return ['success' => false, 'message' => 'No currencies configured.'];
     }
 
-    $stmt = $db->prepare('SELECT c.code FROM user u LEFT JOIN currencies c ON u.main_currency = c.id WHERE u.id = :userId');
+    $stmt = $db->prepare('SELECT c.code FROM "user" u LEFT JOIN currencies c ON u.main_currency = c.id WHERE u.id = :userId');
     $stmt->bindValue(':userId', $userId, SQLITE3_INTEGER);
     $result = $stmt->execute();
     $row = $result ? $result->fetchArray(SQLITE3_ASSOC) : false;

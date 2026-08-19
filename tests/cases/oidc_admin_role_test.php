@@ -291,6 +291,10 @@ wallos_test('the environment overrides what the interface stored', function () {
 });
 
 wallos_test('the migration adds the columns and leaves them empty', function () {
+    if (wallos_test_skip_unless_sqlite('replays a SQLite migration')) {
+        return;
+    }
+
     // An existing installation must upgrade into "no admin mapping", not into
     // some default that starts handing out administrator rights.
     $db = wallos_test_open_database();
@@ -314,6 +318,10 @@ wallos_test('the migration adds the columns and leaves them empty', function () 
 });
 
 wallos_test('the role migration is idempotent for the columns', function () {
+    if (wallos_test_skip_unless_sqlite('replays a SQLite migration')) {
+        return;
+    }
+
     $db = wallos_test_open_database();
 
     require WALLOS_ROOT . '/migrations/000059.php';

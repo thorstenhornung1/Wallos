@@ -20,7 +20,7 @@ if (wallos_is_last_admin($db, $userId)) {
     ]));
 } else {
     // Delete user
-    $stmt = $db->prepare('DELETE FROM user WHERE id = :id');
+    $stmt = $db->prepare('DELETE FROM "user" WHERE id = :id');
     $stmt->bindValue(':id', $userId, SQLITE3_INTEGER);
     $result = $stmt->execute();
 

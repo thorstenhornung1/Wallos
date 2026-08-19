@@ -93,7 +93,7 @@ if ($login_disabled === 1) {
         exit;
     }
 
-    $userCount = $db->querySingle("SELECT COUNT(*) FROM user");
+    $userCount = $db->querySingle("SELECT COUNT(*) FROM \"user\"");
     if ($userCount > 1) {
         echo json_encode([
             'success' => false,

@@ -19,7 +19,7 @@ if (isset($_GET['code']) && isset($_GET['state'])) {
     if (isset($_SESSION['loggedin']) && $_SESSION['loggedin'] === true) {
         $username = $_SESSION['username'];
         $main_currency = $_SESSION['main_currency'];
-        $sql = "SELECT * FROM user WHERE username = :username";
+        $sql = "SELECT * FROM \"user\" WHERE username = :username";
         $stmt = $db->prepare($sql);
         $stmt->bindValue(':username', $username, SQLITE3_TEXT);
         $result = $stmt->execute();

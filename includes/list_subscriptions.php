@@ -391,7 +391,7 @@ function printSubscriptions($subscriptions, $sort, $categories, $members, $i18n,
     }
 }
 
-$query = "SELECT main_currency FROM user WHERE id = :userId";
+$query = "SELECT main_currency FROM \"user\" WHERE id = :userId";
 $stmt = $db->prepare($query);
 $stmt->bindValue(':userId', $userId, SQLITE3_INTEGER);
 $result = $stmt->execute();

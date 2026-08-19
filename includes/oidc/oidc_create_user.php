@@ -23,7 +23,7 @@ $password = bin2hex(random_bytes(16)); // 32-character random password
 $hashedPassword = password_hash($password, PASSWORD_DEFAULT);
 
 // Insert user
-$query = "INSERT INTO user (username, email, oidc_sub, main_currency, avatar, language, budget, firstname, lastname, password, api_key)
+$query = "INSERT INTO \"user\" (username, email, oidc_sub, main_currency, avatar, language, budget, firstname, lastname, password, api_key)
           VALUES (:username, :email, :oidc_sub, :main_currency, :avatar, :language, :budget, :firstname, :lastname, :password, :api_key)";
 $stmt = $db->prepare($query);
 $stmt->bindValue(':username', $username, SQLITE3_TEXT);
@@ -43,7 +43,7 @@ if (!$stmt->execute()) {
 }
 
 // Get the user data into $userData
-$stmt = $db->prepare("SELECT * FROM user WHERE username = :username");
+$stmt = $db->prepare("SELECT * FROM \"user\" WHERE username = :username");
 $stmt->bindValue(':username', $username, SQLITE3_TEXT);
 $result = $stmt->execute();
 $userData = $result->fetchArray(SQLITE3_ASSOC);
@@ -158,7 +158,7 @@ $stmt->bindValue(':user_id', $newUserId, SQLITE3_INTEGER);
 $result = $stmt->execute();
 $currency = $result->fetchArray(SQLITE3_ASSOC);
 if ($currency) {
-    $stmt = $db->prepare("UPDATE user SET main_currency = :main_currency WHERE id = :user_id");
+    $stmt = $db->prepare("UPDATE \"user\" SET main_currency = :main_currency WHERE id = :user_id");
     $stmt->bindValue(':main_currency', $currency['id'], SQLITE3_INTEGER);
     $stmt->bindValue(':user_id', $newUserId, SQLITE3_INTEGER);
     $stmt->execute();

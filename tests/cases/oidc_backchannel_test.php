@@ -259,7 +259,7 @@ wallos_test('a token naming neither subject nor session is refused', function ()
 function backchannel_create_oidc_user($db, $userId, $sub)
 {
     wallos_test_create_user($db, $userId, 'user' . $userId);
-    $stmt = $db->prepare('UPDATE user SET oidc_sub = :sub WHERE id = :id');
+    $stmt = $db->prepare('UPDATE "user" SET oidc_sub = :sub WHERE id = :id');
     $stmt->bindValue(':sub', $sub, SQLITE3_TEXT);
     $stmt->bindValue(':id', $userId, SQLITE3_INTEGER);
     $stmt->execute();
@@ -355,7 +355,7 @@ wallos_test('revocation never deletes the account or its data', function () {
 
     wallos_oidc_revoke_sessions($db, 'subject-a', 'sid-1');
 
-    assert_same(1, (int) $db->querySingle('SELECT COUNT(*) FROM user WHERE id = 1'),
+    assert_same(1, (int) $db->querySingle('SELECT COUNT(*) FROM "user" WHERE id = 1'),
         'the account still exists');
     assert_same(1, (int) $db->querySingle("SELECT COUNT(*) FROM subscriptions WHERE user_id = 1"),
         'and so does the subscription');
@@ -483,7 +483,7 @@ wallos_test('signing in records the session', function () {
 wallos_test('the endpoint deletes no users under any circumstances', function () {
     $source = file_get_contents(WALLOS_ROOT . '/backchannel-logout.php');
 
-    assert_true(strpos($source, 'DELETE FROM user') === false, 'no user deletion');
+    assert_true(strpos($source, 'DELETE FROM "user"') === false, 'no user deletion');
     assert_true(strpos($source, 'DELETE FROM subscriptions') === false, 'no data deletion');
     assert_true(strpos($source, 'wallos_oidc_validate_logout_token') !== false, 'the token is validated');
 });

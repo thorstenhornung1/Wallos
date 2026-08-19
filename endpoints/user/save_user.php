@@ -30,7 +30,7 @@ function update_exchange_rate($db, $userId)
             }
             $codes = rtrim($codes, ',');
 
-            $query = "SELECT u.main_currency, c.code FROM user u LEFT JOIN currencies c ON u.main_currency = c.id WHERE u.id = :userId";
+            $query = "SELECT u.main_currency, c.code FROM \"user\" u LEFT JOIN currencies c ON u.main_currency = c.id WHERE u.id = :userId";
             $stmt = $db->prepare($query);
             $stmt->bindParam(':userId', $userId, SQLITE3_INTEGER);
             $result = $stmt->execute();
@@ -98,7 +98,7 @@ function update_exchange_rate($db, $userId)
 
 $demoMode = getenv('DEMO_MODE');
 
-$query = "SELECT main_currency FROM user WHERE id = :userId";
+$query = "SELECT main_currency FROM \"user\" WHERE id = :userId";
 $stmt = $db->prepare($query);
 $stmt->bindParam(':userId', $userId, SQLITE3_INTEGER);
 $result = $stmt->execute();
@@ -211,7 +211,7 @@ if (
     $lastname = validate($_POST['lastname']);
     $email = validate($_POST['email']);
 
-    $query = "SELECT email FROM user WHERE id = :user_id";
+    $query = "SELECT email FROM \"user\" WHERE id = :user_id";
     $stmt = $db->prepare($query);
     $stmt->bindValue(':user_id', $userId, SQLITE3_TEXT);
     $result = $stmt->execute();
@@ -220,7 +220,7 @@ if (
     $oldEmail = $user['email'];
 
     if ($oldEmail != $email) {
-        $query = "SELECT email FROM user WHERE email = :email AND id != :userId";
+        $query = "SELECT email FROM \"user\" WHERE email = :email AND id != :userId";
         $stmt = $db->prepare($query);
         $stmt->bindValue(':email', $email, SQLITE3_TEXT);
         $stmt->bindValue(':userId', $userId, SQLITE3_INTEGER);
@@ -287,9 +287,9 @@ if (
     }
 
     if (isset($_POST['password']) && $_POST['password'] != "" && !$demoMode) {
-        $sql = "UPDATE user SET avatar = :avatar, firstname = :firstname, lastname = :lastname, email = :email, password = :password, main_currency = :main_currency, language = :language WHERE id = :userId";
+        $sql = "UPDATE \"user\" SET avatar = :avatar, firstname = :firstname, lastname = :lastname, email = :email, password = :password, main_currency = :main_currency, language = :language WHERE id = :userId";
     } else {
-        $sql = "UPDATE user SET avatar = :avatar, firstname = :firstname, lastname = :lastname, email = :email, main_currency = :main_currency, language = :language WHERE id = :userId";
+        $sql = "UPDATE \"user\" SET avatar = :avatar, firstname = :firstname, lastname = :lastname, email = :email, main_currency = :main_currency, language = :language WHERE id = :userId";
     }
 
     $stmt = $db->prepare($sql);

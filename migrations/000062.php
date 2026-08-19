@@ -22,7 +22,7 @@ if ($result !== false) {
 }
 
 if ($adminCount === 0) {
-    $oldest = $db->querySingle('SELECT id FROM user ORDER BY id ASC LIMIT 1');
+    $oldest = $db->querySingle('SELECT id FROM "user" ORDER BY id ASC LIMIT 1');
 
     if ($oldest !== null && $oldest !== false) {
         $statement = $db->prepare("INSERT OR IGNORE INTO user_roles (user_id, role, source)

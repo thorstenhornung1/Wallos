@@ -100,7 +100,7 @@ if (empty($username) || empty($password) || empty($email)) {
     ]));
 }
 
-$stmt = $db->prepare('SELECT COUNT(*) FROM user WHERE username = :username OR email = :email');
+$stmt = $db->prepare('SELECT COUNT(*) FROM "user" WHERE username = :username OR email = :email');
 $stmt->bindValue(':username', $username, SQLITE3_INTEGER);
 $stmt->bindValue(':email', $email, SQLITE3_TEXT);
 $result = $stmt->execute();
@@ -114,7 +114,7 @@ if ($row[0] > 0) {
 }
 
 // Get main currency and language from admin user
-$stmt = $db->prepare('SELECT main_currency, language FROM user WHERE id = :id');
+$stmt = $db->prepare('SELECT main_currency, language FROM "user" WHERE id = :id');
 $stmt->bindValue(':id', $loggedInUserId, SQLITE3_TEXT);
 $result = $stmt->execute();
 $row = $result->fetchArray();
@@ -131,7 +131,7 @@ $stmt->bindValue(':id', $currency, SQLITE3_TEXT);
 $row = $stmt->execute();
 $main_currency = $row->fetchArray()['code'];
 
-$query = "INSERT INTO user (username, email, password, main_currency, avatar, language, budget, api_key) VALUES (:username, :email, :password, :main_currency, :avatar, :language, :budget, :api_key)";
+$query = "INSERT INTO \"user\" (username, email, password, main_currency, avatar, language, budget, api_key) VALUES (:username, :email, :password, :main_currency, :avatar, :language, :budget, :api_key)";
 $stmt = $db->prepare($query);
 $hashedPassword = password_hash($password, PASSWORD_DEFAULT);
 $stmt->bindValue(':username', $username, SQLITE3_TEXT);
@@ -193,7 +193,7 @@ if ($result) {
         $currency = $result->fetchArray(SQLITE3_ASSOC);
 
         // Update user main currency
-        $query = "UPDATE user SET main_currency = :main_currency WHERE id = :user_id";
+        $query = "UPDATE \"user\" SET main_currency = :main_currency WHERE id = :user_id";
         $stmt = $db->prepare($query);
         $stmt->bindValue(':main_currency', $currency['id'], SQLITE3_INTEGER);
         $stmt->bindValue(':user_id', $newUserId, SQLITE3_INTEGER);

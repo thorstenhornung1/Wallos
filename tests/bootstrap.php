@@ -20,6 +20,8 @@ require_once WALLOS_ROOT . '/includes/database/sqlite/database.php';
 
 $GLOBALS['wallos_tests'] = [];
 $GLOBALS['wallos_test_failures'] = [];
+$GLOBALS['wallos_test_skipped'] = [];
+$GLOBALS['wallos_test_pgsql_schemas'] = [];
 $GLOBALS['wallos_test_assertions'] = 0;
 $GLOBALS['wallos_test_current'] = null;
 
@@ -169,6 +171,131 @@ function wallos_test_secret_file($name, $contents)
 }
 
 /**
+ * Which backend this run exercises.
+ *
+ * The suite runs on SQLite by default, because that is what an installation
+ * gets unless it asks otherwise. WALLOS_TEST_DRIVER=pgsql runs the same cases
+ * against PostgreSQL, which is the only way application code is ever executed
+ * against it. Before this existed the single PostgreSQL test compared two
+ * strings, and five defects that made the schema unusable at runtime survived
+ * all the way to a review.
+ *
+ * @return string 'sqlite' or 'pgsql'
+ */
+function wallos_test_driver()
+{
+    return getenv('WALLOS_TEST_DRIVER') === 'pgsql' ? 'pgsql' : 'sqlite';
+}
+
+/**
+ * Connection settings for the PostgreSQL test database.
+ *
+ * @return array
+ */
+function wallos_test_pgsql_settings()
+{
+    return [
+        'host' => getenv('WALLOS_TEST_DB_HOST') ?: 'postgres',
+        'port' => (int) (getenv('WALLOS_TEST_DB_PORT') ?: 5432),
+        'name' => getenv('WALLOS_TEST_DB_NAME') ?: 'wallos',
+        'user' => getenv('WALLOS_TEST_DB_USER') ?: 'wallos',
+        'password' => getenv('WALLOS_TEST_DB_PASSWORD') ?: 'wallos-dev',
+        'sslmode' => 'prefer',
+    ];
+}
+
+/**
+ * A PostgreSQL database with the baseline applied, isolated per case.
+ *
+ * Each case gets its own schema rather than its own database: creating a schema
+ * and loading the baseline costs about 120ms where a database costs far more,
+ * and search_path makes the isolation complete as far as the application can
+ * tell.
+ *
+ * @return WallosDatabase
+ */
+function wallos_test_open_pgsql_database()
+{
+    static $baseline = null;
+
+    require_once WALLOS_ROOT . '/includes/database/pgsql/database.php';
+    require_once WALLOS_ROOT . '/includes/database/configuration.php';
+
+    if ($baseline === null) {
+        $baseline = file_get_contents(WALLOS_ROOT . '/includes/database/pgsql/schema.sql');
+    }
+
+    $settings = wallos_test_pgsql_settings();
+    $db = new WallosPgsqlDatabase(
+        wallos_database_pgsql_dsn($settings),
+        $settings['user'],
+        $settings['password']
+    );
+
+    $schema = 'wallos_test_' . str_replace('.', '', uniqid('', true));
+    $GLOBALS['wallos_test_pgsql_schemas'][] = $schema;
+
+    $db->exec('CREATE SCHEMA ' . $schema);
+    $db->exec('SET search_path TO ' . $schema);
+    $db->exec($baseline);
+
+    return $db;
+}
+
+/**
+ * Removes the schemas this run created.
+ *
+ * @return void
+ */
+function wallos_test_pgsql_cleanup()
+{
+    if (wallos_test_driver() !== 'pgsql' || empty($GLOBALS['wallos_test_pgsql_schemas'])) {
+        return;
+    }
+
+    require_once WALLOS_ROOT . '/includes/database/pgsql/database.php';
+    require_once WALLOS_ROOT . '/includes/database/configuration.php';
+
+    $settings = wallos_test_pgsql_settings();
+    $db = new WallosPgsqlDatabase(
+        wallos_database_pgsql_dsn($settings),
+        $settings['user'],
+        $settings['password']
+    );
+
+    foreach ($GLOBALS['wallos_test_pgsql_schemas'] as $schema) {
+        $db->exec('DROP SCHEMA IF EXISTS ' . $schema . ' CASCADE');
+    }
+
+    $db->close();
+    $GLOBALS['wallos_test_pgsql_schemas'] = [];
+}
+
+/**
+ * Marks a case as SQLite-only.
+ *
+ * Some cases genuinely test SQLite — the migration chain, query plans, the
+ * pragma-based schema checks. Skipping those on PostgreSQL is honest; asserting
+ * them there would be asserting something nobody claims.
+ *
+ * @param string $reason
+ * @return bool whether the case should stop
+ */
+function wallos_test_skip_unless_sqlite($reason)
+{
+    if (wallos_test_driver() === 'sqlite') {
+        return false;
+    }
+
+    $GLOBALS['wallos_test_skipped'][] = [
+        'test' => $GLOBALS['wallos_test_current'],
+        'reason' => $reason,
+    ];
+
+    return true;
+}
+
+/**
  * Builds the real application schema once per run by running the same
  * createdatabase.php and migration chain the container startup uses, then
  * hands out a fresh copy of it per test.
@@ -244,6 +371,10 @@ function wallos_test_database()
  */
 function wallos_test_open_database()
 {
+    if (wallos_test_driver() === 'pgsql') {
+        return wallos_test_open_pgsql_database();
+    }
+
     return wallos_database_connect(wallos_test_database());
 }
 
@@ -302,7 +433,7 @@ function wallos_test_open_counting_database()
  */
 function wallos_test_create_user($db, $id, $username)
 {
-    $stmt = $db->prepare("INSERT INTO user (id, username, email, password, main_currency) VALUES (:id, :username, :email, 'x', 1)");
+    $stmt = $db->prepare("INSERT INTO \"user\" (id, username, email, password, main_currency) VALUES (:id, :username, :email, 'x', 1)");
     $stmt->bindValue(':id', $id, SQLITE3_INTEGER);
     $stmt->bindValue(':username', $username, SQLITE3_TEXT);
     $stmt->bindValue(':email', $username . '@example.com', SQLITE3_TEXT);
@@ -325,11 +456,57 @@ function wallos_test_create_user($db, $id, $username)
         $stmt->execute();
     }
 
-    $stmt = $db->prepare('UPDATE user SET main_currency = :currencyId WHERE id = :id');
+    $stmt = $db->prepare('UPDATE "user" SET main_currency = :currencyId WHERE id = :id');
     $stmt->bindValue(':currencyId', wallos_test_currency_id($id, 0), SQLITE3_INTEGER);
     $stmt->bindValue(':id', $id, SQLITE3_INTEGER);
     $stmt->execute();
+
+    // A household member, a category and a payment method, because a
+    // subscription references all three and PostgreSQL enforces that where
+    // SQLite never has. Fixtures that bound arbitrary ids passed on SQLite and
+    // failed on PostgreSQL with a foreign-key error naming a constraint rather
+    // than the fixture.
+    //
+    // payer_user_id in particular points at household(id), not at user(id) —
+    // this harness used to bind a user id into it, which is the exact confusion
+    // the column's name causes throughout the application.
+    $stmt = $db->prepare('INSERT INTO household (name, email, user_id) VALUES (:name, :email, :userId)');
+    $stmt->bindValue(':name', $username, SQLITE3_TEXT);
+    $stmt->bindValue(':email', $username . '@example.com', SQLITE3_TEXT);
+    $stmt->bindValue(':userId', $id, SQLITE3_INTEGER);
+    $stmt->execute();
+
+    $stmt = $db->prepare('INSERT INTO categories (name, "order", user_id) VALUES (:name, 1, :userId)');
+    $stmt->bindValue(':name', 'Fixture category', SQLITE3_TEXT);
+    $stmt->bindValue(':userId', $id, SQLITE3_INTEGER);
+    $stmt->execute();
+
+    $stmt = $db->prepare('INSERT INTO payment_methods (name, icon, enabled, "order", user_id)
+                          VALUES (:name, :icon, 1, 1, :userId)');
+    $stmt->bindValue(':name', 'Fixture card', SQLITE3_TEXT);
+    $stmt->bindValue(':icon', '', SQLITE3_TEXT);
+    $stmt->bindValue(':userId', $id, SQLITE3_INTEGER);
+    $stmt->execute();
 }
+
+/**
+ * The household member, category and payment method wallos_test_create_user()
+ * made, so a fixture can reference them instead of guessing an id.
+ *
+ * @param SQLite3|WallosDatabase $db
+ * @param int                    $userId
+ * @return array{household: int, category: int, payment_method: int}
+ */
+function wallos_test_user_references($db, $userId)
+{
+    return [
+        'household' => (int) $db->scalar('SELECT id FROM household WHERE user_id = :u ORDER BY id LIMIT 1', [':u' => $userId]),
+        'category' => (int) $db->scalar('SELECT id FROM categories WHERE user_id = :u ORDER BY id LIMIT 1', [':u' => $userId]),
+        'payment_method' => (int) $db->scalar('SELECT id FROM payment_methods WHERE user_id = :u ORDER BY id LIMIT 1', [':u' => $userId]),
+    ];
+}
+
+
 
 /**
  * Fixture currency ids live above the seeded default list so they never clash.

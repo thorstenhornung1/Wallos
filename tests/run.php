@@ -5,6 +5,10 @@
       php tests/run.php              run every case
       php tests/run.php currency     run cases whose file or name matches "currency"
 
+  WALLOS_TEST_DRIVER=pgsql runs the same cases against PostgreSQL. Cases that
+  test SQLite itself mark themselves skipped there rather than asserting
+  something nobody claims.
+
   Exits non-zero when a case fails, so it can be used in CI.
 */
 
@@ -99,10 +103,21 @@ foreach (glob(WALLOS_TEST_TMP . '/case-*.db') as $leftover) {
     @unlink($leftover);
 }
 
+wallos_test_pgsql_cleanup();
+
 $duration = round((microtime(true) - $started) * 1000);
 $failures = count($GLOBALS['wallos_test_failures']);
 
 echo "\n";
+
+if (wallos_test_driver() !== 'sqlite') {
+    echo sprintf("backend: \033[36m%s\033[0m\n", wallos_test_driver());
+}
+
+if (count($GLOBALS['wallos_test_skipped']) > 0) {
+    echo sprintf("\033[33m%d case(s) skipped\033[0m — SQLite-specific behaviour\n",
+        count($GLOBALS['wallos_test_skipped']));
+}
 
 if ($pendingStillOpen > 0) {
     echo sprintf("\033[33m%d open item(s)\033[0m — specified behaviour that is not implemented yet\n", $pendingStillOpen);

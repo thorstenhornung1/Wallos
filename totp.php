@@ -174,7 +174,7 @@ if (isset($_POST['one-time-code'])) {
     }
 
     if ($valid) {
-        $query = "SELECT id, username, main_currency, language FROM user WHERE id = :id";
+        $query = "SELECT id, username, main_currency, language FROM \"user\" WHERE id = :id";
         $stmt = $db->prepare($query);
         $stmt->bindValue(':id', $_SESSION['totp_user_id'], SQLITE3_INTEGER);
         $result = $stmt->execute();

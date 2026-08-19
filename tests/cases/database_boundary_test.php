@@ -12,6 +12,10 @@
 require_once WALLOS_ROOT . '/includes/database/sqlite/database.php';
 
 wallos_test('the connection is the boundary type', function () {
+    if (wallos_test_skip_unless_sqlite('asserts the SQLite implementation extends SQLite3')) {
+        return;
+    }
+
     $db = wallos_test_open_database();
 
     assert_true($db instanceof WallosDatabase, 'it implements the boundary');
@@ -22,21 +26,25 @@ wallos_test('the connection is the boundary type', function () {
 });
 
 wallos_test('every call site pattern still works unchanged', function () {
+    if (wallos_test_skip_unless_sqlite('exercises the SQLite3 method surface directly')) {
+        return;
+    }
+
     // The whole point of extending rather than wrapping. If any of these broke,
     // the migration would have to touch every endpoint at once.
     $db = wallos_test_open_database();
     wallos_test_create_user($db, 1, 'alice');
 
-    $stmt = $db->prepare('SELECT username FROM user WHERE id = :id');
+    $stmt = $db->prepare('SELECT username FROM "user" WHERE id = :id');
     $stmt->bindValue(':id', 1, SQLITE3_INTEGER);
     $row = $stmt->execute()->fetchArray(SQLITE3_ASSOC);
     assert_same('alice', $row['username'], 'prepare/bind/execute/fetchArray');
 
-    assert_same('alice', $db->querySingle('SELECT username FROM user WHERE id = 1'), 'querySingle');
-    assert_true($db->exec("UPDATE user SET username = 'alice2' WHERE id = 1"), 'exec');
+    assert_same('alice', $db->querySingle('SELECT username FROM "user" WHERE id = 1'), 'querySingle');
+    assert_true($db->exec("UPDATE \"user\" SET username = 'alice2' WHERE id = 1"), 'exec');
     assert_same(1, $db->changes(), 'changes');
 
-    $result = $db->query('SELECT id FROM user');
+    $result = $db->query('SELECT id FROM "user"');
     assert_true($result->fetchArray(SQLITE3_ASSOC) !== false, 'query and result iteration');
 
     $db->close();
@@ -51,11 +59,11 @@ wallos_test('scalar reads one value with bound parameters', function () {
     wallos_test_create_user($db, 1, 'alice');
     wallos_test_create_user($db, 2, 'bob');
 
-    assert_same('bob', $db->scalar('SELECT username FROM user WHERE id = :id', [':id' => 2]),
+    assert_same('bob', $db->scalar('SELECT username FROM "user" WHERE id = :id', [':id' => 2]),
         'named parameter');
-    assert_same('alice', $db->scalar('SELECT username FROM user WHERE id = ?', [1]),
+    assert_same('alice', $db->scalar('SELECT username FROM "user" WHERE id = ?', [1]),
         'positional parameter');
-    assert_same(2, (int) $db->scalar('SELECT COUNT(*) FROM user'), 'no parameters');
+    assert_same(2, (int) $db->scalar('SELECT COUNT(*) FROM "user"'), 'no parameters');
 
     $db->close();
 });
@@ -65,7 +73,7 @@ wallos_test('scalar returns null rather than false for no row', function () {
     // empty string or a zero once it reaches a caller that compares loosely.
     $db = wallos_test_open_database();
 
-    assert_true($db->scalar('SELECT username FROM user WHERE id = :id', [':id' => 999]) === null,
+    assert_true($db->scalar('SELECT username FROM "user" WHERE id = :id', [':id' => 999]) === null,
         'no row is null');
 
     $db->close();
@@ -76,11 +84,11 @@ wallos_test('scalar does not interpolate its parameters', function () {
     $db = wallos_test_open_database();
     wallos_test_create_user($db, 1, 'alice');
 
-    $value = $db->scalar('SELECT username FROM user WHERE username = :name',
+    $value = $db->scalar('SELECT username FROM "user" WHERE username = :name',
         [':name' => "alice' OR '1'='1"]);
 
     assert_true($value === null, 'the injection attempt matches nothing');
-    assert_same(1, (int) $db->scalar('SELECT COUNT(*) FROM user'), 'and the table is intact');
+    assert_same(1, (int) $db->scalar('SELECT COUNT(*) FROM "user"'), 'and the table is intact');
 
     $db->close();
 });
@@ -135,10 +143,10 @@ wallos_test('a committed transaction keeps its writes', function () {
     wallos_test_create_user($db, 1, 'alice');
 
     $db->beginTransaction();
-    $db->exec("UPDATE user SET username = 'changed' WHERE id = 1");
+    $db->exec("UPDATE \"user\" SET username = 'changed' WHERE id = 1");
     $db->commit();
 
-    assert_same('changed', $db->scalar('SELECT username FROM user WHERE id = 1'), 'kept');
+    assert_same('changed', $db->scalar('SELECT username FROM "user" WHERE id = 1'), 'kept');
 
     $db->close();
 });
@@ -148,10 +156,10 @@ wallos_test('a rolled back transaction discards its writes', function () {
     wallos_test_create_user($db, 1, 'alice');
 
     $db->beginTransaction();
-    $db->exec("UPDATE user SET username = 'changed' WHERE id = 1");
+    $db->exec("UPDATE \"user\" SET username = 'changed' WHERE id = 1");
     $db->rollBack();
 
-    assert_same('alice', $db->scalar('SELECT username FROM user WHERE id = 1'), 'discarded');
+    assert_same('alice', $db->scalar('SELECT username FROM "user" WHERE id = 1'), 'discarded');
 
     $db->close();
 });
@@ -159,7 +167,7 @@ wallos_test('a rolled back transaction discards its writes', function () {
 wallos_test('lastInsertId agrees with lastInsertRowID', function () {
     // Both spellings work while call sites migrate.
     $db = wallos_test_open_database();
-    $db->exec("INSERT INTO user (username, email, password, main_currency) VALUES ('x', 'x@e.c', 'p', 1)");
+    $db->exec("INSERT INTO \"user\" (username, email, password, main_currency) VALUES ('x', 'x@e.c', 'p', 1)");
 
     assert_same($db->lastInsertRowID(), $db->lastInsertId(), 'the same answer');
     assert_true($db->lastInsertId() > 0, 'and a real id');
@@ -170,6 +178,10 @@ wallos_test('lastInsertId agrees with lastInsertRowID', function () {
 // ------------------------------------------------------------------ the path
 
 wallos_test('the database path resolves independently of the working directory', function () {
+    if (wallos_test_skip_unless_sqlite('SQLite stores its database in a file')) {
+        return;
+    }
+
     // It used to be spelled three ways — 'db/wallos.db', '../../db/wallos.db',
     // and __DIR__-relative — each correct only from the directory its file
     // happened to be included from.
@@ -186,6 +198,10 @@ wallos_test('the database path resolves independently of the working directory',
 });
 
 wallos_test('WALLOS_DB_PATH overrides the location', function () {
+    if (wallos_test_skip_unless_sqlite('SQLite stores its database in a file')) {
+        return;
+    }
+
     putenv('WALLOS_DB_PATH=/tmp/somewhere-else.db');
 
     assert_same('/tmp/somewhere-else.db', wallos_database_path(), 'overridden');
@@ -198,6 +214,10 @@ wallos_test('WALLOS_DB_PATH overrides the location', function () {
 });
 
 wallos_test('connections carry the busy timeout', function () {
+    if (wallos_test_skip_unless_sqlite('busyTimeout is a SQLite concept')) {
+        return;
+    }
+
     // SQLite serialises writers. Without it, a concurrent write fails
     // immediately rather than waiting, the moment two requests overlap — and it
     // used to be set by hand at every call site, which is how one gets missed.

@@ -158,6 +158,10 @@ wallos_test('the type mapping refuses a type it has not been taught', function (
 });
 
 wallos_test('the anchor date default does not carry the day it was generated', function () {
+    if (wallos_test_skip_unless_sqlite('replays a SQLite migration')) {
+        return;
+    }
+
     $schema = pgsql_schema_checked_in();
 
     // migrations/000053.php builds its default out of the current date, so a

@@ -1080,7 +1080,7 @@ if ($budgetPeriodAnchorDate === '1970-01-01' || !preg_match('/^\d{4}-\d{2}-\d{2}
         }
     }
 
-    $query = "SELECT main_currency FROM user WHERE id = :userId";
+    $query = "SELECT main_currency FROM \"user\" WHERE id = :userId";
     $stmt = $db->prepare($query);
     $stmt->bindParam(':userId', $userId, SQLITE3_INTEGER);
     $result = $stmt->execute();

@@ -16,7 +16,7 @@ $replacements = [
 ];
 
 foreach ($replacements as $legacy => $canonical) {
-    $stmt = $db->prepare('UPDATE user SET language = :canonical WHERE language = :legacy');
+    $stmt = $db->prepare('UPDATE "user" SET language = :canonical WHERE language = :legacy');
     $stmt->bindValue(':canonical', $canonical, SQLITE3_TEXT);
     $stmt->bindValue(':legacy', $legacy, SQLITE3_TEXT);
     $stmt->execute();

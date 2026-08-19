@@ -62,7 +62,7 @@ if (isset($_POST['email']) && $_POST['email'] != "" && isset($_GET['submit']) &&
     $resetMode = false;
     $email = $_POST['email'];
 
-    $stmt = $db->prepare("SELECT * FROM user WHERE email = :email");
+    $stmt = $db->prepare("SELECT * FROM \"user\" WHERE email = :email");
     $stmt->bindValue(':email', $email, SQLITE3_TEXT);
     $user = $stmt->execute()->fetchArray(SQLITE3_ASSOC);
 
@@ -114,14 +114,14 @@ if (isset($_POST['password']) && $_POST['password'] != "" && isset($_POST['confi
     $reset = $stmt->execute()->fetchArray(SQLITE3_ASSOC);
 
     if ($reset) {
-        $stmt = $db->prepare("SELECT * FROM user WHERE email = :email");
+        $stmt = $db->prepare("SELECT * FROM \"user\" WHERE email = :email");
         $stmt->bindValue(':email', $reset['email'], SQLITE3_TEXT);
         $result = $stmt->execute();
         $user = $result->fetchArray(SQLITE3_ASSOC);
         
         if ($password == $confirmPassword) {
             $passwordHash = password_hash($password, PASSWORD_DEFAULT);
-            $stmt = $db->prepare("UPDATE user SET password = :password WHERE id = :id");
+            $stmt = $db->prepare("UPDATE \"user\" SET password = :password WHERE id = :id");
             $stmt->bindValue(':password', $passwordHash, SQLITE3_TEXT);
             $stmt->bindValue(':id', $user['id'], SQLITE3_INTEGER);
             $stmt->execute();

@@ -66,7 +66,7 @@ function formatDate($date, $lang = 'en')
 }
 
 // Get the first name of the user
-$stmt = $db->prepare("SELECT username, firstname FROM user WHERE id = :userId");
+$stmt = $db->prepare("SELECT username, firstname FROM \"user\" WHERE id = :userId");
 $stmt->bindValue(':userId', $userId, SQLITE3_INTEGER);
 $result = $stmt->execute();
 $user = $result->fetchArray(SQLITE3_ASSOC);

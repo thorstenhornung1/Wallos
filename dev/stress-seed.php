@@ -50,7 +50,7 @@ function stress_awkward_strings()
         '2026-02-30',                             // a date that does not exist
         '-1',                                     // negative where positive is meant
         '<script>alert(1)</script>',              // HTML that must stay text
-        'SELECT * FROM user; DROP TABLE user;--',  // SQL that must stay text
+        'SELECT * FROM "user"; DROP TABLE user;--',  // SQL that must stay text
     ];
 }
 
@@ -146,7 +146,7 @@ function stress_per_user_rows($index, $awkward)
 
 if ($clean) {
     $db->exec("DELETE FROM subscriptions WHERE name LIKE 'stress-%'");
-    $db->exec("DELETE FROM user WHERE username LIKE 'stress-%'");
+    $db->exec("DELETE FROM \"user\" WHERE username LIKE 'stress-%'");
     foreach (['settings', 'custom_colors', 'custom_css_style', 'notification_settings',
               'email_notifications', 'telegram_notifications', 'webhook_notifications',
               'gotify_notifications', 'pushover_notifications', 'ntfy_notifications',
@@ -156,7 +156,7 @@ if ($clean) {
               'password_resets', 'email_verification', 'ai_recommendations', 'ai_settings',
               'fixer', 'google_search', 'last_exchange_update', 'total_yearly_cost',
               'uploaded_avatars'] as $table) {
-        $db->exec("DELETE FROM $table WHERE user_id NOT IN (SELECT id FROM user)");
+        $db->exec("DELETE FROM $table WHERE user_id NOT IN (SELECT id FROM \"user\")");
     }
     echo "stress data removed\n";
     $db->close();
@@ -178,7 +178,7 @@ for ($u = 1; $u <= $users; $u++) {
     $username = 'stress-user-' . $u;
     $awkwardName = $awkward[$u % count($awkward)];
 
-    stress_insert($db, 'INSERT INTO user (username, email, password, main_currency, avatar, language, budget, firstname, lastname, api_key)
+    stress_insert($db, 'INSERT INTO "user" (username, email, password, main_currency, avatar, language, budget, firstname, lastname, api_key)
         VALUES (:username, :email, :password, 1, :avatar, :language, :budget, :firstname, :lastname, :apiKey)', [
         ':username' => $username,
         ':email' => 'stress' . $u . '@example.com',
@@ -203,7 +203,7 @@ for ($u = 1; $u <= $users; $u++) {
             [':name' => $c[1], ':symbol' => $c[2], ':code' => $c[0], ':rate' => $c[3], ':userId' => $userId]);
         $currencyIds[] = (int) $db->lastInsertRowID();
     }
-    $db->exec('UPDATE user SET main_currency = ' . $currencyIds[0] . ' WHERE id = ' . $userId);
+    $db->exec('UPDATE "user" SET main_currency = ' . $currencyIds[0] . ' WHERE id = ' . $userId);
 
     // Categories, including ones named awkwardly.
     $categoryIds = [];

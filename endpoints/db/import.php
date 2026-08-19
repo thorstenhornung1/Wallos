@@ -1,7 +1,7 @@
 <?php
 require_once '../../includes/connect_endpoint.php';
 
-$result = $db->query("SELECT COUNT(*) as count FROM user");
+$result = $db->query("SELECT COUNT(*) as count FROM \"user\"");
 $row = $result->fetchArray(SQLITE3_NUM);
 if ($row[0] > 0) {
     die(json_encode([

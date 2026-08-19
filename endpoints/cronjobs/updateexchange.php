@@ -10,7 +10,7 @@ if (php_sapi_name() == 'cli') {
     echo "\n" . $date->format('Y-m-d') . " " . $date->format('H:i:s') . "<br />\n";
 }
 
-$query = "SELECT id, username FROM user";
+$query = "SELECT id, username FROM \"user\"";
 $stmt = $db->prepare($query);
 $usersToUpdateExchange = $stmt->execute();
 

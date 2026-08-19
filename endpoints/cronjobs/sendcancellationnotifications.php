@@ -12,7 +12,7 @@ require_once __DIR__ . '/../../includes/notification_settings.php';
 require 'settimezone.php';
 
 // Get all user ids
-$query = "SELECT id, username FROM user";
+$query = "SELECT id, username FROM \"user\"";
 $stmt = $db->prepare($query);
 $usersToNotify = $stmt->execute();
 
@@ -164,7 +164,7 @@ while ($userToNotify = $usersToNotify->fetchArray(SQLITE3_ASSOC)) {
 
             // Email notifications if enabled
             if ($emailNotificationsEnabled) {
-                $stmt = $db->prepare('SELECT * FROM user WHERE id = :user_id');
+                $stmt = $db->prepare('SELECT * FROM "user" WHERE id = :user_id');
                 $stmt->bindValue(':user_id', $userId, SQLITE3_INTEGER);
                 $result = $stmt->execute();
                 $defaultUser = $result->fetchArray(SQLITE3_ASSOC);

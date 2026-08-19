@@ -23,6 +23,10 @@ function index_plan($db, $sql)
 }
 
 wallos_test('the migration creates the subscription indexes', function () {
+    if (wallos_test_skip_unless_sqlite('reads sqlite_master')) {
+        return;
+    }
+
     $db = wallos_test_open_database();
 
     $indexes = [];
@@ -40,6 +44,10 @@ wallos_test('the migration creates the subscription indexes', function () {
 });
 
 wallos_test('the queries Wallos runs use an index instead of scanning', function () {
+    if (wallos_test_skip_unless_sqlite('EXPLAIN QUERY PLAN is SQLite syntax')) {
+        return;
+    }
+
     $db = wallos_test_open_database();
     wallos_test_create_user($db, 1, 'alice');
 
@@ -61,6 +69,10 @@ wallos_test('the queries Wallos runs use an index instead of scanning', function
 });
 
 wallos_test('the migration can run twice', function () {
+    if (wallos_test_skip_unless_sqlite('replays a SQLite migration')) {
+        return;
+    }
+
     $db = wallos_test_open_database();
 
     require WALLOS_ROOT . '/migrations/000055.php';

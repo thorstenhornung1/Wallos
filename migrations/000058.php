@@ -34,4 +34,4 @@ $db->exec("CREATE INDEX IF NOT EXISTS idx_user_roles_user_role ON user_roles (us
 // pointing at nobody.
 $db->exec("INSERT OR IGNORE INTO user_roles (user_id, role, source)
            SELECT 1, 'admin', 'local'
-           WHERE EXISTS (SELECT 1 FROM user WHERE id = 1)");
+           WHERE EXISTS (SELECT 1 FROM \"user\" WHERE id = 1)");

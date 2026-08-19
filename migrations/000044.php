@@ -19,11 +19,11 @@ if (!$tableCheck) {
     ");
 
     // Check if solo user or multiple users
-    $userCount = $db->querySingle("SELECT COUNT(*) FROM user");
+    $userCount = $db->querySingle("SELECT COUNT(*) FROM \"user\"");
 
     if ($userCount === 1) {
         // SOLO USER MIGRATION
-        $userId = $db->querySingle("SELECT id FROM user LIMIT 1");
+        $userId = $db->querySingle("SELECT id FROM \"user\" LIMIT 1");
         
         $avatarDir = '../../images/uploads/logos/avatars';
         
@@ -46,7 +46,7 @@ if (!$tableCheck) {
         }
     } elseif ($userCount > 1) {
         // MULTI-USER MIGRATION
-        $results = $db->query("SELECT id, avatar FROM user");
+        $results = $db->query("SELECT id, avatar FROM \"user\"");
         
         $stmt = $db->prepare("INSERT INTO uploaded_avatars (user_id, path) VALUES (:user_id, :path)");
         

@@ -8,7 +8,7 @@ function getPriceConverted($price, $currency, $database, $userId)
 }
 
 // Get budget from user table
-$query = "SELECT budget FROM user WHERE id = :userId";
+$query = "SELECT budget FROM \"user\" WHERE id = :userId";
 $stmt = $db->prepare($query);
 $stmt->bindValue(':userId', $userId, SQLITE3_INTEGER);
 $result = $stmt->execute();
@@ -76,7 +76,7 @@ if ($usesMultipleCurrencies) {
 // Get code of main currency to display on statistics
 $query = "SELECT c.code
           FROM currencies c
-          INNER JOIN user u ON c.id = u.main_currency
+          INNER JOIN \"user\" u ON c.id = u.main_currency
           WHERE u.id = :userId";
 $stmt = $db->prepare($query);
 $stmt->bindValue(':userId', $userId, SQLITE3_INTEGER);

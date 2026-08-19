@@ -40,7 +40,7 @@ if (!$apiKey) {
     exit;
 }
 
-$sql = "SELECT id FROM user WHERE api_key = :apiKey";
+$sql = "SELECT id FROM \"user\" WHERE api_key = :apiKey";
 $stmt = $db->prepare($sql);
 $stmt->bindValue(':apiKey', $apiKey, SQLITE3_TEXT);
 $result = $stmt->execute();
@@ -113,7 +113,7 @@ if ($hasPeriodBudget || $hasPeriodMeta) {
     $binds[':anchorDate'] = ['value' => $anchorDate, 'type' => SQLITE3_TEXT];
 }
 
-$updateSql = "UPDATE user SET " . implode(', ', $sets) . " WHERE id = :userId";
+$updateSql = "UPDATE \"user\" SET " . implode(', ', $sets) . " WHERE id = :userId";
 $updateStmt = $db->prepare($updateSql);
 
 foreach ($binds as $key => $bind) {

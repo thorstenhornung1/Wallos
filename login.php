@@ -45,7 +45,7 @@ $adminResult = $db->query($adminQuery);
 $adminRow = $adminResult->fetchArray(SQLITE3_ASSOC);
 if ($adminRow['login_disabled'] == 1) {
 
-    $query = "SELECT id, username, main_currency, language FROM user WHERE id = :id";
+    $query = "SELECT id, username, main_currency, language FROM \"user\" WHERE id = :id";
     $stmt = $db->prepare($query);
     $stmt->bindValue(':id', 1, SQLITE3_INTEGER);
     $result = $stmt->execute();
@@ -184,7 +184,7 @@ if (isset($_POST['username']) && isset($_POST['password'])) {
     $password = $_POST['password'];
     $rememberMe = isset($_POST['remember']) ? true : false;
 
-    $query = "SELECT id, password, main_currency, language FROM user WHERE username = :username";
+    $query = "SELECT id, password, main_currency, language FROM \"user\" WHERE username = :username";
     $stmt = $db->prepare($query);
     $stmt->bindValue(':username', $username, SQLITE3_TEXT);
     $result = $stmt->execute();
@@ -205,7 +205,7 @@ if (isset($_POST['username']) && isset($_POST['password'])) {
             $verificationMissing = $result->fetchArray(SQLITE3_ASSOC);
 
             // Check if the user has 2fa enabled
-            $query = "SELECT totp_enabled FROM user WHERE id = :userId";
+            $query = "SELECT totp_enabled FROM \"user\" WHERE id = :userId";
             $stmt = $db->prepare($query);
             $stmt->bindValue(':userId', $userId, SQLITE3_INTEGER);
             $result = $stmt->execute();
@@ -295,7 +295,7 @@ if (!$password_login_disabled) {
     if ($registrationsOpen == 1 && $maxUsers == 0) {
         $registrations = true;
     } else if ($registrationsOpen == 1 && $maxUsers > 0) {
-        $userCountQuery = "SELECT COUNT(id) as userCount FROM user";
+        $userCountQuery = "SELECT COUNT(id) as userCount FROM \"user\"";
         $userCountResult = $db->query($userCountQuery);
         $userCountRow = $userCountResult->fetchArray(SQLITE3_ASSOC);
         $userCount = $userCountRow['userCount'];

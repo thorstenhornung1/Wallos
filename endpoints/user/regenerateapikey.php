@@ -7,7 +7,7 @@ $data = json_decode($postData, true);
 
 $apiKey = bin2hex(random_bytes(32));
 
-$sql = "UPDATE user SET api_key = :apiKey WHERE id = :userId";
+$sql = "UPDATE \"user\" SET api_key = :apiKey WHERE id = :userId";
 $stmt = $db->prepare($sql);
 $stmt->bindValue(':apiKey', $apiKey, SQLITE3_TEXT);
 $stmt->bindValue(':userId', $userId, SQLITE3_TEXT);

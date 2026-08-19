@@ -50,7 +50,7 @@ if ($_SERVER["REQUEST_METHOD"] === "POST" || $_SERVER["REQUEST_METHOD"] === "GET
 
 
     // Get user from API key
-    $sql = "SELECT * FROM user WHERE api_key = :apiKey";
+    $sql = "SELECT * FROM \"user\" WHERE api_key = :apiKey";
     $stmt = $db->prepare($sql);
     $stmt->bindValue(':apiKey', $apiKey);
     $result = $stmt->execute();

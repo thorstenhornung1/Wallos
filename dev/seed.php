@@ -24,14 +24,14 @@ $seedPrefix = 'seed-';
 
 echo "Removing previously seeded data\n";
 $db->exec("DELETE FROM subscriptions WHERE name LIKE '" . $seedPrefix . "%'");
-$db->exec("DELETE FROM user WHERE username LIKE '" . $seedPrefix . "%'");
+$db->exec("DELETE FROM \"user\" WHERE username LIKE '" . $seedPrefix . "%'");
 
 $started = microtime(true);
 $db->exec('BEGIN');
 
 $mainCurrency = (int) $db->querySingle('SELECT id FROM currencies ORDER BY id LIMIT 1');
 
-$insertUser = $db->prepare("INSERT INTO user (username, email, password, main_currency) VALUES (:username, :email, 'seeded', :currency)");
+$insertUser = $db->prepare("INSERT INTO \"user\" (username, email, password, main_currency) VALUES (:username, :email, 'seeded', :currency)");
 $insertSubscription = $db->prepare('INSERT INTO subscriptions
     (name, price, currency_id, next_payment, cycle, frequency, payer_user_id, category_id, notify, inactive, user_id, auto_renew)
     VALUES (:name, :price, :currency, :next, 3, 1, :payer, 1, :notify, 0, :userId, 1)');

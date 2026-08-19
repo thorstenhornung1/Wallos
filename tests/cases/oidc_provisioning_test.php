@@ -64,5 +64,5 @@ wallos_test('the locale is read once, at creation', function () {
     assert_not_contains("locale", $login, 'the login path does not touch it');
 
     $callback = file_get_contents(WALLOS_ROOT . '/includes/oidc/handle_oidc_callback.php');
-    assert_not_contains("UPDATE user SET language", $callback, 'nothing updates the language on login');
+    assert_not_contains("UPDATE \"user\" SET language", $callback, 'nothing updates the language on login');
 });

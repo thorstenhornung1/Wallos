@@ -85,7 +85,7 @@ function handleEditCurrency($db, $userId, $i18n)
 function handleDeleteCurrency($db, $userId, $i18n)
 {
     if (isset($_POST['currencyId']) && $_POST['currencyId'] != "") {
-        $query = "SELECT main_currency FROM user WHERE id = :userId";
+        $query = "SELECT main_currency FROM \"user\" WHERE id = :userId";
         $stmt = $db->prepare($query);
         $stmt->bindParam(':userId', $userId, SQLITE3_INTEGER);
         $result = $stmt->execute();

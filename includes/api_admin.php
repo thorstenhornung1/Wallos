@@ -27,7 +27,7 @@ function wallos_resolve_admin_api_user($db, $apiKey)
         return ['ok' => false, 'user' => null, 'reason' => 'missing_key'];
     }
 
-    $stmt = $db->prepare("SELECT * FROM user WHERE api_key = :apiKey");
+    $stmt = $db->prepare("SELECT * FROM \"user\" WHERE api_key = :apiKey");
     if ($stmt === false) {
         return ['ok' => false, 'user' => null, 'reason' => 'unknown_key'];
     }

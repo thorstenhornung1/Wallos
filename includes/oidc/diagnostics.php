@@ -207,7 +207,7 @@ function wallos_oidc_diagnostics($db)
     }
 
     $provisioned = (int) $db->querySingle(
-        "SELECT COUNT(*) FROM user WHERE oidc_sub IS NOT NULL AND oidc_sub != ''"
+        "SELECT COUNT(*) FROM \"user\" WHERE oidc_sub IS NOT NULL AND oidc_sub != ''"
     );
 
     $checks = wallos_oidc_checks($configuration, $discovery, $discoveryError, $provisioned);

@@ -144,7 +144,7 @@ foreach ($scheduledUserIds as $tempUserId) {
     }
 
     // User language
-    $langStmt = $db->prepare("SELECT language FROM user WHERE id = :user_id");
+    $langStmt = $db->prepare("SELECT language FROM \"user\" WHERE id = :user_id");
     $langStmt->bindValue(':user_id', $tempUserId, SQLITE3_INTEGER);
     $langResult = $langStmt->execute();
     $userLanguage = $langResult->fetchArray(SQLITE3_ASSOC)['language'] ?? 'en';

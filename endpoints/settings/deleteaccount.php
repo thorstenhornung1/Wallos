@@ -15,7 +15,7 @@ if ($userIdToDelete == 1 || $userIdToDelete != $userId) {
     ]));
 } else {
     // Delete user
-    $stmt = $db->prepare('DELETE FROM user WHERE id = :id');
+    $stmt = $db->prepare('DELETE FROM "user" WHERE id = :id');
     $stmt->bindValue(':id', $userIdToDelete, SQLITE3_INTEGER);
     $result = $stmt->execute();
 

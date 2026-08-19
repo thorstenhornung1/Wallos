@@ -51,7 +51,7 @@ if (!$apiKey) {
     exit;
 }
 
-$sql = "SELECT * FROM user WHERE api_key = :apiKey";
+$sql = "SELECT * FROM \"user\" WHERE api_key = :apiKey";
 $stmt = $db->prepare($sql);
 $stmt->bindValue(':apiKey', $apiKey, SQLITE3_TEXT);
 $result = $stmt->execute();
