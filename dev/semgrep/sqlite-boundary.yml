@@ -1,34 +1,71 @@
-# Gate 2 of issue #41 — SQLite APIs must not leak outside the adapter boundary.
+# Gate 2 of issue #41 — SQLite must not leak outside the database boundary.
 #
-# These rules are NOT wired into CI. They cannot pass yet: the adapter boundary
-# does not exist (issue #20) and the repository currently has ~1500 findings.
-# Semgrep has no per-file baseline of the kind dev/db-audit.sh keeps, only
-# --baseline-commit, which needs full git history and only makes sense on pull
-# requests — a second, weaker ratchet with a different shape. A permanently red
-# CI step gets ignored and then deleted, so gate 1 does the gating and these
-# rules are here to be run by hand, and to be switched on the moment the
-# boundary is real.
+# These rules are enforced. `dev/semgrep/run.sh` runs them, the CI job
+# `db-boundary-semgrep` runs that script, and they demand **zero** findings
+# over:
 #
-#   podman run --rm -v "$PWD:/src:ro" -w /src docker.io/semgrep/semgrep \
-#       semgrep --config dev/semgrep/sqlite-boundary.yml --error
+#     includes/  endpoints/  api/  and the root *.php files
 #
-# What Semgrep adds over gate 1: it knows the difference between a method call
-# and the same word in a comment, so once the count is low it can be made to
-# demand zero without the false positives a text search would produce.
+# minus includes/database/ and migrations/, where dialect-specific code belongs
+# by design.
+#
+#   dev/semgrep/run.sh              # exactly what CI runs
+#   dev/semgrep/run.sh --report     # print findings, never fail
+#
+# They were written for issue #41 and left switched off, because at the time
+# they produced ~1350 findings against a boundary that did not exist yet. The
+# boundary exists now (issue #20, includes/database/), and the 2026-08-19
+# PostgreSQL run found three defects that were all the same mistake: code
+# written against SQLite's behaviour rather than against WallosDatabase.
+#
+# Switching the rules on as written was not possible, and the reason is worth
+# stating rather than hiding, because it is the whole design of this file:
+#
+#   1119 findings in the enforced scope, of which
+#   1101  SQLITE3_ASSOC / _TEXT / _INTEGER / _FLOAT / _NUM / _BOTH
+#     17  querySingle() / lastInsertRowID() / busyTimeout()
+#      1  sqlite_master
+#
+# The first 1118 are **not** violations. They are the vocabulary the boundary
+# promises to accept: WallosPgsqlResult::fetchArray() maps SQLITE3_ASSOC onto
+# PDO::FETCH_ASSOC, WallosPgsqlStatement::bindValue() takes the SQLITE3_* type
+# constants "for compatibility", and WallosPgsqlDatabase implements
+# querySingle(), lastInsertRowID() and busyTimeout() so that call sites do not
+# have to ask which backend they are on. A rule that fails on those is not
+# strict, it is wrong — it forbids the portable idiom.
+#
+# So the rules below are narrowed to what genuinely does not survive a change
+# of backend, and extended to the two shapes that were blind and that let #89
+# and #90 through:
+#
+#   * a `SQLite3` type hint, which rejects the PostgreSQL connection outright
+#   * an unquoted mixed-case SQL alias, which PostgreSQL folds to lower case
+#
+# What Semgrep adds over the textual audit in dev/db-audit.sh: it parses PHP,
+# so it can tell a real type hint from the 51 `@param SQLite3 $db` docblocks
+# that would drown a grep for the same thing.
+#
+# Shell scripts are a separate gate. Semgrep cannot see the PHP inside
+# `php -r '...'` in a .sh file, and five violations lived there — see
+# dev/sh-audit.sh.
 
 rules:
+  # ---------------------------------------------------------------------------
+  # Unchanged from the original: 0 findings in the enforced scope, so it is a
+  # wall, not a ratchet. Nothing outside includes/database/ opens a connection
+  # of its own; wallos_database_connect() is the only door.
   - id: wallos-sqlite3-class-outside-boundary
     languages: [php]
     severity: ERROR
     message: >-
-      The SQLite3 extension classes belong to the SQLite adapter. Application
-      code must depend on the Wallos database API instead, so that a second
-      backend cannot be broken silently (issue #41).
+      The SQLite3 extension classes belong to the SQLite adapter. Call
+      wallos_database_connect() and depend on the WallosDatabase API instead,
+      so that a second backend cannot be broken silently (issue #41).
     paths:
       exclude:
-        - libs/
-        - includes/database/sqlite/
-        - migrations/sqlite/
+        - /libs/
+        - /includes/database/
+        - /migrations/
     patterns:
       - pattern-either:
           - pattern: new SQLite3(...)
@@ -36,55 +73,220 @@ rules:
           - pattern: new SQLite3Result(...)
           - pattern: SQLite3::$METHOD(...)
 
-  - id: wallos-sqlite3-method-outside-boundary
+  # ---------------------------------------------------------------------------
+  # Narrowed. The original listed querySingle(), lastInsertRowID(),
+  # busyTimeout(), createFunction() and enableExceptions(). The first three are
+  # implemented on WallosPgsqlDatabase and are portable today — flagging them
+  # cost 17 false positives and no information.
+  #
+  # What is left is the SQLite3 surface that the PostgreSQL adapter does *not*
+  # implement, so a call reaching it is a hard error on the other backend. All
+  # of them are at zero in the enforced scope; this rule keeps them there.
+  - id: wallos-sqlite3-only-method-outside-boundary
     languages: [php]
     severity: ERROR
     message: >-
-      querySingle(), lastInsertRowID() and busyTimeout() exist only on SQLite3.
-      Use the Wallos database API so the call survives a change of backend
-      (issue #41).
+      This method exists only on SQLite3. WallosPgsqlDatabase does not
+      implement it, so the call is a fatal error on any other backend. Add the
+      operation to the WallosDatabase interface instead (issue #41).
     paths:
       exclude:
-        - libs/
-        - includes/database/sqlite/
-        - migrations/sqlite/
+        - /libs/
+        - /includes/database/
+        - /migrations/
     patterns:
       - pattern-either:
-          - pattern: $DB->querySingle(...)
-          - pattern: $DB->lastInsertRowID(...)
-          - pattern: $DB->busyTimeout(...)
           - pattern: $DB->createFunction(...)
+          - pattern: $DB->createAggregate(...)
+          - pattern: $DB->createCollation(...)
           - pattern: $DB->enableExceptions(...)
+          - pattern: $DB->enableExtendedResultCodes(...)
+          - pattern: $DB->loadExtension(...)
+          - pattern: $DB->openBlob(...)
+          - pattern: $DB->setAuthorizer(...)
+          - pattern: $DB->backup(...)
+          - pattern: $DB->lastErrorCode(...)
+          - pattern: $DB->escapeString(...)
+          - pattern: SQLite3::escapeString(...)
+          - pattern: SQLite3::version(...)
+          - pattern: $RESULT->columnName(...)
+          - pattern: $RESULT->columnType(...)
+          - pattern: $STMT->getSQL(...)
+          - pattern: $STMT->paramCount(...)
 
+  # ---------------------------------------------------------------------------
+  # Narrowed, and inverted. The original flagged every SQLITE3_* constant and
+  # found 1101 of them, nearly all of which the boundary handles by design.
+  #
+  # The accepted vocabulary is a closed list — the fetch modes WallosPgsqlResult
+  # maps, the bind types WallosPgsqlStatement understands, and the open flags
+  # wallos_database_connect() documents as SQLite-only for the three callers
+  # that legitimately name a file. Anything outside that list is a constant no
+  # backend but SQLite has ever been asked to understand, so it fails here
+  # rather than at runtime on somebody's instance.
+  #
+  # Keep this list in step with includes/database/pgsql/{result,statement}.php.
+  #
+  # Textual rather than `pattern: $CONSTANT` with a metavariable-regex, which is
+  # what the original used: that form makes Semgrep bind every identifier in the
+  # file and then filter, and it timed out on settings.php. A timed-out rule is
+  # reported as a warning and counts as no findings, so the expensive version
+  # was quietly not checking the largest file in the repository.
   - id: wallos-sqlite3-constant-outside-boundary
     languages: [php]
     severity: ERROR
     message: >-
-      SQLITE3_* constants describe SQLite's own type and mode system. Outside
-      the adapter they pin application code to one backend (issue #41).
+      This SQLITE3_* constant is outside the vocabulary the database boundary
+      accepts. The fetch modes (ASSOC, NUM, BOTH), the bind types (TEXT,
+      INTEGER, FLOAT, BLOB, NULL) and the open flags are translated by the
+      adapters; anything else pins the call site to SQLite (issue #41).
     paths:
       exclude:
-        - libs/
-        - includes/database/sqlite/
-        - migrations/sqlite/
-    patterns:
-      - pattern: $CONSTANT
-      - metavariable-regex:
-          metavariable: $CONSTANT
-          regex: ^SQLITE3_[A-Z_]+$
+        - /libs/
+        - /includes/database/
+        - /migrations/
+    pattern-regex: \bSQLITE3_(?!(?:ASSOC|NUM|BOTH|TEXT|INTEGER|FLOAT|BLOB|NULL|OPEN_READONLY|OPEN_READWRITE|OPEN_CREATE)\b)[A-Z0-9_]+\b
 
+  # ---------------------------------------------------------------------------
   # SQL lives in strings, so this one is deliberately textual: an AST rule can
   # find the string but not parse the dialect inside it.
+  #
+  # Fixed a bug the original shipped with. The pattern was
+  #
+  #     \b(PRAGMA\s+\w|...)\b
+  #
+  # and the trailing \b applies to every alternative, so `PRAGMA\s+\w` could
+  # only ever match a one-letter word: `PRAGMA table_info(subscriptions)` in
+  # endpoints/cronjobs/createdatabase.php was silently not a finding.
   - id: wallos-sqlite-only-sql-outside-boundary
     languages: [php]
     severity: ERROR
     message: >-
       This SQL is SQLite-only. PRAGMA, sqlite_master, pragma_table_info,
-      INSERT OR REPLACE and AUTOINCREMENT have no portable meaning; they belong
-      in a SQLite-only migration under migrations/sqlite/ (issue #41).
+      INSERT OR REPLACE and AUTOINCREMENT have no portable meaning. Ask the
+      boundary instead — tableExists(), columnExists(), tablesWithColumn() —
+      or put the statement in a SQLite-only migration (issue #41).
     paths:
       exclude:
-        - libs/
-        - includes/database/sqlite/
-        - migrations/sqlite/
-    pattern-regex: (?i)\b(PRAGMA\s+\w|sqlite_master|pragma_table_info|INSERT\s+OR\s+REPLACE|AUTOINCREMENT)\b
+        - /libs/
+        - /includes/database/
+        - /migrations/
+        # The SQLite installer, and only for this rule. It returns at line 18
+        # when the driver is pgsql — everything below it builds the SQLite
+        # schema statement by statement, so PRAGMA and sqlite_master there are
+        # the point rather than a leak. It stays in scope for every other rule
+        # in this file. Two findings live here; dev/db-audit.sh still counts
+        # them, and docs/sqlite-boundary.md names them.
+        - /endpoints/cronjobs/createdatabase.php
+    pattern-regex: (?i)\b(PRAGMA\s+\w+|sqlite_master|pragma_table_info|INSERT\s+OR\s+REPLACE|AUTOINCREMENT)\b
+
+  # ---------------------------------------------------------------------------
+  # Issue #90. computeAmountNeededInPeriod() and convertPriceToMainCurrency()
+  # declared `SQLite3 $database`, so PHP threw a TypeError before either body
+  # ran the moment a PostgreSQL connection was passed. That killed
+  # sendnotifications — unattended, so nobody saw it — plus stats.php and
+  # api/subscriptions/get_period_budget.php.
+  #
+  # This is the rule that pays for Semgrep. The same repository holds 51
+  # docblocks spelling `SQLite3 $db`; a text search for that finds 53 things
+  # and buries the two that matter. Parsing PHP finds exactly the two.
+  #
+  # The docblocks are wrong too — they name an implementation where the
+  # contract is meant — but they are documentation, not a runtime break, so
+  # they are reported in docs/sqlite-boundary.md rather than failed on here.
+  - id: wallos-sqlite3-type-outside-boundary
+    languages: [php]
+    severity: ERROR
+    message: >-
+      A SQLite3 type hint names an implementation where the contract is meant,
+      and rejects every other backend with a TypeError before the function body
+      runs. Declare WallosDatabase instead — WallosSqliteDatabase extends
+      SQLite3 and implements it, so existing callers still satisfy the hint
+      (issue #41, defect #90).
+    paths:
+      exclude:
+        - /libs/
+        - /includes/database/
+        - /migrations/
+    patterns:
+      - pattern-either:
+          - pattern: function $F(..., $TYPE $ARG, ...) { ... }
+          - pattern: function $F(..., ?$TYPE $ARG, ...) { ... }
+          - pattern: "function $F(...): $TYPE { ... }"
+          - pattern: "function $F(...): ?$TYPE { ... }"
+          - pattern: $VALUE instanceof $TYPE
+      - metavariable-regex:
+          metavariable: $TYPE
+          regex: ^\\?SQLite3(Stmt|Result)?$
+
+  # Typed properties are the one shape Semgrep's PHP parser will not take as a
+  # pattern (`SQLite3 $x;` is a parse error), so this half is textual. It is
+  # anchored on a visibility keyword and skips continuation lines of a docblock,
+  # because `@var \SQLite3 $db` otherwise reads as one.
+  - id: wallos-sqlite3-typed-property-outside-boundary
+    languages: [php]
+    severity: ERROR
+    message: >-
+      A property typed SQLite3 pins the object holding it to one backend.
+      Declare WallosDatabase instead (issue #41, defect #90).
+    paths:
+      exclude:
+        - /libs/
+        - /includes/database/
+        - /migrations/
+    pattern-regex: (?m)^(?!\s*\*)[^\n]*\b(?:private|protected|public|readonly|static)\s+\??\\?SQLite3(?:Stmt|Result)?\s+&?\$
+
+  # ---------------------------------------------------------------------------
+  # Issue #89. PostgreSQL folds an unquoted identifier to lower case, so
+  # `SELECT COUNT(*) as userCount` comes back under the key `usercount` and
+  # every read of the documented key finds nothing — silently, with a zero.
+  # SQLite preserves the case, which is why seven of these survived for as long
+  # as there was only one backend.
+  #
+  # The alias must start lower case and contain an upper-case letter: that is
+  # what camelCase looks like and what English prose after the word "as" does
+  # not. Measured against the tree that still had the defect it found all seven
+  # sites and nothing else.
+  #
+  # Already-quoted aliases are excluded by the lookahead, which is also what
+  # keeps ordinary prose — `count as "has text"` — out of the results.
+  - id: wallos-unquoted-mixed-case-alias
+    languages: [php]
+    severity: ERROR
+    message: >-
+      This SQL alias is mixed case and unquoted. PostgreSQL folds it to lower
+      case, so the array key the reading side asks for does not exist and the
+      value silently reads as null. Write `as "userCount"` — it works on both
+      backends and the reading site needs no change (issue #41, defect #89).
+    paths:
+      exclude:
+        - /libs/
+        - /includes/database/
+        - /migrations/
+    pattern-regex: \b[Aa][Ss]\s+(?!["'`])[a-z_][A-Za-z0-9_]*[A-Z][A-Za-z0-9_]*
+
+  # ---------------------------------------------------------------------------
+  # `user` is a reserved word in PostgreSQL: unquoted, `FROM user` means the
+  # session user, not the table. Commit a892a6b quoted all of them; this keeps
+  # the next one from arriving unquoted. Zero findings in the enforced scope.
+  #
+  # `user_roles`, `user_id` and friends are safe — the pattern requires the
+  # word to end there.
+  #
+  # Case-sensitive on the keyword, deliberately. Wallos writes SQL keywords in
+  # upper case, and a case-insensitive version matched four English comments
+  # ("Update user main currency", "Get budget from user table") for every real
+  # site. Lower-case SQL would slip past; a comment that fails the build teaches
+  # contributors to switch the rule off.
+  - id: wallos-unquoted-reserved-table-outside-boundary
+    languages: [php]
+    severity: ERROR
+    message: >-
+      `user` is a reserved word in PostgreSQL. Unquoted, this reads the session
+      user rather than the table. Write "user" (issue #41).
+    paths:
+      exclude:
+        - /libs/
+        - /includes/database/
+        - /migrations/
+    pattern-regex: \b(?:FROM|JOIN|INTO|UPDATE)\s+user\b

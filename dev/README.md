@@ -16,6 +16,27 @@ vendors its libraries. It builds the real schema by running
 `endpoints/cronjobs/createdatabase.php` and the migration chain inside a
 throwaway copy of the source tree, then hands each case its own database file.
 
+The same cases run against PostgreSQL, which needs a server to connect to and
+therefore the development container rather than the throwaway one:
+
+```sh
+podman exec -e WALLOS_TEST_DRIVER=pgsql wallos-dev php tests/run.php
+```
+
+Each case gets its own schema there, and cases that test SQLite itself say so
+and stand aside instead of asserting something nobody claims.
+
+**The fixture hands over the connection the application builds.**
+`wallos_test_open_database()` points `WALLOS_DB_PATH` or the `WALLOS_DB_*`
+variables at a throwaway database and then calls `wallos_database_connect()`
+with no arguments — the same call `index.php` makes. A fixture that constructs
+its own object can construct one the application never has, and then a
+signature like `computeAmountNeededInPeriod(..., SQLite3 $database)` goes on
+rejecting the real PostgreSQL connection in production while the suite stays
+green (issue #90). On PostgreSQL the environment also carries `PGOPTIONS`, so a
+connection the code under test opens for itself lands in the same isolated
+schema rather than in `public`.
+
 Cases registered with `wallos_test_pending()` describe behaviour the
 specification requires but the code does not implement yet. They are reported
 as `open` and do not fail the run; when one starts passing, the runner says so
@@ -88,6 +109,85 @@ podman exec wallos-dev php /var/www/html/dev/seed.php 10 100
 Seeds users and subscriptions for query-count and page-timing work. Seeded rows
 are prefixed `seed-` and are replaced on each run; real accounts are untouched.
 Useful sizes from the specification: `1 100`, `10 1000`, `100 10000`.
+
+### Performance measurement
+
+```sh
+dev/benchmark.sh                                     the local dev instance
+WALLOS_PASSWORD=… dev/benchmark.sh \
+    --base https://test.example.de --user admin \
+    --exec 'docker exec wallos-test_wallos.1.abc'    a remote instance
+```
+
+Two tables: one account's subscription list at 100, 1000 and 5000 entries, and
+the notification cron at 1, 10 and 100 accounts. Every figure is the median of
+five runs, and the header names the database the figures were measured against.
+
+Everything that writes goes through `dev/bench.php`, which connects with
+`wallos_database_connect()` and has no way to name a database. That is the fix
+for issue #91: on a PostgreSQL instance the seeding used to reach PostgreSQL
+while the sizing and the cleanup went to `db/wallos.db`, so the entries column
+timed pages against rows that were never inserted where those pages read, and
+the run finished by printing "Seeded data removed." having removed nothing. The
+cleanup now reports the rows it actually removed, counted before and after, and
+the script refuses to measure at all if the account it signs in as over HTTP is
+absent from the database it just opened.
+
+The password comes from `WALLOS_PASSWORD`, `--password-file` or
+`--password-stdin`. `--password` still works and warns: an argument is visible
+to every `ps` on the machine for the length of the run.
+
+The rates column is decided before any tier runs: with no provider configured,
+one that refuses, or one that does not answer within `--rates-timeout` seconds
+(20 by default), it reads `skipped` and the reason is printed under the table.
+If a tier that is measured passes `--cron-timeout` instead, the cell reads
+`timeout`, the figures already taken stay, and the later tiers are not attempted
+— they have more accounts and would buy the same answer at the same price.
+Both the development environment and `docs/test-instance.md` prescribe a
+deliberately invalid provider key so that no run spends real quota, which means
+the figure that column would otherwise print is a network timeout — one tier
+alone ran for eleven minutes that way. Every cron run is bounded, so a hanging
+job costs one bound rather than the whole benchmark.
+
+### Snapshots of a real database
+
+```sh
+dev/snapshot.sh                          take one, named by timestamp
+dev/snapshot.sh --name before-79         take one under a name
+dev/snapshot.sh --list                   what is stored
+dev/snapshot.sh --show before-79         its manifest
+dev/snapshot.sh --rehearse before-79     migrate it into a scratch schema
+```
+
+A migration has to survive real data, and real data is not what a generator
+produces. SQLite declares foreign keys and enforces them only when asked, so an
+installation that has been used accumulates rows PostgreSQL will refuse — a
+subscription pointing at a payment method somebody deleted, notification rows
+belonging to an account that is gone. Those rows are the interesting part of a
+migration and no fixture has them, because a fixture has no history.
+
+The copy is taken with `VACUUM INTO` from a read-only connection, falling back
+to the backup API; both are transactionally consistent on a database that is
+being written to, which `cp` is not — a plain copy can catch a page halfway
+through a write and produce a file that opens and is wrong. The copy is then
+checked, streamed out of the container, and compared byte for byte, because a
+truncated database file opens perfectly well.
+
+Each snapshot gets a manifest beside it: row counts per table, and how many rows
+violate which foreign key that PostgreSQL will enforce. The constraint list is
+read from `includes/database/pgsql/schema.sql`, because the question is not
+which references SQLite declares but which ones the target will enforce when the
+data arrives.
+
+Snapshots hold real data, so `dev/snapshots/` is git-ignored. The script refuses
+to snapshot an instance that is configured for PostgreSQL: a `db/wallos.db` on
+such an instance is a leftover, and on the instance in issue #91 it was the
+backup kept as the rollback route.
+
+`--rehearse` creates a scratch schema, runs `dev/migrate-to-pgsql.php` against
+the snapshot, and drops the schema again — `--keep` leaves it, and `--dry-run`,
+`--allow-non-empty` and `--skip-orphans` are passed through. A schema that was
+already there is never dropped, and `public` is never dropped at all.
 
 ### Moving an existing installation to PostgreSQL
 

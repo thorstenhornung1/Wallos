@@ -90,12 +90,41 @@ jobs:
   # still turns the whole workflow red, which is the enforcement; `build` does
   # not depend on it, because refusing to produce an image over a boundary
   # regression only creates pressure to switch the gate off.
+  # The shell audit lives in this job rather than in one of its own for the same
+  # reason the textual one does: it is grep, it needs nothing installed, and it
+  # answers the same question about a file type Semgrep cannot read.
   db-boundary:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - name: Audit the SQLite boundary
         run: dev/db-audit.sh
+      - name: Audit the SQLite boundary in shell scripts
+        # Runs even when the textual audit failed: the two look at different
+        # files, and finding out about both in one run beats two round trips.
+        if: always()
+        run: dev/sh-audit.sh
+
+  # The same boundary, checked by parsing PHP instead of searching it. Semgrep
+  # tells a real `SQLite3 $db` type hint from the 51 docblocks that spell the
+  # same words, which a text search cannot — and that is the whole reason gate 2
+  # exists: defect #90 was two of the former hidden among the latter.
+  #
+  # Separate from db-boundary because it is the only part that needs something
+  # installed. The grep gates answer in seconds; making them wait on a pip
+  # install would spend the property that made them worth having.
+  #
+  # Semgrep is pinned. An unpinned linter turns somebody else's release into a
+  # red build on a branch that changed nothing, and the first fix anybody
+  # reaches for then is to switch the gate off.
+  db-boundary-semgrep:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Semgrep
+        run: pipx install semgrep==1.172.0
+      - name: Audit the SQLite boundary with Semgrep
+        run: dev/semgrep/run.sh --local
 
   build:
     runs-on: ubuntu-latest

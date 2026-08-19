@@ -11,5 +11,10 @@ AGENTS.md
 # Local development environment: real secret files, never the examples
 dev/secrets/
 
+# Copies of real databases taken by dev/snapshot.sh, with the manifest that
+# describes them. They hold whatever the instance they came from held —
+# addresses, subscription names, notification settings — so they stay local.
+dev/snapshots/
+
 # Agent worktrees and local tooling state
 .claude/

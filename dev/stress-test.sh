@@ -71,11 +71,13 @@ printf '\nWallos stress test — %s, %d users, %d rounds, %d concurrent\n\n' \
 BLOCKED=$($EXEC php -r '
     require "/var/www/html/includes/database/connection.php";
     $db = wallos_database_connect();
-    $r = $db->query("SELECT u.username FROM user u
-                     JOIN email_verification ev ON ev.user_id = u.id
-                     WHERE u.username LIKE \"stress-user-%\"");
+    $s = $db->prepare("SELECT u.username FROM \"user\" u
+                       JOIN email_verification ev ON ev.user_id = u.id
+                       WHERE u.username LIKE :prefix");
+    $s->bindValue(":prefix", "stress-user-%");
+    $r = $s->execute();
     $names = [];
-    while ($x = $r->fetchArray(SQLITE3_ASSOC)) { $names[] = $x["username"]; }
+    while ($r !== false && $x = $r->fetchArray()) { $names[] = $x["username"]; }
     echo implode(" ", $names);
 ' 2>/dev/null)
 
@@ -162,10 +164,10 @@ while [ "$i" -le "$USERS" ]; do
     ids=$($EXEC php -r '
         require "/var/www/html/includes/database/connection.php";
         $db = wallos_database_connect();
-        $u = (int) $db->scalar("SELECT id FROM user WHERE username = :n", [":n" => "stress-user-'"$i"'"]);
+        $u = (int) $db->scalar("SELECT id FROM \"user\" WHERE username = :n", [":n" => "stress-user-'"$i"'"]);
         printf("%d %d %d %d",
             $u,
-            (int) $db->scalar("SELECT main_currency FROM user WHERE id = :u", [":u" => $u]),
+            (int) $db->scalar("SELECT main_currency FROM \"user\" WHERE id = :u", [":u" => $u]),
             (int) $db->scalar("SELECT id FROM categories WHERE user_id = :u LIMIT 1", [":u" => $u]),
             (int) $db->scalar("SELECT id FROM payment_methods WHERE user_id = :u LIMIT 1", [":u" => $u]));
     ' 2>/dev/null)
@@ -223,7 +225,7 @@ check "$CONCURRENCY concurrent writers all completed" \
 users_now=$($EXEC php -r '
     require "/var/www/html/includes/database/connection.php";
     $db = wallos_database_connect();
-    echo (int) $db->scalar("SELECT COUNT(*) FROM user WHERE username LIKE :p", [":p" => "stress-%"]);
+    echo (int) $db->scalar("SELECT COUNT(*) FROM \"user\" WHERE username LIKE :p", [":p" => "stress-%"]);
 ' 2>/dev/null)
 check "the seeded accounts are all still present" \
     "$([ "$users_now" = "$USERS" ] && echo 1 || echo 0)"

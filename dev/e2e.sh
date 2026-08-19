@@ -9,6 +9,7 @@
 
 set -eu
 
+ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 BASE=${WALLOS_BASE:-http://localhost:8383}
 MAILPIT=${MAILPIT_BASE:-http://localhost:8025}
 ENGINE=${CONTAINER_ENGINE:-podman}
@@ -48,13 +49,24 @@ LOGS=$("$ENGINE" logs "$CONTAINER" 2>&1 || true)
 # Asked of the database rather than the log: the log only mentions a migration
 # on the run that applied it, so a restarted container would fail a log check
 # while being perfectly up to date.
+#
+# Asked of the configured database, not of a file. Opening db/wallos.db here
+# passed on a PostgreSQL instance by reading a SQLite file the application had
+# stopped using (issue #91) — the check would have gone on succeeding against a
+# database nobody was serving from.
 LATEST_MIGRATION=$("$ENGINE" exec "$CONTAINER" php -r '
-    $db = new SQLite3("/var/www/html/db/wallos.db");
-    echo (string) $db->querySingle("SELECT MAX(migration) FROM migrations");
+    require "/var/www/html/includes/database/connection.php";
+    $db = wallos_database_connect();
+    echo (string) $db->scalar("SELECT MAX(migration) FROM migrations");
 ' 2>/dev/null || true)
 
-check "the migration chain is fully applied" \
-    "$(contains "$LATEST_MIGRATION" '000063')"
+# Taken from the tree rather than written down: a number in this file is stale
+# the day the next migration lands, and a check that has to be edited by hand
+# after every migration is a check that eventually gets deleted instead.
+EXPECTED_MIGRATION=$(basename "$(ls "$ROOT"/migrations/*.php | LC_ALL=C sort | tail -1)")
+
+check "the migration chain is fully applied (through $EXPECTED_MIGRATION)" \
+    "$(contains "$LATEST_MIGRATION" "$EXPECTED_MIGRATION")"
 check "startup produced no PHP errors" "$(absent "$LOGS" 'PHP \(Fatal\|Parse\|Warning\)')"
 
 # --- account ---------------------------------------------------------------
@@ -80,9 +92,10 @@ check "admin page renders" "$(contains "$ADMIN" 'Instance Integrations')"
 # The admin page above renders because of a role row, not because this account
 # happens to be the first in the table. A second account must not get in.
 ROLES=$("$ENGINE" exec "$CONTAINER" php -r '
-    $db = new SQLite3("/var/www/html/db/wallos.db");
+    require "/var/www/html/includes/database/connection.php";
+    $db = wallos_database_connect();
     $r = $db->query("SELECT user_id, role, source FROM user_roles");
-    while ($x = $r->fetchArray(SQLITE3_ASSOC)) { echo $x["user_id"], ":", $x["role"], ":", $x["source"], "\n"; }
+    while ($r !== false && $x = $r->fetchArray()) { echo $x["user_id"], ":", $x["role"], ":", $x["source"], "\n"; }
 ' 2>/dev/null)
 check "the first account holds a local admin role" "$(contains "$ROLES" '1:admin:local')"
 
