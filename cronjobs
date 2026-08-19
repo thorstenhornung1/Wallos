@@ -1,12 +1,34 @@
+# Wallos scheduled jobs.
+#
+# Two things every line does, and both are about being able to tell that a job
+# failed without being told by a user.
+#
+# WALLOS_CRON_STRICT=1 asks the job to put its outcome in its exit status. It
+# is set here rather than defaulted in the code because startup.sh runs four of
+# these same scripts under `set -e` before the container finishes starting, and
+# an installation that cannot reach GitHub or whose rate provider refuses its
+# key should still boot. A run nobody is watching is exactly the one that wants
+# the status, and that is this file.
+#
+# The output is split rather than merged. Standard output is the job's running
+# commentary and stays in a file; standard error is where the reporting harness
+# writes its one ERROR line, and /proc/1/fd/2 is the container's own stderr, so
+# that line reaches `docker logs` instead of a file inside the container that
+# nobody mounts and nothing rotates.
+#
+# A job that fails also records itself in the cron_runs table, which the admin
+# page reads. That is the signal that survives a container being recreated, and
+# the only one that shows a job which stopped being started at all.
+
 # Run the scripts every day
-0 1 * * * /usr/local/bin/php /var/www/html/endpoints/cronjobs/updatenextpayment.php >> /var/log/cron/updatenextpayment.log 2>&1
-0 2 * * * /usr/local/bin/php /var/www/html/endpoints/cronjobs/updateexchange.php >> /var/log/cron/updateexchange.log 2>&1
-0 8 * * * /usr/local/bin/php /var/www/html/endpoints/cronjobs/sendcancellationnotifications.php >> /var/log/cron/sendcancellationnotifications.log 2>&1
-0 9 * * * /usr/local/bin/php /var/www/html/endpoints/cronjobs/sendnotifications.php >> /var/log/cron/sendnotifications.log 2>&1
-*/2 * * * * /usr/local/bin/php /var/www/html/endpoints/cronjobs/sendverificationemails.php >> /var/log/cron/sendverificationemails.log 2>&1
-*/2 * * * * /usr/local/bin/php /var/www/html/endpoints/cronjobs/sendresetpasswordemails.php >> /var/log/cron/sendresetpasswordemails.log 2>&1
-0 */6 * * * /usr/local/bin/php /var/www/html/endpoints/cronjobs/checkforupdates.php >> /var/log/cron/checkforupdates.log 2>&1
-30 1 * * 1 /usr/local/bin/php /var/www/html/endpoints/cronjobs/storetotalyearlycost.php >> /var/log/cron/storetotalyearlycost.log 2>&1
-0 3 * * * /usr/local/bin/php /var/www/html/endpoints/cronjobs/cleanupresettokens.php >> /var/log/cron/cleanupresettokens.log 2>&1
-30 3 * * 1 /usr/local/bin/php /var/www/html/endpoints/cronjobs/generaterecommendations.php weekly >> /var/log/cron/generaterecommendations.log 2>&1
-0 4 1 * * /usr/local/bin/php /var/www/html/endpoints/cronjobs/generaterecommendations.php monthly >> /var/log/cron/generaterecommendations.log 2>&1
+0 1 * * * WALLOS_CRON_STRICT=1 /usr/local/bin/php /var/www/html/endpoints/cronjobs/updatenextpayment.php >> /var/log/cron/updatenextpayment.log 2>> /proc/1/fd/2
+0 2 * * * WALLOS_CRON_STRICT=1 /usr/local/bin/php /var/www/html/endpoints/cronjobs/updateexchange.php >> /var/log/cron/updateexchange.log 2>> /proc/1/fd/2
+0 8 * * * WALLOS_CRON_STRICT=1 /usr/local/bin/php /var/www/html/endpoints/cronjobs/sendcancellationnotifications.php >> /var/log/cron/sendcancellationnotifications.log 2>> /proc/1/fd/2
+0 9 * * * WALLOS_CRON_STRICT=1 /usr/local/bin/php /var/www/html/endpoints/cronjobs/sendnotifications.php >> /var/log/cron/sendnotifications.log 2>> /proc/1/fd/2
+*/2 * * * * WALLOS_CRON_STRICT=1 /usr/local/bin/php /var/www/html/endpoints/cronjobs/sendverificationemails.php >> /var/log/cron/sendverificationemails.log 2>> /proc/1/fd/2
+*/2 * * * * WALLOS_CRON_STRICT=1 /usr/local/bin/php /var/www/html/endpoints/cronjobs/sendresetpasswordemails.php >> /var/log/cron/sendresetpasswordemails.log 2>> /proc/1/fd/2
+0 */6 * * * WALLOS_CRON_STRICT=1 /usr/local/bin/php /var/www/html/endpoints/cronjobs/checkforupdates.php >> /var/log/cron/checkforupdates.log 2>> /proc/1/fd/2
+30 1 * * 1 WALLOS_CRON_STRICT=1 /usr/local/bin/php /var/www/html/endpoints/cronjobs/storetotalyearlycost.php >> /var/log/cron/storetotalyearlycost.log 2>> /proc/1/fd/2
+0 3 * * * WALLOS_CRON_STRICT=1 /usr/local/bin/php /var/www/html/endpoints/cronjobs/cleanupresettokens.php >> /var/log/cron/cleanupresettokens.log 2>> /proc/1/fd/2
+30 3 * * 1 WALLOS_CRON_STRICT=1 /usr/local/bin/php /var/www/html/endpoints/cronjobs/generaterecommendations.php weekly >> /var/log/cron/generaterecommendations.log 2>> /proc/1/fd/2
+0 4 1 * * WALLOS_CRON_STRICT=1 /usr/local/bin/php /var/www/html/endpoints/cronjobs/generaterecommendations.php monthly >> /var/log/cron/generaterecommendations.log 2>> /proc/1/fd/2

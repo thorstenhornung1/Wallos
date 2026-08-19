@@ -3,18 +3,26 @@ use PHPMailer\PHPMailer\PHPMailer;
 use PHPMailer\PHPMailer\SMTP;
 use PHPMailer\PHPMailer\Exception;
 
+require_once __DIR__ . '/../../includes/cron_run.php';
+wallos_cron_begin('sendcancellationnotifications');
+
 require_once 'validate.php';
 require_once __DIR__ . '/../../includes/connect_endpoint_crontabs.php';
 require_once __DIR__ . '/../../includes/ssrf_helper.php';
 require_once __DIR__ . '/../../includes/mailer.php';
 require_once __DIR__ . '/../../includes/notification_settings.php';
+wallos_cron_database($db);
 
 require 'settimezone.php';
 
 // Get all user ids
 $query = "SELECT id, username FROM \"user\"";
 $stmt = $db->prepare($query);
-$usersToNotify = $stmt->execute();
+$usersToNotify = $stmt === false ? false : $stmt->execute();
+
+if ($usersToNotify === false) {
+    wallos_cron_fail('could not read the user list: ' . wallos_cron_reason($db));
+}
 
 // One query per provider table for everybody, instead of one per user per
 // provider.
@@ -184,6 +192,9 @@ while ($userToNotify = $usersToNotify->fetchArray(SQLITE3_ASSOC)) {
                     $transport = wallos_build_mailer($emailConfig, $db);
 
                     if (!$transport['success']) {
+                        wallos_cron_problem('the mail transport of user ' . $userId
+                            . ' is unusable, so no cancellation email was sent: '
+                            . $transport['message']);
                         echo "Email notifications not sent: " . $transport['message'] . "<br />";
                         break;
                     }
@@ -196,29 +207,43 @@ while ($userToNotify = $usersToNotify->fetchArray(SQLITE3_ASSOC)) {
                     $emailaddress = !empty($user['email']) ? $user['email'] : $defaultEmail;
                     $name = !empty($user['name']) ? $user['name'] : $defaultName;
 
-                    $mail->addAddress($emailaddress, $name);
+                    // Per recipient. PHPMailer throws from addAddress, addCC
+                    // and send alike, and this notice only fires on the single
+                    // day a subscription's cancellation date matches — so a run
+                    // that dies at the first bad address does not lose one
+                    // notification, it loses everyone else's for good.
+                    try {
+                        $mail->addAddress($emailaddress, $name);
 
-                    if (!empty($emailConfig['values']['other_emails'])) {
-                        $list = explode(';', $emailConfig['values']['other_emails']);
+                        if (!empty($emailConfig['values']['other_emails'])) {
+                            $list = explode(';', $emailConfig['values']['other_emails']);
 
-                        // Avoid duplicate emails
-                        $list = array_unique($list);
-                        $list = array_filter($list, function ($value) use ($emailaddress) {
-                            return $value !== $emailaddress;
-                        });
+                            // Avoid duplicate emails
+                            $list = array_unique($list);
+                            $list = array_filter($list, function ($value) use ($emailaddress) {
+                                return $value !== $emailaddress;
+                            });
 
-                        foreach($list as $value) {
-                            $mail->addCC(trim($value));
+                            foreach($list as $value) {
+                                $mail->addCC(trim($value));
+                            }
                         }
-                    }
 
-                    $mail->Subject = 'Wallos Cancellation Notification';
-                    $mail->Body = $message;
+                        $mail->Subject = 'Wallos Cancellation Notification';
+                        $mail->Body = $message;
 
-                    if ($mail->send()) {
-                        echo "Email Notifications sent<br />";
-                    } else {
-                        echo "Error sending notifications: " . $mail->ErrorInfo . "<br />";
+                        if ($mail->send()) {
+                            wallos_cron_count('sent');
+                            echo "Email Notifications sent<br />";
+                        } else {
+                            wallos_cron_problem('a cancellation email was not delivered: '
+                                . $mail->ErrorInfo);
+                            echo "Error sending notifications: " . $mail->ErrorInfo . "<br />";
+                        }
+                    } catch (Exception $error) {
+                        wallos_cron_problem('a cancellation email was not delivered: '
+                            . ($mail->ErrorInfo !== '' ? $mail->ErrorInfo : $error->getMessage()));
+                        echo "Error sending notifications: " . $error->getMessage() . "<br />";
                     }
                 }
             }
@@ -227,6 +252,8 @@ while ($userToNotify = $usersToNotify->fetchArray(SQLITE3_ASSOC)) {
             if ($discordNotificationsEnabled) {
                 $ssrf = is_url_safe_for_ssrf($discord['webhook_url'], $db, $userId);
                 if (!$ssrf) {
+                    wallos_cron_problem('the configured Discord URL failed the SSRF check, '
+                        . 'so the whole Discord channel was skipped');
                     echo "Discord notification skipped: URL failed SSRF validation.<br />";
                 } else {
                     foreach ($notify as $userId => $perUser) {
@@ -274,8 +301,11 @@ while ($userToNotify = $usersToNotify->fetchArray(SQLITE3_ASSOC)) {
                         $response = curl_exec($ch);
                         
                         if ($response === false) {
+                            wallos_cron_problem('a Discord cancellation notification was not delivered: '
+                                . curl_error($ch));
                             echo "Error sending notifications: " . curl_error($ch) . "<br />";
                         } else {
+                            wallos_cron_count('sent');
                             echo "Discord Notifications sent<br />";
                         }
                         
@@ -288,6 +318,8 @@ while ($userToNotify = $usersToNotify->fetchArray(SQLITE3_ASSOC)) {
             if ($gotifyNotificationsEnabled) {
                 $ssrf = is_url_safe_for_ssrf($gotify['serverUrl'], $db, $userId);
                 if (!$ssrf) {
+                    wallos_cron_problem('the configured Gotify URL failed the SSRF check, '
+                        . 'so the whole Gotify channel was skipped');
                     echo "Gotify notification skipped: URL failed SSRF validation.<br />";
                 } else {
                     foreach ($notify as $userId => $perUser) {
@@ -335,8 +367,11 @@ while ($userToNotify = $usersToNotify->fetchArray(SQLITE3_ASSOC)) {
 
                         $result = curl_exec($ch);
                         if ($result === false) {
+                            wallos_cron_problem('a Gotify cancellation notification was not delivered: '
+                                . curl_error($ch));
                             echo "Error sending notifications: " . curl_error($ch) . "<br />";
                         } else {
+                            wallos_cron_count('sent');
                             echo "Gotify Notifications sent<br />";
                         }
                     }
@@ -384,8 +419,11 @@ while ($userToNotify = $usersToNotify->fetchArray(SQLITE3_ASSOC)) {
 
                     $result = curl_exec($ch);
                     if ($result === false) {
+                        wallos_cron_problem('a Telegram cancellation notification was not delivered: '
+                            . curl_error($ch));
                         echo "Error sending notifications: " . curl_error($ch) . "<br />";
                     } else {
+                        wallos_cron_count('sent');
                         echo "Telegram Notifications sent<br />";
                     }
                 }
@@ -423,8 +461,11 @@ while ($userToNotify = $usersToNotify->fetchArray(SQLITE3_ASSOC)) {
                     $result = curl_exec($ch);
 
                     if ($result === false) {
+                        wallos_cron_problem('a Pushover cancellation notification was not delivered: '
+                            . curl_error($ch));
                         echo "Error sending notifications: " . curl_error($ch) . "<br />";
                     } else {
+                        wallos_cron_count('sent');
                         echo "Pushover Notifications sent<br />";
                     }
                     
@@ -436,6 +477,8 @@ while ($userToNotify = $usersToNotify->fetchArray(SQLITE3_ASSOC)) {
             if ($ntfyNotificationsEnabled) {
                 $ssrf = is_url_safe_for_ssrf($ntfy['host'], $db, $userId);
                 if (!$ssrf) {
+                    wallos_cron_problem('the configured Ntfy URL failed the SSRF check, '
+                        . 'so the whole Ntfy channel was skipped');
                     echo "Ntfy notification skipped: URL failed SSRF validation.<br />";
                 } else {
                     foreach ($notify as $userId => $perUser) {
@@ -453,10 +496,24 @@ while ($userToNotify = $usersToNotify->fetchArray(SQLITE3_ASSOC)) {
                             $message .= $subscription['name'] . " for " . $subscription['price'] . "\n";
                         }
 
+                        // sendnotifications.php guards this with is_array();
+                        // this file never did. An empty headers column, or one
+                        // holding anything but a JSON object, makes json_decode
+                        // answer null and array_keys(null) a TypeError — which
+                        // ended the whole run, before every remaining user and
+                        // every remaining channel, with nothing but a line in a
+                        // file to show for it.
                         $headers = json_decode($ntfy["headers"], true);
-                        $customheaders = array_map(function ($key, $value) {
-                            return "$key: $value";
-                        }, array_keys($headers), $headers);
+                        $customheaders = [];
+
+                        if (is_array($headers)) {
+                            $customheaders = array_map(function ($key, $value) {
+                                return "$key: $value";
+                            }, array_keys($headers), $headers);
+                        } elseif (trim((string) $ntfy["headers"]) !== '') {
+                            wallos_cron_problem('the ntfy headers of user ' . $userId
+                                . ' are not a JSON object, so they were not sent');
+                        }
 
                         $ch = curl_init();
 
@@ -480,8 +537,11 @@ while ($userToNotify = $usersToNotify->fetchArray(SQLITE3_ASSOC)) {
                         $response = curl_exec($ch);
                         
                         if ($response === false) {
+                            wallos_cron_problem('an ntfy cancellation notification was not delivered: '
+                                . curl_error($ch));
                             echo "Error sending notifications: " . curl_error($ch) . "<br />";
                         } else {
+                            wallos_cron_count('sent');
                             echo "Ntfy Notifications sent<br />";
                         }
                         
@@ -494,6 +554,8 @@ while ($userToNotify = $usersToNotify->fetchArray(SQLITE3_ASSOC)) {
             if ($webhookNotificationsEnabled) {
                 $ssrf = is_url_safe_for_ssrf($webhook['url'], $db, $userId);
                 if (!$ssrf) {
+                    wallos_cron_problem('the configured webhook URL failed the SSRF check, '
+                        . 'so the whole webhook channel was skipped');
                     echo "Webhook notification skipped: URL failed SSRF validation.<br />";
                 } else {
                     foreach ($notify as $userId => $perUser) {
@@ -545,8 +607,13 @@ while ($userToNotify = $usersToNotify->fetchArray(SQLITE3_ASSOC)) {
                             $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
                 
                             if ($response === false || $httpCode >= 400) {
+                                // curl_error() is empty on a 4xx, which is how
+                                // this printed a reason-less error line.
+                                wallos_cron_problem('a webhook cancellation notification was not delivered: '
+                                    . ($response === false ? curl_error($ch) : 'HTTP ' . $httpCode));
                                 echo "Error sending cancellation notifications: " . curl_error($ch) . "<br />";
                             } else {
+                                wallos_cron_count('sent');
                                 echo "Webhook Cancellation Notification sent for subscription: " . $subscription['name'] . "<br />";
                             }
                             
@@ -568,5 +635,10 @@ while ($userToNotify = $usersToNotify->fetchArray(SQLITE3_ASSOC)) {
     }
 
 }
+
+// The sentinel. A run that does not reach this is reported as stopped, which
+// is what a die() in an include or an uncatchable fatal leaves behind and what
+// nothing used to tell apart from a day with no cancellations.
+wallos_cron_done();
 
 ?>

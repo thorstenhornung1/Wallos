@@ -2,6 +2,7 @@
 require_once 'includes/header.php';
 require_once 'includes/oidc_settings.php';
 require_once 'includes/oidc/diagnostics.php';
+require_once 'includes/cron/diagnostics.php';
 require_once 'includes/ssrf_helper.php';
 require_once 'includes/integration_config.php';
 
@@ -21,6 +22,11 @@ $oidcManagedFields = $oidcConfiguration['managed_fields'];
 $oidcNotes = $oidcConfiguration['notes'];
 
 $oidcDiagnostics = wallos_oidc_diagnostics($db);
+
+// What the scheduled jobs last reported. The container healthcheck covers nginx
+// and php-fpm, so a container whose cron has not started a job in a fortnight is
+// still reported healthy; this is the only place that says otherwise.
+$cronDiagnostics = wallos_cron_diagnostics($db);
 
 $ssrfConfiguration = wallos_get_effective_ssrf_allowlist($db);
 $ssrfManagedFields = $ssrfConfiguration['is_managed'] ? ['allowlist' => 'SSRF_ALLOWLIST'] : [];
@@ -243,6 +249,37 @@ $loginDisabledAllowed = $userCount == 1 && $settings['registrations_open'] == 0;
         <?php
     }
     ?>
+
+    <section class="account-section">
+        <header>
+            <h2><?= translate('cron_diagnostics', $i18n) ?></h2>
+        </header>
+        <div class="admin-form">
+            <div class="settings-notes">
+                <?php foreach ($cronDiagnostics['checks'] as $check): ?>
+                    <?php
+                    $icon = [
+                        'ok' => 'fa-circle-check',
+                        'warning' => 'fa-triangle-exclamation',
+                        'error' => 'fa-circle-xmark',
+                        'unknown' => 'fa-circle-question',
+                    ][$check['status']] ?? 'fa-circle-info';
+                    ?>
+                    <p>
+                        <i class="fa-solid <?= $icon ?>" aria-hidden="true"></i>
+                        <strong><?= htmlspecialchars($check['label']) ?>:</strong>
+                        <?= htmlspecialchars($check['detail']) ?>
+                    </p>
+                <?php endforeach; ?>
+            </div>
+            <div class="settings-notes">
+                <p>
+                    <i class="fa-solid fa-circle-info"></i>
+                    <?= translate('cron_diagnostics_hint', $i18n) ?>
+                </p>
+            </div>
+        </div>
+    </section>
 
     <section class="account-section">
         <header>

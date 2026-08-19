@@ -1,9 +1,7 @@
 <?php
 set_time_limit(300);
-require_once 'validate.php';
-require_once __DIR__ . '/../../includes/connect_endpoint_crontabs.php';
-require_once __DIR__ . '/../../includes/ssrf_helper.php';
-require_once __DIR__ . '/../../includes/integration_config.php';
+
+require_once __DIR__ . '/../../includes/cron_run.php';
 
 if (php_sapi_name() === 'cli') {
     $runType = $argv[1] ?? 'weekly';
@@ -14,6 +12,17 @@ if (php_sapi_name() === 'cli') {
 if (!in_array($runType, ['weekly', 'monthly'])) {
     $runType = 'weekly';
 }
+
+// Two crontab lines run this file, and they are two different jobs: the weekly
+// one is overdue after nine days and the monthly one is not overdue until nine
+// weeks. One row for both would report whichever ran last.
+wallos_cron_begin('generaterecommendations:' . $runType);
+
+require_once 'validate.php';
+require_once __DIR__ . '/../../includes/connect_endpoint_crontabs.php';
+require_once __DIR__ . '/../../includes/ssrf_helper.php';
+require_once __DIR__ . '/../../includes/integration_config.php';
+wallos_cron_database($db);
 
 echo "Running " . $runType . " AI Recommendations generation.\n";
 
@@ -26,7 +35,11 @@ $stmt = $db->prepare("
     AND run_schedule = ?
 ");
 $stmt->bindValue(1, $runType, SQLITE3_TEXT);
-$queryResult = $stmt->execute();
+$queryResult = $stmt === false ? false : $stmt->execute();
+
+if ($queryResult === false) {
+    wallos_cron_fail('could not read the AI schedule: ' . wallos_cron_reason($db));
+}
 
 // Fetch all into array first so the connection is free for inner queries
 $scheduledUserIds = [];
@@ -74,7 +87,14 @@ foreach ($scheduledUserIds as $tempUserId) {
     $aiConfig = wallos_get_effective_ai_config($db, $tempUserId);
 
     if (!$aiConfig['valid']) {
-        $failures[] = ['user_id' => $tempUserId, 'reason' => $aiConfig['notes'][0] ?? 'invalid configuration'];
+        // The user switched recommendations on and the provider behind them is
+        // not usable. Every run from now on will do nothing for this account,
+        // and until now the only place that was written down was a JSON line on
+        // standard output, in a file, inside the container.
+        $reason = $aiConfig['notes'][0] ?? 'invalid configuration';
+        $failures[] = ['user_id' => $tempUserId, 'reason' => $reason];
+        wallos_cron_problem('AI recommendations are enabled for user ' . $tempUserId
+            . ' but the provider is not usable: ' . $reason);
         continue;
     }
 
@@ -87,6 +107,8 @@ foreach ($scheduledUserIds as $tempUserId) {
     // Validate provider
     if (!in_array($type, ['chatgpt', 'gemini', 'openrouter', 'ollama', 'openai-compatible']) || empty($model)) {
         $failures[] = ['user_id' => $tempUserId, 'reason' => 'invalid type or model'];
+        wallos_cron_problem('AI recommendations are enabled for user ' . $tempUserId
+            . ' but the configured provider or model is not one Wallos supports');
         continue;
     }
 
@@ -94,6 +116,8 @@ foreach ($scheduledUserIds as $tempUserId) {
     if (in_array($type, ['ollama', 'openai-compatible'])) {
         if (empty($host)) {
             $failures[] = ['user_id' => $tempUserId, 'reason' => 'missing host'];
+            wallos_cron_problem('AI recommendations are enabled for user ' . $tempUserId
+                . ' but no provider URL is configured');
             continue;
         }
         $parsedUrl = parse_url($host);
@@ -103,15 +127,33 @@ foreach ($scheduledUserIds as $tempUserId) {
             !filter_var($host, FILTER_VALIDATE_URL)
         ) {
             $failures[] = ['user_id' => $tempUserId, 'reason' => 'invalid host URL'];
+            wallos_cron_problem('AI recommendations are enabled for user ' . $tempUserId
+                . ' but the configured provider URL is not a valid http(s) URL');
             continue;
         }
-        $ssrf = validate_webhook_url_for_ssrf($host, $db, [], $tempUserId);
+        // is_url_safe_for_ssrf() rather than validate_webhook_url_for_ssrf(),
+        // which is the same check with a die() in it. One user pointing at a
+        // self-hosted model on an unresolvable or non-allowlisted host therefore
+        // ended the whole run: every account after them was skipped, the summary
+        // line never printed, and the process still exited 0. The other two
+        // notification crons already call this variant.
+        $ssrf = is_url_safe_for_ssrf($host, $db, $tempUserId);
+
+        if ($ssrf === false) {
+            $failures[] = ['user_id' => $tempUserId, 'reason' => 'host failed SSRF validation'];
+            wallos_cron_problem('the AI provider URL of user ' . $tempUserId
+                . ' failed the SSRF check, so no recommendations were generated');
+            continue;
+        }
+
         if ($type === 'ollama') {
             $apiKey = '';
         }
     } else {
         if (empty($apiKey)) {
             $failures[] = ['user_id' => $tempUserId, 'reason' => 'missing api key'];
+            wallos_cron_problem('AI recommendations are enabled for user ' . $tempUserId
+                . ' but no API key is configured');
             continue;
         }
     }
@@ -160,7 +202,11 @@ foreach ($scheduledUserIds as $tempUserId) {
     }
 
     if (empty($subscriptions)) {
+        // Not a failure. There is nothing to recommend about an account with no
+        // active subscriptions, and saying so every week would train whoever
+        // reads the admin page to stop reading it.
         $failures[] = ['user_id' => $tempUserId, 'reason' => 'no active subscriptions'];
+        wallos_cron_count('skipped');
         continue;
     }
 
@@ -281,6 +327,8 @@ PROMPT;
 
     if (curl_errno($ch)) {
         $failures[] = ['user_id' => $tempUserId, 'reason' => curl_error($ch)];
+        wallos_cron_problem('the AI provider of user ' . $tempUserId
+            . ' could not be reached: ' . curl_error($ch));
         unset($ch);
         continue;
     }
@@ -307,38 +355,90 @@ PROMPT;
     }
 
     if (json_last_error() !== JSON_ERROR_NONE || !is_array($recommendations)) {
+        // Also where an HTTP 401 or 429 lands: the status is never inspected, so
+        // a refused request arrives here as an unparseable answer.
         $failures[] = ['user_id' => $tempUserId, 'reason' => 'invalid AI response: ' . json_last_error_msg()];
+        wallos_cron_problem('the AI provider of user ' . $tempUserId
+            . ' did not answer with recommendations: ' . json_last_error_msg());
         continue;
     }
 
-    // Save recommendations
+    // Save recommendations.
+    //
+    // In a transaction, because the delete and the inserts were two separate
+    // statements with nothing between them but hope: anything that stopped the
+    // run after the delete left the account with no recommendations at all,
+    // which on screen is indistinguishable from an account the model had
+    // nothing to say about.
+    $db->beginTransaction();
+
+    $written = true;
+
     $delStmt = $db->prepare("DELETE FROM ai_recommendations WHERE user_id = :user_id");
-    $delStmt->bindValue(':user_id', $tempUserId, SQLITE3_INTEGER);
-    $delStmt->execute();
+    if ($delStmt === false) {
+        $written = false;
+    } else {
+        $delStmt->bindValue(':user_id', $tempUserId, SQLITE3_INTEGER);
+        $written = $delStmt->execute() !== false;
+    }
 
     $insert = $db->prepare("
         INSERT INTO ai_recommendations (user_id, type, title, description, savings)
         VALUES (:user_id, :type, :title, :description, :savings)
     ");
-    foreach ($recommendations as $rec) {
-        $insert->bindValue(':user_id', $tempUserId, SQLITE3_INTEGER);
-        $insert->bindValue(':type', 'subscription', SQLITE3_TEXT);
-        $insert->bindValue(':title', $rec['title'] ?? '', SQLITE3_TEXT);
-        $insert->bindValue(':description', $rec['description'] ?? '', SQLITE3_TEXT);
-        $insert->bindValue(':savings', $rec['savings'] ?? '', SQLITE3_TEXT);
-        $insert->execute();
+
+    if ($insert === false) {
+        $written = false;
+    } else {
+        foreach ($recommendations as $rec) {
+            $insert->bindValue(':user_id', $tempUserId, SQLITE3_INTEGER);
+            $insert->bindValue(':type', 'subscription', SQLITE3_TEXT);
+            $insert->bindValue(':title', $rec['title'] ?? '', SQLITE3_TEXT);
+            $insert->bindValue(':description', $rec['description'] ?? '', SQLITE3_TEXT);
+            $insert->bindValue(':savings', $rec['savings'] ?? '', SQLITE3_TEXT);
+
+            if ($insert->execute() === false) {
+                $written = false;
+                break;
+            }
+        }
     }
 
-    // Update last_successful_run
-    $updateStmt = $db->prepare("UPDATE ai_settings SET last_successful_run = CURRENT_TIMESTAMP WHERE user_id = ?");
-    $updateStmt->bindValue(1, $tempUserId, SQLITE3_INTEGER);
-    $updateStmt->execute();
+    if (!$written) {
+        $db->rollBack();
+        $failures[] = ['user_id' => $tempUserId, 'reason' => 'could not store the recommendations'];
+        wallos_cron_problem('the recommendations for user ' . $tempUserId
+            . ' could not be stored: ' . wallos_cron_reason($db));
+        continue;
+    }
 
+    // Only now, and only if it committed. The stamp used to be written whether
+    // or not a single row had landed, so last_successful_run said the run had
+    // succeeded for accounts whose recommendations had just been deleted.
+    $updateStmt = $db->prepare("UPDATE ai_settings SET last_successful_run = CURRENT_TIMESTAMP WHERE user_id = ?");
+    if ($updateStmt !== false) {
+        $updateStmt->bindValue(1, $tempUserId, SQLITE3_INTEGER);
+        $updateStmt->execute();
+    }
+
+    if (!$db->commit()) {
+        $failures[] = ['user_id' => $tempUserId, 'reason' => 'could not store the recommendations'];
+        wallos_cron_problem('the recommendations for user ' . $tempUserId
+            . ' could not be committed: ' . wallos_cron_reason($db));
+        continue;
+    }
+
+    wallos_cron_count('generated');
     $successes++;
 }
 
+wallos_cron_count('users', $processed);
+wallos_cron_done($successes . ' of ' . $processed . ' account(s) got recommendations');
+
 echo json_encode([
-    "success"   => true,
+    // Was hardcoded true. A run in which every account failed printed
+    // "success": true and exited 0.
+    "success"   => $failures === [],
     "run_type"  => $runType,
     "processed" => $processed,
     "successes" => $successes,

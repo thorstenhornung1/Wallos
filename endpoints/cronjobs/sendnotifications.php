@@ -3,11 +3,15 @@ use PHPMailer\PHPMailer\PHPMailer;
 use PHPMailer\PHPMailer\SMTP;
 use PHPMailer\PHPMailer\Exception;
 
+require_once __DIR__ . '/../../includes/cron_run.php';
+wallos_cron_begin('sendnotifications');
+
 require_once 'validate.php';
 require_once __DIR__ . '/../../includes/connect_endpoint_crontabs.php';
 require_once __DIR__ . '/../../includes/ssrf_helper.php';
 require_once __DIR__ . '/../../includes/mailer.php';
 require_once __DIR__ . '/../../includes/notification_settings.php';
+wallos_cron_database($db);
 
 require __DIR__ . '/../../includes/currency_formatter.php';
 require __DIR__ . '/../../includes/budget_period_calculations.php';
@@ -24,7 +28,11 @@ if (php_sapi_name() == 'cli') {
 // Get all user ids
 $query = "SELECT id, username FROM \"user\"";
 $stmt = $db->prepare($query);
-$usersToNotify = $stmt->execute();
+$usersToNotify = $stmt === false ? false : $stmt->execute();
+
+if ($usersToNotify === false) {
+    wallos_cron_fail('could not read the user list: ' . wallos_cron_reason($db));
+}
 
 // One query per provider table for everybody, instead of one per user per
 // provider. Users with nothing enabled are skipped before any further work.
@@ -333,6 +341,13 @@ while ($userToNotify = $usersToNotify->fetchArray(SQLITE3_ASSOC)) {
                     $transport = wallos_build_mailer($emailConfig, $db);
 
                     if (!$transport['success']) {
+                        // break leaves this recipient loop only; the run goes on
+                        // to Discord and the rest, so this is a channel failing
+                        // rather than the job failing. It is still the case that
+                        // a payment reminder somebody asked for was not sent.
+                        wallos_cron_problem('the mail transport of user ' . $userId
+                            . ' is unusable, so no email notification was sent: '
+                            . $transport['message']);
                         echo "Email notifications not sent: " . $transport['message'] . "<br />";
                         break;
                     }
@@ -345,29 +360,43 @@ while ($userToNotify = $usersToNotify->fetchArray(SQLITE3_ASSOC)) {
                     $emailaddress = !empty($user['email']) ? $user['email'] : $defaultEmail;
                     $name = !empty($user['name']) ? $user['name'] : $defaultName;
 
-                    $mail->addAddress($emailaddress, $name);
+                    // PHPMailer is constructed with exceptions enabled, so
+                    // addAddress, addCC and send all throw. Uncaught, the first
+                    // malformed address or refused SMTP session ended the whole
+                    // run — every later user, and every other channel, silently
+                    // skipped. Per recipient the damage is one notification.
+                    try {
+                        $mail->addAddress($emailaddress, $name);
 
-                    if (!empty($emailConfig['values']['other_emails'])) {
-                        $list = explode(';', $emailConfig['values']['other_emails']);
+                        if (!empty($emailConfig['values']['other_emails'])) {
+                            $list = explode(';', $emailConfig['values']['other_emails']);
 
-                        // Avoid duplicate emails
-                        $list = array_unique($list);
-                        $list = array_filter($list, function ($value) use ($emailaddress) {
-                            return $value !== $emailaddress;
-                        });
+                            // Avoid duplicate emails
+                            $list = array_unique($list);
+                            $list = array_filter($list, function ($value) use ($emailaddress) {
+                                return $value !== $emailaddress;
+                            });
 
-                        foreach ($list as $value) {
-                            $mail->addCC(trim($value));
+                            foreach ($list as $value) {
+                                $mail->addCC(trim($value));
+                            }
                         }
-                    }
 
-                    $mail->Subject = 'Wallos Notification';
-                    $mail->Body = $message;
+                        $mail->Subject = 'Wallos Notification';
+                        $mail->Body = $message;
 
-                    if ($mail->send()) {
-                        echo "Email Notifications sent<br />";
-                    } else {
-                        echo "Error sending notifications: " . $mail->ErrorInfo . "<br />";
+                        if ($mail->send()) {
+                            wallos_cron_count('sent');
+                            echo "Email Notifications sent<br />";
+                        } else {
+                            wallos_cron_problem('an email notification was not delivered: '
+                                . $mail->ErrorInfo);
+                            echo "Error sending notifications: " . $mail->ErrorInfo . "<br />";
+                        }
+                    } catch (Exception $error) {
+                        wallos_cron_problem('an email notification was not delivered: '
+                            . ($mail->ErrorInfo !== '' ? $mail->ErrorInfo : $error->getMessage()));
+                        echo "Error sending notifications: " . $error->getMessage() . "<br />";
                     }
                 }
             }
@@ -376,6 +405,8 @@ while ($userToNotify = $usersToNotify->fetchArray(SQLITE3_ASSOC)) {
             if ($discordNotificationsEnabled) {
                 $ssrf = is_url_safe_for_ssrf($discord['webhook_url'], $db, $userId);
                 if (!$ssrf) {
+                    wallos_cron_problem('the configured Discord URL failed the SSRF check, '
+                        . 'so the whole Discord channel was skipped');
                     echo "SSRF attempt detected for Discord webhook URL. Notifications not sent.<br />";
                 } else {
                     foreach ($notify as $userId => $perUser) {
@@ -419,8 +450,11 @@ while ($userToNotify = $usersToNotify->fetchArray(SQLITE3_ASSOC)) {
                         $response = curl_exec($ch);
 
                         if ($response === false) {
+                            wallos_cron_problem('a Discord notification was not delivered: '
+                                . curl_error($ch));
                             echo "Error sending notifications: " . curl_error($ch) . "<br />";
                         } else {
+                            wallos_cron_count('sent');
                             echo "Discord Notifications sent<br />";
                         }
 
@@ -433,6 +467,8 @@ while ($userToNotify = $usersToNotify->fetchArray(SQLITE3_ASSOC)) {
             if ($gotifyNotificationsEnabled) {
                 $ssrf = is_url_safe_for_ssrf($gotify['serverUrl'], $db, $userId);
                 if (!$ssrf) {
+                    wallos_cron_problem('the configured Gotify URL failed the SSRF check, '
+                        . 'so the whole Gotify channel was skipped');
                     echo "SSRF attempt detected for Gotify server URL. Notifications not sent.<br />";
                 } else {
                     foreach ($notify as $userId => $perUser) {
@@ -476,8 +512,11 @@ while ($userToNotify = $usersToNotify->fetchArray(SQLITE3_ASSOC)) {
 
                         $result = curl_exec($ch);
                         if ($result === false) {
+                            wallos_cron_problem('a Gotify notification was not delivered: '
+                                . curl_error($ch));
                             echo "Error sending notifications: " . curl_error($ch) . "<br />";
                         } else {
+                            wallos_cron_count('sent');
                             echo "Gotify Notifications sent<br />";
                         }
 
@@ -527,8 +566,11 @@ while ($userToNotify = $usersToNotify->fetchArray(SQLITE3_ASSOC)) {
 
                     $result = curl_exec($ch);
                     if ($result === false) {
+                        wallos_cron_problem('a Telegram notification was not delivered: '
+                            . curl_error($ch));
                         echo "Error sending notifications: " . curl_error($ch) . "<br />";
                     } else {
+                        wallos_cron_count('sent');
                         echo "Telegram Notifications sent<br />";
                     }
 
@@ -579,13 +621,18 @@ while ($userToNotify = $usersToNotify->fetchArray(SQLITE3_ASSOC)) {
                     $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
 
                     if ($result === false) {
+                        wallos_cron_problem('a PushPlus notification was not delivered: '
+                            . curl_error($ch));
                         echo "Error sending PushPlus notifications: " . curl_error($ch) . "<br />";
                     } else {
                         $resultData = json_decode($result, true);
                         if (isset($resultData['code']) && $resultData['code'] == 200) {
+                            wallos_cron_count('sent');
                             echo "PushPlus Notifications sent successfully<br />";
                         } else {
                             $errorMsg = isset($resultData['msg']) ? $resultData['msg'] : 'Unknown error';
+                            wallos_cron_problem('PushPlus accepted the request and refused the message: '
+                                . $errorMsg);
                             echo "PushPlus API error: " . $errorMsg . "<br />";
                         }
                     }
@@ -597,6 +644,8 @@ while ($userToNotify = $usersToNotify->fetchArray(SQLITE3_ASSOC)) {
             if ($mattermostNotificationsEnabled) {
                 $ssrf = is_url_safe_for_ssrf($mattermost['webhook_url'], $db, $userId);
                 if (!$ssrf) {
+                    wallos_cron_problem('the configured Mattermost URL failed the SSRF check, '
+                        . 'so the whole Mattermost channel was skipped');
                     echo "SSRF attempt detected for Mattermost webhook URL. Notifications not sent.<br />";
                 } else {
                     foreach ($notify as $userId => $perUser) {
@@ -640,13 +689,23 @@ while ($userToNotify = $usersToNotify->fetchArray(SQLITE3_ASSOC)) {
                         $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
 
                         if ($result === false) {
+                            wallos_cron_problem('a Mattermost notification was not delivered: '
+                                . curl_error($ch));
                             echo "Error sending Mattermost notifications: " . curl_error($ch) . "<br />";
                         } else {
+                            // $httpCode, which was read on the line above and then
+                            // discarded. A Mattermost incoming webhook answers the
+                            // bare string "ok" with status 200 and no JSON, so the
+                            // old test — a decoded code field equal to 200 — was
+                            // false for every successful send, and every one of
+                            // them was printed as an API error.
                             $resultData = json_decode($result, true);
-                            if (isset($resultData['code']) && $resultData['code'] == 200) {
+                            if ($httpCode >= 200 && $httpCode < 300) {
+                                wallos_cron_count('sent');
                                 echo "Mattermost Notifications sent successfully<br />";
                             } else {
-                                $errorMsg = isset($resultData['msg']) ? $resultData['msg'] : 'Unknown error';
+                                $errorMsg = isset($resultData['msg']) ? $resultData['msg'] : 'HTTP ' . $httpCode;
+                                wallos_cron_problem('Mattermost refused a notification: ' . $errorMsg);
                                 echo "Mattermost API error: " . $errorMsg . "<br />";
                             }
                         }
@@ -687,8 +746,11 @@ while ($userToNotify = $usersToNotify->fetchArray(SQLITE3_ASSOC)) {
                     $result = curl_exec($ch);
 
                     if ($result === false) {
+                        wallos_cron_problem('a Pushover notification was not delivered: '
+                            . curl_error($ch));
                         echo "Error sending notifications: " . curl_error($ch) . "<br />";
                     } else {
+                        wallos_cron_count('sent');
                         echo "Pushover Notifications sent<br />";
                     }
 
@@ -700,6 +762,8 @@ while ($userToNotify = $usersToNotify->fetchArray(SQLITE3_ASSOC)) {
             if ($ntfyNotificationsEnabled) {
                 $ssrf = is_url_safe_for_ssrf($ntfy['host'], $db, $userId);
                 if (!$ssrf) {
+                    wallos_cron_problem('the configured Ntfy URL failed the SSRF check, '
+                        . 'so the whole Ntfy channel was skipped');
                     echo "SSRF attempt detected for Ntfy host URL. Notifications not sent.<br />";
                 } else {
                     foreach ($notify as $userId => $perUser) {
@@ -745,8 +809,11 @@ while ($userToNotify = $usersToNotify->fetchArray(SQLITE3_ASSOC)) {
                         $response = curl_exec($ch);
 
                         if ($response === false) {
+                            wallos_cron_problem('an ntfy notification was not delivered: '
+                                . curl_error($ch));
                             echo "Error sending notifications: " . curl_error($ch) . "<br />";
                         } else {
+                            wallos_cron_count('sent');
                             echo "Ntfy Notifications sent<br />";
                         }
 
@@ -759,7 +826,9 @@ while ($userToNotify = $usersToNotify->fetchArray(SQLITE3_ASSOC)) {
             if ($webhookNotificationsEnabled) {
                 $ssrf = is_url_safe_for_ssrf($webhook['url'], $db, $userId);
                 if (!$ssrf) {
-                    echo "SSRF attempt detected for webhook URL. Notifications not sent.<br />";;
+                    wallos_cron_problem('the configured webhook URL failed the SSRF check, '
+                        . 'so the whole webhook channel was skipped');
+                    echo "SSRF attempt detected for webhook URL. Notifications not sent.<br />";
                 } else {
                     foreach ($notify as $userId => $perUser) {
                         // Get name of user from household table
@@ -812,8 +881,14 @@ while ($userToNotify = $usersToNotify->fetchArray(SQLITE3_ASSOC)) {
                             $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
                 
                             if ($response === false || $httpCode >= 400) {
+                                // curl_error() is empty for a 404 or a 500, which
+                                // is how this reported "Error sending
+                                // notifications: " with nothing after the colon.
+                                wallos_cron_problem('a webhook notification was not delivered: '
+                                    . ($response === false ? curl_error($ch) : 'HTTP ' . $httpCode));
                                 echo "Error sending notifications: " . curl_error($ch) . "<br />";
                             } else {
+                                wallos_cron_count('sent');
                                 echo "Webhook Notification sent for subscription: " . $subscription['name'] . "<br />";
                             }
 
@@ -868,9 +943,12 @@ while ($userToNotify = $usersToNotify->fetchArray(SQLITE3_ASSOC)) {
                     if ($response === false || $httpCode >= 400) {
                         $errorMessage = $response === false ? curl_error($ch) : $httpCode;
                         unset($ch);
+                        wallos_cron_problem('a Serverchan notification was not delivered: '
+                            . $errorMessage);
                         echo "Error sending Serverchan notifications: " . $errorMessage . "<br />";
                     } else {
                         unset($ch);
+                        wallos_cron_count('sent');
                         echo "Serverchan Notifications sent<br />";
                     }
                 }
@@ -885,3 +963,8 @@ while ($userToNotify = $usersToNotify->fetchArray(SQLITE3_ASSOC)) {
     }
 
 }
+
+// Reached the end of every user and every channel. Without this the run is
+// reported as having stopped, which is exactly what a die() deeper down would
+// leave behind and what nothing used to distinguish from a quiet night.
+wallos_cron_done();

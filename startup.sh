@@ -165,14 +165,22 @@ fi
 # Perform any database migrations
 /usr/local/bin/php /var/www/html/endpoints/db/migrate.php
 
-# Run updatenextpayment.php and wait for it to finish
-/usr/local/bin/php /var/www/html/endpoints/cronjobs/updatenextpayment.php
+# The startup runs of the scheduled jobs, which are now able to report failure
+# with a non-zero status.
+#
+# `|| true` on each, because this script runs under `set -e` and these jobs are
+# not what the container is for. An exchange-rate provider refusing a key, or
+# GitHub being unreachable, must not stop Wallos from serving pages — the job
+# still logs the failure and records it for the admin page, which is where such
+# a problem belongs. Without this the container would fail to start over a
+# temporarily unreachable third party.
+/usr/local/bin/php /var/www/html/endpoints/cronjobs/updatenextpayment.php || true
 
 # Run updateexchange.php
-/usr/local/bin/php /var/www/html/endpoints/cronjobs/updateexchange.php
+/usr/local/bin/php /var/www/html/endpoints/cronjobs/updateexchange.php || true
 
 # Run checkforupdates.php
-/usr/local/bin/php /var/www/html/endpoints/cronjobs/checkforupdates.php
+/usr/local/bin/php /var/www/html/endpoints/cronjobs/checkforupdates.php || true
 
 # Essentially wait until all child processes exit
 wait
