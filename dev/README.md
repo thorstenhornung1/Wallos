@@ -89,6 +89,44 @@ Seeds users and subscriptions for query-count and page-timing work. Seeded rows
 are prefixed `seed-` and are replaced on each run; real accounts are untouched.
 Useful sizes from the specification: `1 100`, `10 1000`, `100 10000`.
 
+### Moving an existing installation to PostgreSQL
+
+```sh
+podman exec \
+    -e WALLOS_DB_DRIVER=pgsql -e WALLOS_DB_HOST=postgres \
+    -e WALLOS_DB_NAME=wallos -e WALLOS_DB_USER=wallos \
+    -e WALLOS_DB_PASSWORD=wallos-dev \
+    wallos-dev php /var/www/html/dev/migrate-to-pgsql.php --dry-run
+```
+
+Copies an existing SQLite database into PostgreSQL (issue #79). The environment
+names the target, the same variables the running application reads; `--source`
+names the SQLite file, which is opened read-only and never written to. Drop
+`--dry-run` to do it for real, and stop the application first.
+
+It refuses rather than guesses. A target that already holds more than the
+baseline seeds needs `--allow-non-empty`, which deletes what is there. Source
+rows that violate a foreign key PostgreSQL enforces and SQLite never has need
+`--skip-orphans`, which leaves them behind and counts them in the verification;
+without it the migration stops and names the constraint. A source whose applied
+migrations differ from the baseline's is refused outright, because the copy
+would silently leave the newer columns at their defaults.
+
+Everything happens in one transaction, every sequence is set past the highest
+id copied — that last part is what stops the first insert after the import
+colliding with a row it just wrote — and the run ends with a row count per
+table rather than a claim that it worked.
+
+To check the contents rather than the counts:
+
+```sh
+podman exec wallos-dev php /var/www/html/dev/stress-seed.php 12 25
+podman exec wallos-dev php /var/www/html/dev/stress-verify.php > before.txt
+# migrate, then with the pgsql variables set:
+podman exec wallos-dev php /var/www/html/dev/stress-verify.php > after.txt
+diff before.txt after.txt   # only the driver name on the first line may differ
+```
+
 ### Tearing down
 
 ```sh

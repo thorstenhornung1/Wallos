@@ -122,7 +122,15 @@ foreach ($tables as $table) {
     // ids may be renumbered by a correct migration; timestamps are set on insert.
     $content = array_values(array_filter($columns, fn($c) => !in_array($c, ['id', 'created_at', 'migrated_at', 'timestamp'], true)));
 
-    $count = (int) $db->scalar('SELECT COUNT(*) FROM ' . $table);
+    // The table name is quoted for the same reason the columns below are:
+    // `user` is a reserved word in PostgreSQL, so an unquoted `FROM user` is a
+    // syntax error there. The failure was quiet in exactly the way that matters
+    // — the query returned false, the loop ran zero times, and the table
+    // reported nought rows and the hash of nothing, which reads as a migration
+    // that lost every account rather than as a broken fingerprint.
+    $quotedTable = '"' . str_replace('"', '""', $table) . '"';
+
+    $count = (int) $db->scalar('SELECT COUNT(*) FROM ' . $quotedTable);
 
     if ($content === [] || $count === 0) {
         printf("%-30s rows=%-7d columns=%s\n", $table, $count, implode(',', $columns));
@@ -132,7 +140,7 @@ foreach ($tables as $table) {
     // Ordered by every content column so the hash does not depend on storage
     // order, which two databases have no reason to agree on.
     $quoted = array_map(fn($c) => '"' . $c . '"', $content);
-    $result = $db->query('SELECT ' . implode(', ', $quoted) . ' FROM ' . $table
+    $result = $db->query('SELECT ' . implode(', ', $quoted) . ' FROM ' . $quotedTable
         . ' ORDER BY ' . implode(', ', $quoted));
 
     $hash = hash_init('sha256');

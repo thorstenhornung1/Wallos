@@ -288,10 +288,15 @@ for ($u = 1; $u <= $users; $u++) {
             [':userId' => $userId]);
     }
 
-    // Integrations.
+    // Integrations. fixer.provider is the numeric provider selector — 0 is
+    // Fixer.io and 1 is APILayer — which is what every write in the application
+    // binds and what the column is declared as. Seeding the provider's name
+    // here instead put text in an INTEGER column, which SQLite accepts silently
+    // and PostgreSQL refuses, so the fixture broke the migration it exists to
+    // exercise. provider_mode below is the one that takes a word.
     stress_insert($db, 'INSERT INTO fixer (api_key, provider, user_id, usage_used, usage_limit, provider_mode)
         VALUES (:key, :provider, :userId, :used, :limit, :mode)',
-        [':key' => 'fixer-' . $u, ':provider' => 'apilayer', ':userId' => $userId,
+        [':key' => 'fixer-' . $u, ':provider' => $u % 2, ':userId' => $userId,
          ':used' => $u * 3, ':limit' => 1000, ':mode' => 'custom']);
     if ($u % 2 === 0) {
         stress_insert($db, 'INSERT INTO google_search (user_id, api_key) VALUES (:userId, :key)',

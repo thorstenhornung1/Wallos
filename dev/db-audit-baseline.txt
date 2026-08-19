@@ -11,7 +11,7 @@
 #
 # Do not edit by hand — run dev/db-audit.sh --update and commit the diff.
 #
-# total: 1574 matches in 222 file(s)
+# total: 1554 matches in 222 file(s)
 admin.php	5
 api/admin/get_admin_settings.php	1
 api/admin/set_admin_settings.php	20
@@ -36,17 +36,17 @@ api/subscriptions/get_monthly_cost.php	5
 api/subscriptions/get_period_budget.php	7
 api/subscriptions/get_subscription.php	16
 api/subscriptions/get_subscriptions.php	9
-api/subscriptions/set_subscriptions.php	78
+api/subscriptions/set_subscriptions.php	62
 api/users/get_user.php	1
 api/users/set_budget.php	7
 calendar.php	8
 dev/generate-pgsql-schema.php	15
+dev/migrate-to-pgsql.php	23
 dev/seed.php	13
 dev/stress-seed.php	6
 dev/stress-verify.php	6
 endpoints/admin/adduser.php	31
 endpoints/admin/deleteunusedlogos.php	2
-endpoints/admin/deleteuser.php	21
 endpoints/admin/enableoidc.php	1
 endpoints/admin/saveopenregistrations.php	6
 endpoints/admin/savesecuritysettings.php	1
@@ -95,7 +95,6 @@ endpoints/settings/colortheme.php	2
 endpoints/settings/convert_currency.php	2
 endpoints/settings/customcss.php	3
 endpoints/settings/customtheme.php	5
-endpoints/settings/deleteaccount.php	19
 endpoints/settings/disabled_to_bottom.php	2
 endpoints/settings/fixer_usage.php	2
 endpoints/settings/google_search.php	3
@@ -215,16 +214,17 @@ registration.php	36
 settings.php	48
 stats.php	2
 subscriptions.php	5
-tests/bootstrap.php	29
+tests/bootstrap.php	30
 tests/cases/currency_rates_test.php	4
 tests/cases/currency_refresh_test.php	13
 tests/cases/currency_scope_test.php	10
 tests/cases/database_boundary_test.php	18
 tests/cases/integration_config_test.php	1
 tests/cases/language_migration_test.php	5
+tests/cases/migrate_pgsql_test.php	11
 tests/cases/migration_test.php	18
 tests/cases/oidc_admin_role_test.php	4
-tests/cases/oidc_backchannel_test.php	9
+tests/cases/oidc_backchannel_test.php	10
 tests/cases/oidc_discovery_test.php	10
 tests/cases/oidc_provisioning_test.php	1
 tests/cases/performance_test.php	13
