@@ -20,7 +20,7 @@
 --   * Every identifier is quoted, because "user" and "order" are reserved words
 --     and a keyword list kept in the generator would be wrong eventually.
 
--- 43 tables, 63 migrations recorded as applied.
+-- 42 tables, 63 migrations recorded as applied.
 
 CREATE TABLE "admin" (
     "id" SERIAL PRIMARY KEY,
@@ -217,18 +217,6 @@ CREATE TABLE "notification_settings" (
     "days" INTEGER DEFAULT 0,
     "user_id" INTEGER DEFAULT 1,
     "period_summary_at_period_start" INTEGER DEFAULT 0
-);
-
-CREATE TABLE "notifications" (
-    "id" SERIAL PRIMARY KEY,
-    "enabled" INTEGER DEFAULT 0,
-    "days" INTEGER,
-    "smtp_address" VARCHAR(255),
-    "smtp_port" INTEGER,
-    "smtp_username" VARCHAR(255),
-    "smtp_password" VARCHAR(255),
-    "from_email" VARCHAR(255),
-    "encryption" TEXT DEFAULT 'tls'
 );
 
 CREATE TABLE "ntfy_notifications" (

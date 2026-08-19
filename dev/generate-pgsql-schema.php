@@ -765,6 +765,14 @@ function wallos_pgsql_schema_reference_database()
     symlink($root . '/includes/database/connection.php', $sandbox . '/includes/database/connection.php');
     symlink($root . '/includes/database/sqlite/database.php', $sandbox . '/includes/database/sqlite/database.php');
 
+    // createdatabase.php has required these two since 543f25e. Without them the
+    // command line generator died on its first line while the test case — which
+    // builds the same sandbox through tests/bootstrap.php, where they are
+    // symlinked — kept passing. So the file the test tells you to run to fix a
+    // stale baseline was itself broken, and only the instructions knew.
+    symlink($root . '/includes/database/configuration.php', $sandbox . '/includes/database/configuration.php');
+    symlink($root . '/includes/config_helper.php', $sandbox . '/includes/config_helper.php');
+
     $databaseFile = $sandbox . '/db/wallos.db';
 
     putenv('WALLOS_DB_PATH=' . $databaseFile);

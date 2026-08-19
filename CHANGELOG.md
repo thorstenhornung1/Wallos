@@ -1,5 +1,23 @@
 # Changelog
 
+## [5.8.2](https://github.com/thorstenhornung1/Wallos/releases/tag/v5.8.2) (2026-08-19)
+
+Corrects 5.8.1, whose test suite fails: the migration fix in that release changes
+the schema the migration chain produces, and the checked-in PostgreSQL baseline
+was not regenerated with it.
+
+### Fixed
+
+* **db:** the PostgreSQL baseline still declared the `notifications` table that
+  migration 000016 now succeeds in dropping, so a fresh PostgreSQL installation
+  was created with a table nothing uses
+* **dev:** `dev/generate-pgsql-schema.php` could not be run. It has been broken
+  since `543f25e` added two requires to `createdatabase.php` that its sandbox
+  does not provide — while the test case that tells you to run it builds the
+  same sandbox through `tests/bootstrap.php`, where those files are symlinked,
+  and so kept passing. The instructions for fixing a stale baseline were
+  themselves the thing that did not work
+
 ## [5.8.1](https://github.com/thorstenhornung1/Wallos/releases/tag/v5.8.1) (2026-08-19)
 
 Failures that reported success. A security audit of the 5.8.0 fixes found the
