@@ -11,7 +11,7 @@
 #
 # Do not edit by hand — run dev/db-audit.sh --update and commit the diff.
 #
-# total: 1554 matches in 222 file(s)
+# total: 1562 matches in 225 file(s)
 admin.php	5
 api/admin/get_admin_settings.php	1
 api/admin/set_admin_settings.php	20
@@ -151,6 +151,7 @@ includes/session_tokens.php	2
 includes/ssrf_helper.php	6
 includes/stats_calculations.php	21
 includes/stats_extra_calculations.php	2
+includes/totp_state.php	11
 includes/user_provisioning.php	4
 includes/user_roles.php	21
 index.php	10
@@ -228,9 +229,11 @@ tests/cases/oidc_backchannel_test.php	10
 tests/cases/oidc_discovery_test.php	10
 tests/cases/oidc_provisioning_test.php	1
 tests/cases/performance_test.php	13
+tests/cases/portable_sql_test.php	2
 tests/cases/session_tokens_test.php	6
 tests/cases/subscription_index_test.php	6
+tests/cases/totp_replay_test.php	6
 tests/cases/user_provisioning_test.php	2
 tests/cases/user_roles_test.php	5
-totp.php	17
+totp.php	6
 verifyemail.php	6
