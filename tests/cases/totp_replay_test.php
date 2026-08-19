@@ -354,3 +354,59 @@ wallos_test('the page no longer builds these statements itself', function () {
     assert_true(strpos($source, 'SET backup_codes') === false, 'no inline backup-code write');
     assert_true(strpos($source, 'SET failed_attempts') === false, 'no inline counter write');
 });
+
+// ------------------------------------------------------------- disabling 2FA
+
+wallos_test('disabling clears both the flag and the enrolment', function () {
+    $db = wallos_test_open_database();
+    $userId = 1;
+    wallos_test_create_user($db, $userId, 'alice');
+    totp_enrol($db, $userId);
+    $db->exec('UPDATE "user" SET totp_enabled = 1 WHERE id = ' . $userId);
+
+    assert_true(wallos_totp_disable($db, $userId), 'reported as done');
+
+    assert_same(0, (int) $db->scalar('SELECT totp_enabled FROM "user" WHERE id = ' . $userId),
+        'the flag is cleared');
+    assert_true(wallos_totp_load_state($db, $userId) === null, 'and the enrolment is gone');
+
+    $db->close();
+});
+
+wallos_test('a half-completed disable leaves nothing behind', function () {
+    // The state this prevents: totp_enabled still set with no enrolment row.
+    // login.php sends such an account to totp.php, which finds no secret and no
+    // backup codes — no credential in existence can get in. Both call sites
+    // reported success unconditionally, so the user was told 2FA was off.
+    wallos_test_skip_unless_sqlite('needs a RAISE(ABORT) trigger');
+
+    $db = wallos_test_open_database();
+    $userId = 1;
+    wallos_test_create_user($db, $userId, 'alice');
+    totp_enrol($db, $userId);
+    $db->exec('UPDATE "user" SET totp_enabled = 1 WHERE id = ' . $userId);
+
+    // Let the flag clear, then block the enrolment delete.
+    $db->exec('CREATE TRIGGER block_totp_delete BEFORE DELETE ON totp
+               BEGIN SELECT RAISE(ABORT, \'blocked\'); END');
+
+    assert_true(@wallos_totp_disable($db, $userId) === false, 'reported as failed');
+
+    $db->exec('DROP TRIGGER block_totp_delete');
+
+    assert_same(1, (int) $db->scalar('SELECT totp_enabled FROM "user" WHERE id = ' . $userId),
+        'the flag was rolled back with it');
+    assert_true(wallos_totp_load_state($db, $userId) !== null,
+        'so the account still has a credential that works');
+
+    $db->close();
+});
+
+wallos_test('the endpoint disables through the checked path', function () {
+    assert_true(wallos_test_file_calls('endpoints/user/disable_totp.php', 'wallos_totp_disable'),
+        'the endpoint calls it');
+
+    $source = file_get_contents(WALLOS_ROOT . '/endpoints/user/disable_totp.php');
+    assert_true(strpos($source, 'DELETE FROM totp') === false,
+        'and has no inline copy of its own — there were two, and both were unchecked');
+});

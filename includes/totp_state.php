@@ -227,3 +227,57 @@ function wallos_totp_record_failure($db, $userId, $failedAttempts, $maxAttempts,
 
     return ['locked' => false, 'stored' => $statement->execute() !== false];
 }
+
+/**
+ * Turn two-factor authentication off for an account.
+ *
+ * Two writes have to agree: the flag on the account and the enrolment row. When
+ * only one lands, the account is left in a state no credential can satisfy —
+ * totp_enabled still set, but no secret and no backup codes to answer with, so
+ * login.php routes the user to a page that can never accept anything. Both
+ * call sites reported success unconditionally, so the user was told 2FA was off
+ * while being locked out of their account.
+ *
+ * @param  WallosDatabase $db
+ * @param  int            $userId
+ * @return bool false when nothing was changed
+ */
+function wallos_totp_disable($db, $userId)
+{
+    $userId = (int) $userId;
+    if ($userId <= 0) {
+        return false;
+    }
+
+    $db->beginTransaction();
+
+    $statement = $db->prepare('UPDATE "user" SET totp_enabled = 0 WHERE id = :id');
+    if ($statement === false) {
+        $db->rollBack();
+        return false;
+    }
+    $statement->bindValue(':id', $userId, SQLITE3_INTEGER);
+    if ($statement->execute() === false) {
+        $db->rollBack();
+        return false;
+    }
+
+    $statement = $db->prepare('DELETE FROM totp WHERE user_id = :id');
+    if ($statement === false) {
+        $db->rollBack();
+        return false;
+    }
+    $statement->bindValue(':id', $userId, SQLITE3_INTEGER);
+    if ($statement->execute() === false) {
+        $db->rollBack();
+        return false;
+    }
+
+    if ($db->commit() === false) {
+        error_log('Wallos: could not commit disabling 2FA for user ' . $userId
+            . ': ' . $db->lastErrorMsg());
+        return false;
+    }
+
+    return true;
+}

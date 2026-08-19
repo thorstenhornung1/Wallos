@@ -3,6 +3,7 @@
 require_once '../../includes/connect_endpoint.php';
 require_once '../../includes/inputvalidation.php';
 require_once '../../includes/validate_endpoint.php';
+require_once __DIR__ . '/../../includes/totp_state.php';
 
 if (!function_exists('trigger_deprecation')) {
     function trigger_deprecation($package, $version, $message, ...$args)
@@ -62,13 +63,14 @@ if (isset($data['totpCode']) && $data['totpCode'] != "") {
     $totp->setPeriod(30);
 
     if ($totp->verify($totp_code, null, 15)) {
-        $statement = $db->prepare('UPDATE "user" SET totp_enabled = 0 WHERE id = :id');
-        $statement->bindValue(':id', $userId, SQLITE3_INTEGER);
-        $statement->execute();
-
-        $statement = $db->prepare('DELETE FROM totp WHERE user_id = :id');
-        $statement->bindValue(':id', $userId, SQLITE3_INTEGER);
-        $statement->execute();
+        // Both writes or neither: an account left with totp_enabled set but no
+        // enrolment row cannot be logged into by any credential.
+        if (!wallos_totp_disable($db, $userId)) {
+            die(json_encode([
+                "success" => false,
+                "message" => translate('error', $i18n)
+            ]));
+        }
 
         die(json_encode([
             "success" => true,
@@ -89,13 +91,12 @@ if (isset($data['totpCode']) && $data['totpCode'] != "") {
         // Search for the normalized code
         if (($key = array_search($totp_code, $normalizedBackupCodes)) !== false) {
             // Match found, disable TOTP
-            $statement = $db->prepare('UPDATE "user" SET totp_enabled = 0 WHERE id = :id');
-            $statement->bindValue(':id', $userId, SQLITE3_INTEGER);
-            $statement->execute();
-
-            $statement = $db->prepare('DELETE FROM totp WHERE user_id = :id');
-            $statement->bindValue(':id', $userId, SQLITE3_INTEGER);
-            $statement->execute();
+            if (!wallos_totp_disable($db, $userId)) {
+                die(json_encode([
+                    "success" => false,
+                    "message" => translate('error', $i18n)
+                ]));
+            }
 
             die(json_encode([
                 "success" => true,
