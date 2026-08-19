@@ -34,7 +34,9 @@ wallos_test('a failed issue leaves the previous token working', function () {
     // The point of the transaction. Without it the delete has already happened
     // when the insert fails, so the account is left with nothing — and the page
     // said an email was sent.
-    wallos_test_skip_unless_sqlite('needs a RAISE(ABORT) trigger');
+    if (wallos_test_skip_unless_sqlite('needs a RAISE(ABORT) trigger')) {
+        return;
+    }
 
     $db = wallos_test_open_database();
     wallos_test_create_user($db, 1, 'alice');

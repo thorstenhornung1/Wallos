@@ -226,7 +226,9 @@ wallos_test('a backup code is not honoured when it could not be struck off', fun
     // An earlier version of this case asserted in both branches of an if, which
     // meant it passed whatever the function did — it did not notice when the
     // check was removed.
-    wallos_test_skip_unless_sqlite('needs a RAISE(ABORT) trigger');
+    if (wallos_test_skip_unless_sqlite('needs a RAISE(ABORT) trigger')) {
+        return;
+    }
 
     $db = wallos_test_open_database();
     $userId = 1;
@@ -252,7 +254,9 @@ wallos_test('a step that could not be recorded is reported', function () {
     // The caller lets the login through in this case — the credential was
     // genuine — but it has to know, because the replay window is then
     // unguarded and that is worth a log line.
-    wallos_test_skip_unless_sqlite('needs a RAISE(ABORT) trigger');
+    if (wallos_test_skip_unless_sqlite('needs a RAISE(ABORT) trigger')) {
+        return;
+    }
 
     $db = wallos_test_open_database();
     $userId = 1;
@@ -271,7 +275,9 @@ wallos_test('a step that could not be recorded is reported', function () {
 wallos_test('a failed attempt that could not be counted is reported', function () {
     // Same shape, and the one with the quietest consequence: brute-force
     // protection stops working with nothing visible to anyone.
-    wallos_test_skip_unless_sqlite('needs a RAISE(ABORT) trigger');
+    if (wallos_test_skip_unless_sqlite('needs a RAISE(ABORT) trigger')) {
+        return;
+    }
 
     $db = wallos_test_open_database();
     $userId = 1;
@@ -378,7 +384,9 @@ wallos_test('a half-completed disable leaves nothing behind', function () {
     // login.php sends such an account to totp.php, which finds no secret and no
     // backup codes — no credential in existence can get in. Both call sites
     // reported success unconditionally, so the user was told 2FA was off.
-    wallos_test_skip_unless_sqlite('needs a RAISE(ABORT) trigger');
+    if (wallos_test_skip_unless_sqlite('needs a RAISE(ABORT) trigger')) {
+        return;
+    }
 
     $db = wallos_test_open_database();
     $userId = 1;

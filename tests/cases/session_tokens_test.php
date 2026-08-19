@@ -115,7 +115,9 @@ wallos_test('a delete that could not run is not reported as nothing to delete', 
     // holding a working credential. Reporting 0 for both is what let
     // back-channel logout count a live session as revoked and answer the
     // identity provider HTTP 200 — which no provider retries.
-    wallos_test_skip_unless_sqlite('needs a RAISE(ABORT) trigger');
+    if (wallos_test_skip_unless_sqlite('needs a RAISE(ABORT) trigger')) {
+        return;
+    }
 
     $db = wallos_test_open_database();
     wallos_test_create_user($db, 1, 'alice');
@@ -159,7 +161,9 @@ wallos_test('back-channel logout does not count a session whose token survived',
     // Driven rather than read: an earlier version of this case asserted that
     // the token check appeared before the counter in the source, which stayed
     // true when the `continue` was deleted and the session counted anyway.
-    wallos_test_skip_unless_sqlite('needs a RAISE(ABORT) trigger');
+    if (wallos_test_skip_unless_sqlite('needs a RAISE(ABORT) trigger')) {
+        return;
+    }
 
     require_once WALLOS_ROOT . '/includes/oidc/backchannel.php';
 
@@ -187,7 +191,9 @@ wallos_test('back-channel logout does not count a session whose token survived',
 
 wallos_test('back-channel logout counts a session it fully revoked', function () {
     // The other side, so the case above cannot pass by always returning 0.
-    wallos_test_skip_unless_sqlite('driven through SQLite fixtures');
+    if (wallos_test_skip_unless_sqlite('driven through SQLite fixtures')) {
+        return;
+    }
 
     require_once WALLOS_ROOT . '/includes/oidc/backchannel.php';
 
