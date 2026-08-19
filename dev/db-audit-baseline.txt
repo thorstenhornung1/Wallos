@@ -11,7 +11,7 @@
 #
 # Do not edit by hand — run dev/db-audit.sh --update and commit the diff.
 #
-# total: 1560 matches in 225 file(s)
+# total: 1560 matches in 226 file(s)
 admin.php	5
 api/admin/get_admin_settings.php	1
 api/admin/set_admin_settings.php	20
@@ -145,6 +145,7 @@ includes/oidc/oidc_create_user.php	29
 includes/oidc/oidc_login.php	4
 includes/oidc/session_guard.php	2
 includes/oidc_settings.php	11
+includes/password_reset.php	4
 includes/remember_me.php	11
 includes/run_migrations.php	2
 includes/session_tokens.php	2
@@ -209,7 +210,7 @@ migrations/000060.php	3
 migrations/000061.php	1
 migrations/000062.php	3
 migrations/000063.php	2
-passwordreset.php	18
+passwordreset.php	14
 profile.php	5
 registration.php	36
 settings.php	48

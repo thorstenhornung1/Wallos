@@ -1,6 +1,7 @@
 <?php
 
 require_once 'includes/connect.php';
+require_once 'includes/password_reset.php';
 require_once 'includes/checkuser.php';
 require_once 'includes/integration_config.php';
 
@@ -67,20 +68,22 @@ if (isset($_POST['email']) && $_POST['email'] != "" && isset($_GET['submit']) &&
     $stmt->bindValue(':email', $email, SQLITE3_TEXT);
     $user = $stmt->execute()->fetchArray(SQLITE3_ASSOC);
 
+    // Nothing here may depend on whether the address is registered — that is
+    // why the success message is set for both. It is also why the failure below
+    // uses the generic error: it says a request could not be processed, not
+    // that an account exists.
+    $issued = true;
+
     if ($user) {
-        $stmt = $db->prepare("DELETE FROM password_resets WHERE email = :email");
-        $stmt->bindValue(':email', $email, SQLITE3_TEXT);
-        $stmt->execute();
-
         $token = bin2hex(random_bytes(32));
-
-        $stmt = $db->prepare("INSERT INTO password_resets (user_id, email, token) VALUES (:user_id, :email, :token)");
-        $stmt->bindValue(':user_id', $user['id'], SQLITE3_INTEGER);
-        $stmt->bindValue(':email', $email, SQLITE3_TEXT);
-        $stmt->bindValue(':token', $token, SQLITE3_TEXT);
-        $stmt->execute();
+        $issued = wallos_issue_password_reset($db, $user['id'], $email, $token);
     }
-    $hasSuccessMessage = true;
+
+    if ($issued) {
+        $hasSuccessMessage = true;
+    } else {
+        $hasErrorMessage = true;
+    }
 }
 
 if (isset($_GET['token']) && $_GET['token'] != "" && isset($_GET['email']) && $_GET['email'] != "") {
