@@ -1,5 +1,81 @@
 # Changelog
 
+## [5.8.0](https://github.com/thorstenhornung1/Wallos/releases/tag/v5.8.0) (2026-08-19)
+
+PostgreSQL as an optional backend, and two security fixes found by auditing code
+that already had tests.
+
+### Security
+
+* **oidc:** back-channel logout reached one of 113 entry points. The revocation
+  check lived only in `checksession.php`, the path that renders pages; all 112
+  files bootstrapping through `connect_endpoint.php` never asked whether the
+  session was still valid. After an identity provider ended a session the browser
+  kept full API access — user administration and database backup included — until
+  the PHP session expired, up to thirty days later
+* **oidc:** a session rebuilt from the remember-me cookie lost its OIDC origin and
+  was permanently exempt from revocation afterwards. Since PHP sessions are
+  collected after about 24 minutes and the cookie lives 30 days, this is the path
+  most long-lived sessions actually take
+* **oidc:** the client secret reached the admin API and the page HTML. A secret
+  supplied through `OIDC_CLIENT_SECRET_FILE` — deliberately kept out of the
+  database — was returned verbatim in JSON and rendered as an editable text field.
+  The API now reports whether a secret is set, never its value
+* **oidc:** back-channel logout now revokes the provider-derived admin role along
+  with the session, so a de-privileged administrator stops administering rather
+  than keeping the role until their next login
+* **auth:** both user-deletion flows deleted the account row before its children,
+  in no transaction, without checking a single result. On PostgreSQL that fails
+  and both endpoints reported success anyway, leaving a half-dismantled account.
+  Twelve tables were missing from both flows, two more from the self-service one —
+  including `login_tokens`, so a self-deleted account left a working remember-me
+  token behind ([#81](https://github.com/thorstenhornung1/Wallos/issues/81))
+* **subscriptions:** six foreign-key ids went from the form into the database
+  unvalidated, so a subscription could reference another account's category,
+  payment method or household member ([#82](https://github.com/thorstenhornung1/Wallos/issues/82))
+
+### Features
+
+* **database:** PostgreSQL is selectable with `WALLOS_DB_DRIVER=pgsql` plus host,
+  port, name, user, password and sslmode. SQLite stays the default and an
+  installation that sets nothing keeps exactly what it has
+  ([#20](https://github.com/thorstenhornung1/Wallos/issues/20),
+  [#21](https://github.com/thorstenhornung1/Wallos/issues/21))
+* **database:** `dev/migrate-to-pgsql.php` moves an existing SQLite installation
+  across, verified by comparing a content fingerprint of every table before and
+  after, and by inserting into every sequence-backed table afterwards
+  ([#79](https://github.com/thorstenhornung1/Wallos/issues/79))
+* **dev:** a stress instance covering all 42 tables, a fingerprint tool, a load
+  script and a repeatable benchmark
+
+### Bug Fixes
+
+* **stats:** the category list was ordered by a string constant rather than by the
+  `order` column, on both backends. It has never sorted; now it does
+* **api:** the subscriptions endpoint refused cycle 5, "One-time", which migration
+  000046 added and the interface has offered ever since — the allowlist was
+  hardcoded and had drifted from the table
+* **registration:** an unknown currency code was silently accepted as the first
+  currency in the list, because a failed `array_search` returns `false` and `false`
+  as an array index is `0`
+* **oidc:** four defects in the PostgreSQL layer, each of which reported success
+  while doing nothing: a commit on a transaction PostgreSQL had already discarded,
+  a bind failure escaping as a fatal, a boolean coercion running backwards, and a
+  change counter that survived a failed statement — which the session and role
+  revocation functions read as "rows removed"
+
+### Upgrade notes
+
+Nothing to do. SQLite installations are unaffected; the migration chain runs as
+before.
+
+To try PostgreSQL, set `WALLOS_DB_DRIVER=pgsql` and the connection variables on
+an empty database — the schema installs itself. To move existing data, run
+`dev/migrate-to-pgsql.php`, which refuses by default if the source contains rows
+that violate a foreign key PostgreSQL enforces and SQLite never did.
+
+Tested against PostgreSQL 14 and 18 in CI, both running the full test suite.
+
 ## [5.7.2](https://github.com/thorstenhornung1/Wallos/releases/tag/v5.7.2) (2026-08-17)
 
 No application code changes. Both fixes come from the 2026-08-16/17 test run on
