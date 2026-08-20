@@ -1,5 +1,6 @@
 <?php
 require_once '../../includes/connect_endpoint.php';
+require_once '../../includes/validate_endpoint_session.php';
 
 if (isset($_SESSION['loggedin']) && $_SESSION['loggedin'] === true) {
     if (isset($_GET['id']) && $_GET['id'] != "") {

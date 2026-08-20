@@ -1,5 +1,6 @@
 <?php
 require_once '../../includes/connect_endpoint.php';
+require_once '../../includes/validate_endpoint_session.php';
 
 require_once '../../includes/currency_formatter.php';
 require_once '../../includes/getdbkeys.php';

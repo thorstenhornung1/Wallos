@@ -6,6 +6,7 @@
   Returns the same JSON shape as search.php: {"results": [{thumbnail, image, ...}]}.
 */
 require_once '../../includes/connect_endpoint.php';
+require_once '../../includes/validate_endpoint_session.php';
 
 header('Content-Type: application/json');
 

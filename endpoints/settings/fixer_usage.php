@@ -1,5 +1,6 @@
 <?php
 require_once '../../includes/connect_endpoint.php';
+require_once '../../includes/validate_endpoint_session.php';
 require_once '../../includes/integration_config.php';
 
 header('Content-Type: application/json');
