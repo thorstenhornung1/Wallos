@@ -504,6 +504,18 @@ wallos_test('a restored remember-me session stays subject to revocation', functi
         'the OIDC origin is restored in code, not only mentioned in a comment');
     assert_true(strpos($withoutComments, 'UPDATE oidc_sessions SET session_id') !== false,
         'and the recorded session id follows the regenerated one');
+
+    // And when that update fails, the restore is refused rather than completed.
+    // A session whose row still names the invalidated id is one back-channel
+    // revocation cannot end: it would delete a session that no longer exists
+    // and leave this one running for as long as the cookie lasts. The write
+    // result used to go nowhere, which put the defect 5.8.0 closed back within
+    // reach of a single failed UPDATE (issue #87).
+    $update = strpos($withoutComments, 'UPDATE oidc_sessions SET session_id');
+    $refusal = strpos($withoutComments, '$_SESSION = [];');
+
+    assert_true($refusal !== false && $refusal > $update,
+        'a failed update discards the session instead of continuing with it');
 });
 
 wallos_test('signing in records the session', function () {

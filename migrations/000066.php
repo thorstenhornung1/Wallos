@@ -45,6 +45,9 @@ foreach ($statements as $column => $statement) {
         error_log('Wallos migration 000066: could not add cron_runs.' . $column . ': '
             . $db->lastErrorMsg());
 
-        return;
+        // false, not a bare return: includes/run_migrations.php reads the
+        // return value now, and a migration that stops halfway must not be
+        // recorded as applied.
+        return false;
     }
 }

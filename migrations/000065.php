@@ -36,7 +36,9 @@ if ($rows > 0 && (int) $db->scalar('SELECT COUNT(*) FROM email_notifications') =
         error_log('Wallos migration 000065: could not carry the notification settings over; '
             . 'leaving the old table in place: ' . $db->lastErrorMsg());
 
-        return;
+        // false rather than a bare return, so run_migrations.php does not
+        // record a migration that gave up halfway as applied.
+        return false;
     }
 
     if ($db->exec('INSERT INTO notification_settings (days) SELECT days FROM notifications') === false) {

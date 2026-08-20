@@ -92,10 +92,31 @@ function restoreSessionFromRememberMeCookie($db)
             $_SESSION['from_oidc'] = true;
 
             $update = $db->prepare('UPDATE oidc_sessions SET session_id = :sessionId WHERE id = :id');
+            $recorded = false;
+
             if ($update !== false) {
                 $update->bindValue(':sessionId', session_id(), SQLITE3_TEXT);
                 $update->bindValue(':id', $sessionRow['id'], SQLITE3_INTEGER);
-                $update->execute();
+                $recorded = $update->execute() !== false;
+            }
+
+            if (!$recorded) {
+                // The row still names the session id that session_regenerate_id()
+                // invalidated a few lines above, so back-channel revocation would
+                // delete a session that no longer exists and leave this one
+                // running — for up to the thirty days the cookie lasts. That is
+                // the defect 5.8.0 closed (#37, #49), reachable again through a
+                // write whose result nobody read (issue #87).
+                //
+                // Refused rather than logged and continued: making somebody sign
+                // in again is a smaller harm than a session the provider cannot
+                // end.
+                error_log('Wallos: could not move the OIDC session onto the restored session id, '
+                    . 'so the remember-me restore was refused: ' . $db->lastErrorMsg());
+
+                $_SESSION = [];
+
+                return false;
             }
         }
     }
