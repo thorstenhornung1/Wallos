@@ -820,6 +820,27 @@ Worth testing separately rather than as a variant of everything above: the
 failure modes are different, and a PostgreSQL instance enforces foreign keys
 that SQLite has never enforced, so it rejects writes SQLite accepted.
 
+**Which versions this is known to work on.** CI runs the whole suite against
+PostgreSQL 14 and 18 on every push — the oldest version upstream still supports
+and the newest — and the 2026-08-20 night run installed a fresh instance on
+every version from 12 to 18, each producing the same 42 tables and 65
+migrations, with registration, login and eight pages exercised at both ends.
+The baseline uses `SERIAL` and nothing newer: no `gen_random_uuid()`, no
+`GENERATED ALWAYS AS IDENTITY`, no `jsonb`, no `ON CONFLICT`, no generated
+columns.
+
+Two things that range does **not** cover, and neither should be assumed:
+
+* **PostgreSQL 11 and older.** Untested, and out of upstream support.
+* **The upgrade path.** A fresh PostgreSQL installation applies the baseline
+  and records all 65 migrations as done, so they never execute. Only an
+  existing PostgreSQL database being upgraded actually runs them — which means
+  a version-specific problem in a migration would not show up in any of the
+  runs above. When you upgrade an existing PostgreSQL instance, watch the
+  container log on first start: each migration reports by name, and since 5.8.3
+  one that fails says so and stops the run rather than recording itself as
+  applied.
+
 ### 8.1 A fresh PostgreSQL instance
 
 Add a database to the stack and point Wallos at it:
