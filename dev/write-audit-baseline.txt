@@ -8,7 +8,7 @@
 #
 # Do not edit by hand — run dev/write-audit.php --update and commit the diff.
 #
-# 131 file(s), 66 discarded result(s), 368 unchecked prepare(s).
+# 131 file(s), 57 discarded result(s), 362 unchecked prepare(s).
 
 admin.php	0	4
 api/admin/get_admin_settings.php	0	1
@@ -38,7 +38,7 @@ api/subscriptions/set_subscriptions.php	1	9
 api/users/get_user.php	0	1
 api/users/set_budget.php	0	2
 calendar.php	0	4
-endpoints/admin/adduser.php	5	11
+endpoints/admin/adduser.php	2	8
 endpoints/admin/deleteunusedlogos.php	0	2
 endpoints/admin/enableoidc.php	1	1
 endpoints/admin/saveopenregistrations.php	0	2
@@ -120,7 +120,7 @@ includes/getsettings.php	0	3
 includes/integration_config.php	0	7
 includes/list_subscriptions.php	0	1
 includes/oidc/handle_oidc_callback.php	1	4
-includes/oidc/oidc_create_user.php	5	0
+includes/oidc/oidc_create_user.php	2	0
 includes/oidc/oidc_login.php	1	2
 includes/oidc_settings.php	1	0
 includes/remember_me.php	1	3
@@ -135,7 +135,7 @@ migrations/000044.php	2	2
 migrations/000057.php	1	1
 migrations/000062.php	1	1
 profile.php	0	3
-registration.php	6	13
+registration.php	3	10
 settings.php	0	23
 stats.php	0	1
 subscriptions.php	0	2

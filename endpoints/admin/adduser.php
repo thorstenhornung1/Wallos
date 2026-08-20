@@ -4,76 +4,10 @@ require_once '../../includes/validate_endpoint_admin.php';
 require_once '../../includes/integration_config.php';
 require_once '../../includes/user_provisioning.php';
 
-$currencies = [
-    ['id' => 1, 'name' => 'Euro', 'symbol' => '€', 'code' => 'EUR'],
-    ['id' => 2, 'name' => 'US Dollar', 'symbol' => '$', 'code' => 'USD'],
-    ['id' => 3, 'name' => 'Japanese Yen', 'symbol' => '¥', 'code' => 'JPY'],
-    ['id' => 4, 'name' => 'Bulgarian Lev', 'symbol' => 'лв', 'code' => 'BGN'],
-    ['id' => 5, 'name' => 'Czech Republic Koruna', 'symbol' => 'Kč', 'code' => 'CZK'],
-    ['id' => 6, 'name' => 'Danish Krone', 'symbol' => 'kr', 'code' => 'DKK'],
-    ['id' => 7, 'name' => 'British Pound Sterling', 'symbol' => '£', 'code' => 'GBP'],
-    ['id' => 8, 'name' => 'Hungarian Forint', 'symbol' => 'Ft', 'code' => 'HUF'],
-    ['id' => 9, 'name' => 'Polish Zloty', 'symbol' => 'zł', 'code' => 'PLN'],
-    ['id' => 10, 'name' => 'Romanian Leu', 'symbol' => 'lei', 'code' => 'RON'],
-    ['id' => 11, 'name' => 'Swedish Krona', 'symbol' => 'kr', 'code' => 'SEK'],
-    ['id' => 12, 'name' => 'Swiss Franc', 'symbol' => 'Fr', 'code' => 'CHF'],
-    ['id' => 13, 'name' => 'Icelandic Króna', 'symbol' => 'kr', 'code' => 'ISK'],
-    ['id' => 14, 'name' => 'Norwegian Krone', 'symbol' => 'kr', 'code' => 'NOK'],
-    ['id' => 15, 'name' => 'Russian Ruble', 'symbol' => '₽', 'code' => 'RUB'],
-    ['id' => 16, 'name' => 'Turkish Lira', 'symbol' => '₺', 'code' => 'TRY'],
-    ['id' => 17, 'name' => 'Australian Dollar', 'symbol' => '$', 'code' => 'AUD'],
-    ['id' => 18, 'name' => 'Brazilian Real', 'symbol' => 'R$', 'code' => 'BRL'],
-    ['id' => 19, 'name' => 'Canadian Dollar', 'symbol' => '$', 'code' => 'CAD'],
-    ['id' => 20, 'name' => 'Chinese Yuan', 'symbol' => '¥', 'code' => 'CNY'],
-    ['id' => 21, 'name' => 'Hong Kong Dollar', 'symbol' => 'HK$', 'code' => 'HKD'],
-    ['id' => 22, 'name' => 'Indonesian Rupiah', 'symbol' => 'Rp', 'code' => 'IDR'],
-    ['id' => 23, 'name' => 'Israeli New Sheqel', 'symbol' => '₪', 'code' => 'ILS'],
-    ['id' => 24, 'name' => 'Indian Rupee', 'symbol' => '₹', 'code' => 'INR'],
-    ['id' => 25, 'name' => 'South Korean Won', 'symbol' => '₩', 'code' => 'KRW'],
-    ['id' => 26, 'name' => 'Mexican Peso', 'symbol' => 'Mex$', 'code' => 'MXN'],
-    ['id' => 27, 'name' => 'Malaysian Ringgit', 'symbol' => 'RM', 'code' => 'MYR'],
-    ['id' => 28, 'name' => 'New Zealand Dollar', 'symbol' => 'NZ$', 'code' => 'NZD'],
-    ['id' => 29, 'name' => 'Philippine Peso', 'symbol' => '₱', 'code' => 'PHP'],
-    ['id' => 30, 'name' => 'Singapore Dollar', 'symbol' => 'S$', 'code' => 'SGD'],
-    ['id' => 31, 'name' => 'Thai Baht', 'symbol' => '฿', 'code' => 'THB'],
-    ['id' => 32, 'name' => 'South African Rand', 'symbol' => 'R', 'code' => 'ZAR'],
-    ['id' => 33, 'name' => 'Ukrainian Hryvnia', 'symbol' => '₴', 'code' => 'UAH'],
-    ['id' => 34, 'name' => 'New Taiwan Dollar', 'symbol' => 'NT$', 'code' => 'TWD'],
-];
+// The same two lists registration.php and the OIDC provisioning need, from
+// the one place that has them.
+$currencies = wallos_default_currencies();
 
-$payment_methods = [
-    ['id' => 1, 'name' => 'PayPal', 'icon' => 'images/uploads/icons/paypal.png'],
-    ['id' => 2, 'name' => 'Credit Card', 'icon' => 'images/uploads/icons/creditcard.png'],
-    ['id' => 3, 'name' => 'Bank Transfer', 'icon' => 'images/uploads/icons/banktransfer.png'],
-    ['id' => 4, 'name' => 'Direct Debit', 'icon' => 'images/uploads/icons/directdebit.png'],
-    ['id' => 5, 'name' => 'Money', 'icon' => 'images/uploads/icons/money.png'],
-    ['id' => 6, 'name' => 'Google Pay', 'icon' => 'images/uploads/icons/googlepay.png'],
-    ['id' => 7, 'name' => 'Samsung Pay', 'icon' => 'images/uploads/icons/samsungpay.png'],
-    ['id' => 8, 'name' => 'Apple Pay', 'icon' => 'images/uploads/icons/applepay.png'],
-    ['id' => 9, 'name' => 'Crypto', 'icon' => 'images/uploads/icons/crypto.png'],
-    ['id' => 10, 'name' => 'Klarna', 'icon' => 'images/uploads/icons/klarna.png'],
-    ['id' => 11, 'name' => 'Amazon Pay', 'icon' => 'images/uploads/icons/amazonpay.png'],
-    ['id' => 12, 'name' => 'SEPA', 'icon' => 'images/uploads/icons/sepa.png'],
-    ['id' => 13, 'name' => 'Skrill', 'icon' => 'images/uploads/icons/skrill.png'],
-    ['id' => 14, 'name' => 'Sofort', 'icon' => 'images/uploads/icons/sofort.png'],
-    ['id' => 15, 'name' => 'Stripe', 'icon' => 'images/uploads/icons/stripe.png'],
-    ['id' => 16, 'name' => 'Affirm', 'icon' => 'images/uploads/icons/affirm.png'],
-    ['id' => 17, 'name' => 'AliPay', 'icon' => 'images/uploads/icons/alipay.png'],
-    ['id' => 18, 'name' => 'Elo', 'icon' => 'images/uploads/icons/elo.png'],
-    ['id' => 19, 'name' => 'Facebook Pay', 'icon' => 'images/uploads/icons/facebookpay.png'],
-    ['id' => 20, 'name' => 'GiroPay', 'icon' => 'images/uploads/icons/giropay.png'],
-    ['id' => 21, 'name' => 'iDeal', 'icon' => 'images/uploads/icons/ideal.png'],
-    ['id' => 22, 'name' => 'Union Pay', 'icon' => 'images/uploads/icons/unionpay.png'],
-    ['id' => 23, 'name' => 'Interac', 'icon' => 'images/uploads/icons/interac.png'],
-    ['id' => 24, 'name' => 'WeChat', 'icon' => 'images/uploads/icons/wechat.png'],
-    ['id' => 25, 'name' => 'Paysafe', 'icon' => 'images/uploads/icons/paysafe.png'],
-    ['id' => 26, 'name' => 'Poli', 'icon' => 'images/uploads/icons/poli.png'],
-    ['id' => 27, 'name' => 'Qiwi', 'icon' => 'images/uploads/icons/qiwi.png'],
-    ['id' => 28, 'name' => 'ShopPay', 'icon' => 'images/uploads/icons/shoppay.png'],
-    ['id' => 29, 'name' => 'Venmo', 'icon' => 'images/uploads/icons/venmo.png'],
-    ['id' => 30, 'name' => 'VeriFone', 'icon' => 'images/uploads/icons/verifone.png'],
-    ['id' => 31, 'name' => 'WebMoney', 'icon' => 'images/uploads/icons/webmoney.png'],
-];
 
 function validate($value)
 {
@@ -150,38 +84,27 @@ if ($result) {
     $newUserId = $db->lastInsertRowID();
 
     // Add username as household member for that user
-    $query = "INSERT INTO household (name, user_id) VALUES (:name, :user_id)";
-    $stmt = $db->prepare($query);
-    $stmt->bindValue(':name', $username, SQLITE3_TEXT);
-    $stmt->bindValue(':user_id', $newUserId, SQLITE3_INTEGER);
-    $stmt->execute();
+    if (!wallos_create_household_member($db, $newUserId, $username)) {
+        error_log('Wallos adduser: could not create the household member for user '
+            . $newUserId . ': ' . $db->lastErrorMsg());
+    }
 
     if ($newUserId > 1) {
 
         // Add categories for that user, in the language the account gets
         wallos_create_default_categories($db, $newUserId, $language);
 
-        // Add payment methods for that user
-        $query = 'INSERT INTO payment_methods (name, icon, "order", user_id) VALUES (:name, :icon, :order, :user_id)';
-        $stmt = $db->prepare($query);
-        foreach ($payment_methods as $index => $payment_method) {
-            $stmt->bindValue(':name', $payment_method['name'], SQLITE3_TEXT);
-            $stmt->bindValue(':icon', $payment_method['icon'], SQLITE3_TEXT);
-            $stmt->bindValue(':order', $index + 1, SQLITE3_INTEGER);
-            $stmt->bindValue(':user_id', $newUserId, SQLITE3_INTEGER);
-            $stmt->execute();
+        // Add payment methods and currencies for that user, and say so when
+        // either fails: an account holding a third of its currencies is not an
+        // account to report as created (issue #87).
+        if (!wallos_create_default_payment_methods($db, $newUserId)) {
+            error_log('Wallos adduser: could not create the default payment methods for user '
+                . $newUserId . ': ' . $db->lastErrorMsg());
         }
 
-        // Add currencies for that user
-        $query = "INSERT INTO currencies (name, symbol, code, rate, user_id) VALUES (:name, :symbol, :code, :rate, :user_id)";
-        $stmt = $db->prepare($query);
-        foreach ($currencies as $currency) {
-            $stmt->bindValue(':name', $currency['name'], SQLITE3_TEXT);
-            $stmt->bindValue(':symbol', $currency['symbol'], SQLITE3_TEXT);
-            $stmt->bindValue(':code', $currency['code'], SQLITE3_TEXT);
-            $stmt->bindValue(':rate', 1, SQLITE3_FLOAT);
-            $stmt->bindValue(':user_id', $newUserId, SQLITE3_INTEGER);
-            $stmt->execute();
+        if (!wallos_create_default_currencies($db, $newUserId)) {
+            error_log('Wallos adduser: could not create the default currencies for user '
+                . $newUserId . ': ' . $db->lastErrorMsg());
         }
 
         // Retrieve main currency id
