@@ -51,7 +51,9 @@ services:
       - mailpit
 
   # PostgreSQL for the optional backend (#21). Wallos does not use it unless
-  # WALLOS_DB_DRIVER says so — dev/pgsql.sh switches a container over.
+  # WALLOS_DB_DRIVER says so. Set the WALLOS_DB_* variables on the wallos
+  # service to point it here, or see "Moving an existing installation to
+  # PostgreSQL" in dev/README.md to bring an existing SQLite database across.
   #
   # The version here is the oldest one still supported upstream, because that is
   # where "this uses a feature newer than our floor" shows up. CI runs the

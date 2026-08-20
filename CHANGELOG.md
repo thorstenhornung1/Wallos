@@ -1,5 +1,88 @@
 # Changelog
 
+## [5.8.3](https://github.com/thorstenhornung1/Wallos/releases/tag/v5.8.3) (2026-08-20)
+
+Two things the 5.8.2 test run recorded without an issue capturing them, one
+defect found while building the instance it ran on, and the section that run
+reported as blocked — which is not blocked: the tooling defect behind it was
+fixed in 5.8.2 itself, so the load measurements can be taken on PostgreSQL for
+the first time. The test plan is corrected where it cost that run time.
+
+### Fixed
+
+* **db:** deleting a payment method left every subscription that used it
+  pointing at a row that no longer exists, and answered success. The three
+  comparable endpoints — categories, currencies, household members — all count
+  what still references the row and refuse; payment methods were the one
+  deletion of a referenced entity that just went ahead
+  ([#93](https://github.com/thorstenhornung1/Wallos/issues/93)).
+
+  On SQLite the dangling references sit there indefinitely, because foreign keys
+  are not enforced. PostgreSQL does not accept them, so
+  `dev/migrate-to-pgsql.php` refuses a source that holds them: an ordinary
+  interface action in March becomes a migration that cannot run in August.
+
+  All eight delete paths — four endpoints and four REST — now share one count
+  instead of carrying eight private copies of it, and the gate finds them by
+  looking for the statement rather than from a list, so a ninth is covered
+  without anyone remembering to add it. The shared count deliberately ignores
+  who owns the referencing subscription: a stranger's row satisfies the foreign
+  key just as well, and where the two counts differ the difference is a defect
+  that says so in the log.
+* **db:** the payment method endpoint no longer reports a delete that matched
+  nothing as a deletion — an id belonging to another account, or to the system
+  rows older installations carry with `user_id 0`, said "removed" while the
+  method was still on the list after a reload
+  ([#87](https://github.com/thorstenhornung1/Wallos/issues/87)).
+* **ui:** seven admin buttons, four two-factor buttons and seven more across the
+  settings page did nothing at all when clicked. Every element carrying an id is
+  also exposed as a property of `window`, so a handler with the same name as an
+  element's id can resolve to the element instead of the function — no request,
+  no message, nothing in any log. The OIDC settings could not be saved through
+  the interface at all ([#95](https://github.com/thorstenhornung1/Wallos/issues/95)).
+
+  Eighteen elements carried the collision, not the seven the issue names. They
+  were found by comparing the set of ids against the set of names inline
+  handlers call, which is how the new gate finds them: the next one fails a test
+  the day it is written rather than the day somebody clicks it in the right
+  browser.
+* **cron:** a job that failed and then succeeded again looked as though it had
+  never failed. `cron_runs` holds one row per job, replaced on every run, so a
+  job that dies every third night shows a green line and a fresh timestamp the
+  morning after it worked.
+
+  Migration 000066 adds the last failure, its reason and a cumulative count that
+  a success does not reset — three columns rather than a history table, so the
+  row count stays at one per job and nothing needs pruning. The admin page warns
+  while the failure is recent and goes quiet afterwards, where "recent" is three
+  of the job's own staleness windows: two hours ago is many runs back for a job
+  that runs every two minutes and last night for one that runs daily.
+
+### Changed
+
+* **dev:** `dev/compose.yaml` pointed at `dev/pgsql.sh` for switching a
+  container to PostgreSQL. There is no such script; the instructions are in
+  `dev/README.md`.
+
+### Documentation
+
+* **test plan:** section 6 no longer reads as blocked. `dev/benchmark.sh` seeded
+  one database and measured another on PostgreSQL until 5.8.2
+  ([#91](https://github.com/thorstenhornung1/Wallos/issues/91)); that is fixed,
+  and the section now says that the figures in it are from SQLite and that
+  PostgreSQL has none yet.
+* **test plan:** the password reset test has a section of its own, in section 5
+  where it belongs rather than inside the OIDC chapter, with the precondition
+  that made the whole feature look broken — `passwordreset.php` redirects away
+  silently unless `admin.server_url` is set, and on a fresh instance it is not.
+* **test plan:** back-channel logout says under what condition Authentik sends
+  the notification at all. It builds it from the session's live access tokens,
+  which last minutes where sessions last days, so "end session" in the admin
+  interface reports success and sends nothing for most of a session's life.
+* **test plan:** section 7.2 listed two fixed defects as current limitations. A
+  section that does that is itself a finding — a reader takes it as a reason not
+  to test — so both are named as fixed instead of quietly deleted.
+
 ## [5.8.2](https://github.com/thorstenhornung1/Wallos/releases/tag/v5.8.2) (2026-08-19)
 
 Corrects 5.8.1, whose test suite fails: the migration fix in that release changes

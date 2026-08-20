@@ -368,6 +368,32 @@ done
 key is intentionally invalid. What matters is that no job produces a PHP warning
 or fatal error.
 
+### 5.9 Password reset, and the setting that makes it inert
+
+`passwordreset.php` redirects away silently unless the instance SMTP
+configuration is valid **and** `admin.server_url` is set. On a fresh instance
+that column is empty, which is the default state, so every request answers `302`
+with no token, no mail and no message on the page — indistinguishable from a
+broken feature. Two full attempts were recorded as failures before the cause was
+found in the source. Set it before testing:
+
+```sh
+$EXEC php -r 'require "/var/www/html/includes/database/connection.php";
+$db = wallos_database_connect();
+$db->exec("UPDATE admin SET server_url = \'https://test.hornung-bn.de\'");'
+```
+
+Then, with a throwaway account: request a reset, take the token from the mail,
+set a new password, and check three things rather than one.
+
+* the new password works, and the old one does not
+* the token cannot be used a second time
+* **the first new password still works after the refused second attempt.** That
+  a replay sets nothing shows only that it failed; that the account is still
+  usable is what rules out the retry having left it in a third state
+* an unknown address answers exactly as a known one does and creates no token,
+  so the page cannot be used to find out who has an account
+
 ## 6. Load, to see the performance work
 
 `dev/benchmark.sh` seeds data, measures, and cleans up after itself. It takes the
@@ -383,9 +409,19 @@ Two axes, because they stress different things: one account's list grows to 100,
 1000 and 5000 entries, then the notification cron runs against 1, 10 and 100
 users.
 
-Measured on the local dev container (Podman, 5.6.3, SQLite on a tmpfs-free
-bind mount), so treat these as a shape rather than as absolute numbers for your
-hardware:
+**These figures are from SQLite, and there are none for PostgreSQL yet.** The
+benchmark could not produce a valid one until 5.8.2: three of its helpers opened
+`db/wallos.db` directly, so on a PostgreSQL instance it seeded one database and
+measured another, and reported a cleanup that removed nothing
+([#91](https://github.com/thorstenhornung1/Wallos/issues/91)). That is fixed —
+everything goes through `wallos_database_connect()`, the script prints the
+target it resolved, and `dev/sh-audit.sh` keeps it that way in CI. So this
+section can be run on PostgreSQL now, and the numbers it produces will be the
+first ones anybody has.
+
+The table below is the local dev container (Podman, 5.6.3, SQLite on a
+tmpfs-free bind mount) — a shape rather than absolute numbers for your
+hardware, and explicitly not a PostgreSQL baseline to compare against:
 
 | entries | list | stats | calendar |
 |---|---|---|---|
@@ -532,17 +568,25 @@ Both halves are required. Setting only one is reported in the configuration
 check rather than silently ignored, so you do not end up believing rights are
 being synchronised when nothing is happening.
 
-### 7.2 Known limitations
+### 7.2 Limitations that used to be here
 
-Open issues, not misconfiguration:
+Both entries this section carried are fixed, and they are named rather than
+deleted: a section listing solved defects as current is itself a finding,
+because a reader takes it as a reason not to test.
 
-* an auto-created user is always English and EUR, whatever the `locale` claim
-  says ([#34](https://github.com/thorstenhornung1/Wallos/issues/34),
+* **an auto-created user is always English and EUR** ([#34](https://github.com/thorstenhornung1/Wallos/issues/34),
   [#35](https://github.com/thorstenhornung1/Wallos/issues/35),
-  [#40](https://github.com/thorstenhornung1/Wallos/issues/40))
-* logging out in Authentik leaves the Wallos session alive
+  [#40](https://github.com/thorstenhornung1/Wallos/issues/40)) — fixed in 5.6.0
+  and verified on 2026-08-16 through the instance default and the `locale` claim
+  separately, which is what tells a working claim apart from a lucky default
+* **logging out in Authentik leaves the Wallos session alive**
   ([#37](https://github.com/thorstenhornung1/Wallos/issues/37),
-  [#49](https://github.com/thorstenhornung1/Wallos/issues/49))
+  [#49](https://github.com/thorstenhornung1/Wallos/issues/49)) — this is what
+  back-channel logout addresses; verified end to end on 2026-08-20, including
+  the endpoint path rather than only the page
+
+Nothing here is a known limitation at present. If a test in section 7 fails,
+treat it as a finding rather than as something already recorded.
 
 ### 7.3 Logout
 
@@ -627,17 +671,19 @@ To check it end to end: sign in through Authentik, then terminate that session
 in Authentik's admin interface, then reload any Wallos page. You should land on
 the login screen.
 
-**Precondition, or the whole feature is inert.** `passwordreset.php` redirects
-away silently unless the instance SMTP configuration is valid **and**
-`admin.server_url` is set. On a fresh instance that column is empty, so every
-request answers `302` with no token, no mail and no message on the page. Set it
-before testing:
+**Do it within a few minutes of signing in, or the test will quietly do
+nothing.** Authentik builds the back-channel notification from the *access
+tokens* that belong to the session
+(`authentik/providers/oauth2/signals.py`, the `pre_delete` receiver on
+`AuthenticatedSession`). Access tokens live minutes; sessions live hours to
+days. With none left, the list is empty, no request is sent, and the admin
+interface reports success either way — measured on two attempts, one with zero
+access tokens and no request at all, one with a token expiring in four minutes
+and a revocation that arrived.
 
-```sh
-$EXEC php -r 'require "/var/www/html/includes/database/connection.php";
-$db = wallos_database_connect();
-$db->exec("UPDATE admin SET server_url = \'https://test.hornung-bn.de\'");'
-```
+This is Authentik behaviour rather than a Wallos defect, and it is worth knowing
+before treating "end session" as a control: for most of a session's life it does
+not reach a relying party using back-channel logout.
 
 ### 7.5 The three fixes from 5.8.0, checked deliberately
 
@@ -777,7 +823,7 @@ printf("tables:     %d\n", (int) $db->scalar("SELECT COUNT(*) FROM information_s
 printf("migrations: %d\n", (int) $db->scalar("SELECT COUNT(*) FROM migrations"));'
 ```
 
-Expected on a fresh installation: `pgsql`, 42 tables, 64 migrations. Then run
+Expected on a fresh installation: `pgsql`, 42 tables, 65 migrations. Then run
 sections 4 through 7 unchanged — the whole plan applies, and any difference is a
 finding.
 
@@ -793,14 +839,17 @@ So:
 
 | Database | Tables | Migrations |
 |---|---|---|
-| Installed fresh from 5.8.2 or later | 42 | 64 |
+| Installed fresh from 5.8.3 or later | 42 | 65 |
+| Installed fresh from 5.8.2 | 42 | 64 |
 | Installed from the 5.8.0 or 5.8.1 baseline, not yet upgraded | 43 | 63 |
-| Either of the above, after migration 000065 | 42 | 64 |
+| Any of the above, after migrations 000065 and 000066 | 42 | 65 |
 
 If you are testing 5.8.2 itself against a database created by 5.8.0 or 5.8.1,
-**43 is correct** — 000065 is not in that release. Report the count you see
-rather than adjusting it; the number matters less than which of these three
-rows your instance is in.
+**43 is correct** — 000065 is not in that release. From 5.8.3 the three
+converge: 000065 drops the leftover table wherever it still exists, so an
+upgraded instance and a fresh one end up with the same 42. Report the count you
+see rather than adjusting it; the number matters less than which of these rows
+your instance is in.
 
 ### 8.2 Moving an existing instance across
 
