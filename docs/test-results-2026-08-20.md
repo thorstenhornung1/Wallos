@@ -40,7 +40,7 @@ Migration `000064` ran on first start of the new image.
 | 1 cron jobs, `stats.php`, budget API | **pass** | five jobs `exit=0 fatal=0`; API returns JSON |
 | 2 mixed-case aliases | **pass** | registration gated both ways; order 18/19/20; ids 218/219/220 |
 | 3 back-channel revocation reaches endpoints | **partly covered** | guard in shared bootstrap (112 endpoints); malformed tokens refused |
-| 3 the same, at runtime | **not covered** | needs an OIDC browser session |
+| 3 the same, at runtime | **pass** | 200 → 401 on the endpoint, `1 session(s) revoked` |
 | 4 2FA, backup codes, disable | **pass** | replay refused, fresh code accepted, both flags cleared |
 | 5 password reset | **pass** | token consumed, old password dead, replay refused |
 | 6 privilege separation | **pass** | `755 root:root`, write to code denied, write to `db/` allowed |
@@ -319,6 +319,97 @@ unless it says so — which is the reasoning recorded in migration 000064.
 
 Restoring the path made delivery work again in the same run.
 
+### 3 / 7.4 / 7.5 — revocation reaches endpoints, verified at runtime
+
+Run with a real OIDC session, cookie taken from the browser, `PHPSESSID` only —
+the remember-me cookie was deliberately not sent, because it rebuilds a
+destroyed session and would produce a `200` that says nothing.
+
+```
+                                  before    after
+endpoints/subscriptions/get.php     200      401
+settings.php (page path)            200      302
+oidc_sessions                         1        0
+login_tokens                                   0
+
+container log: Wallos OIDC back-channel logout: 1 session(s) revoked.
+```
+
+The endpoint is the test, not the page. Until 5.8.0 the guard lived only on the
+page-rendering path, so `settings.php` would have redirected correctly while
+`endpoints/…` kept answering `200` — user administration and database backup
+included — for up to thirty days.
+
+**The guard fires once, by design.** It sets 401, then clears and destroys the
+session (`$_SESSION = []; session_destroy();`). The session file is 0 bytes
+afterwards. A second request is therefore not a revoked session but an
+unauthenticated one, and the guard correctly has nothing to check. An earlier
+reading of that second `200` as a regression was a misinterpretation on my part,
+not a defect.
+
+### The first attempt failed, and the cause is in Authentik
+
+Worth recording in full, because the plan's instruction — *terminate that session
+in Authentik's admin interface* — works only under a condition it does not state.
+
+The first attempt did nothing at all: session deleted in Authentik, but no
+back-channel request, no log line, Wallos session still valid. The reason is in
+`authentik/providers/oauth2/signals.py:85`:
+
+```python
+@receiver(pre_delete, sender=AuthenticatedSession)
+def user_session_deleted_oauth_backchannel_logout_and_tokens_removal(...):
+    access_tokens = AccessToken.objects.select_related("provider").filter(
+        user=instance.user,
+        session__session__session_key=instance.session.session_key,
+    )
+```
+
+The notification is built from **live access tokens**. With none, the list is
+empty and nothing is sent — silently. Measured on both attempts:
+
+```
+attempt 1   access_tokens for admin: 0   auth_time 23.6 h earlier   -> no request sent
+attempt 2   access_tokens for admin: 1   expiring in 4 minutes      -> revoked
+```
+
+Access tokens live minutes; sessions live hours to days. In the window between
+them — which is most of a session's life — "end session" in Authentik is
+**ineffective** for a relying party using back-channel logout, and the admin
+interface reports success either way.
+
+This is Authentik behaviour, not a Wallos defect, and it belongs here rather than
+in an issue against the fork. Practically: to test revocation, sign in and end
+the session within the access token's lifetime.
+
+### Unauthenticated endpoints answer 200, not 401
+
+Found while chasing the above. With no cookie at all:
+
+```
+endpoints/subscriptions/get.php                    -> HTTP 200
+endpoints/notifications/saveemailnotifications.php -> HTTP 200
+endpoints/admin/deleteuser.php                     -> HTTP 200
+```
+
+**Nothing leaks and nothing is written.** The write paths refuse in the body
+(`{"success":false,"message":"Invalid CSRF token"}`), and the user count was 4
+before and 4 after an unauthenticated delete attempt against `deleteuser.php`.
+The read path returns 755 bytes containing no subscription data — zero hits for
+a subscription name that exists.
+
+What it does return is three PHP warnings in clear text
+(`Undefined array key 1 in includes/list_subscriptions.php on line 402`,
+`Trying to access array offset on null`, and a deprecation from
+`getsettings.php`). `endpoints/subscriptions/get.php` includes
+`connect_endpoint.php` but not `validate_endpoint.php`, so an anonymous request
+runs the page-building code with no user rather than being refused.
+
+Low severity — the refusal happens, just in the wrong place, and the warnings
+disclose file paths and line numbers rather than data. Recorded rather than
+filed: it is pre-existing behaviour, not something this release changed, and the
+same shape exists upstream.
+
 ## Conclusions, kept separate from the observations above
 
 * **All three defects from the previous run are fixed**, each verified by the
@@ -328,8 +419,10 @@ Restoring the path made delivery work again in the same run.
   reset token consumption and account enumeration all behave as described.
 * **Sections 4 through 9 are covered except two.** 5.1-5.8, 7.4's refusal path,
   7.5's secret check, 8.1 and 9 all ran against 5.8.2.
-* **Two remain genuinely open, neither skipped.** Back-channel revocation at
-  runtime cannot be reached from a local account by design. Section 6 cannot
+* **Back-channel revocation is now verified end to end**, and the one attempt
+  that failed failed in Authentik rather than in Wallos — for a reason worth
+  knowing before relying on "end session" as a control.
+* **One remains genuinely open, not skipped.** Section 6 cannot
   produce a valid figure while
   [#91](https://github.com/thorstenhornung1/Wallos/issues/91) stands — the
   benchmark writes its fixtures to SQLite and measures pages that read
