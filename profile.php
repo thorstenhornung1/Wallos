@@ -179,7 +179,7 @@ while ($row = $result->fetchArray(SQLITE3_ASSOC)) {
                     <?php
                     if (!$userData['totp_enabled']) {
                         ?>
-                        <input type="button" value="<?= translate('enable_two_factor_authentication', $i18n) ?>" id="enableTotp"
+                        <input type="button" value="<?= translate('enable_two_factor_authentication', $i18n) ?>" id="enableTotpToggle"
                             onClick="enableTotp()" class="button thin mobile-grow"/>
                         <div class="totp-popup" id="totp-popup">
                             <header>
@@ -206,10 +206,10 @@ while ($row = $result->fetchArray(SQLITE3_ASSOC)) {
                                     <div class="form-group-inline wrap">
                                         <input type="button" class="button secondary-button grow"
                                             value="<?= translate('copy_to_clipboard', $i18n) ?>" id="copyBackupCodes"
-                                            onClick="copyBackupCodes()" />
+                                            onClick="copyBackupCodesButton()" />
                                         <input type="button" class="grow"
                                             value="<?= translate('download_backup_codes', $i18n) ?>" id="downloadBackupCodes"
-                                            onClick="downloadBackupCodes()" />
+                                            onClick="downloadBackupCodesButton()" />
                                     </div>
                                     <div class="settings-notes">
                                         <p>
@@ -224,7 +224,7 @@ while ($row = $result->fetchArray(SQLITE3_ASSOC)) {
                     } else {
                         ?>
                         <input type="button" class="button secondary-button thin mobile-grow"
-                            value="<?= translate('disable_two_factor_authentication', $i18n) ?>" id="disableTotp"
+                            value="<?= translate('disable_two_factor_authentication', $i18n) ?>" id="disableTotpToggle"
                             onClick="disableTotp()" />
                         <div class="totp-popup" id="totp-disable-popup">
                             <header>
@@ -270,7 +270,7 @@ while ($row = $result->fetchArray(SQLITE3_ASSOC)) {
         <div class="account-api-key">
             <div class="form-group-inline">
                 <input type="text" id="apikey" name="apikey" value="<?= htmlspecialchars($userData['api_key'] ?? '') ?>" placeholder="API Key" readonly>
-                <input type="submit" value="<?= translate('regenerate', $i18n) ?>" id="regenerateApiKey" onClick="regenerateApiKey()" />
+                <input type="submit" value="<?= translate('regenerate', $i18n) ?>" id="regenerateApiKey" onClick="regenerateApiKeyButton()" />
             </div>
             <div class="settings-notes">
                 <p>

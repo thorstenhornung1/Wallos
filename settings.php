@@ -88,7 +88,7 @@ if ($budgetPeriodAnchorDate === '1970-01-01' || !preg_match('/^\d{4}-\d{2}-\d{2}
                 <label for="monthly_budget"><?= $userData['currency_symbol'] ?></label>
                 <input type="number" id="monthly_budget" name="monthly_budget" autocomplete="off" value="<?= $userData['budget'] ?>"
                     placeholder="Budget">
-                <input type="submit" value="<?= translate('save', $i18n) ?>" id="saveMonthlyBudget" onClick="saveMonthlyBudget()" />
+                <input type="submit" value="<?= translate('save', $i18n) ?>" id="saveMonthlyBudget" onClick="saveMonthlyBudgetButton()" />
             </div>
             <div class="settings-notes">
                 <p>
@@ -122,7 +122,7 @@ if ($budgetPeriodAnchorDate === '1970-01-01' || !preg_match('/^\d{4}-\d{2}-\d{2}
                     <input type="date" id="budget_period_anchor_date" name="budget_period_anchor_date"
                         value="<?= htmlspecialchars($budgetPeriodAnchorDate, ENT_QUOTES, 'UTF-8') ?>">
                 </div>
-                <input type="submit" value="<?= translate('save', $i18n) ?>" id="savePeriodBudget" class="period-budget-save" onClick="savePeriodBudget()" />
+                <input type="submit" value="<?= translate('save', $i18n) ?>" id="savePeriodBudget" class="period-budget-save" onClick="savePeriodBudgetButton()" />
             </div>
             <div class="settings-notes">
                 <p>
@@ -498,7 +498,7 @@ if ($budgetPeriodAnchorDate === '1970-01-01' || !preg_match('/^\d{4}-\d{2}-\d{2}
                         ?>
                     </select>
                     <input type="submit" class="thin" value="<?= translate('save', $i18n) ?>" id="saveNotifications"
-                        onClick="saveNotifications()" />
+                        onClick="saveNotificationsButton()" />
                 </div>
                 <div class="form-group-inline">
                     <input type="checkbox" id="period_summary_at_period_start" name="period_summary_at_period_start"
@@ -1056,7 +1056,7 @@ if ($budgetPeriodAnchorDate === '1970-01-01' || !preg_match('/^\d{4}-\d{2}-\d{2}
                 if ($canTranslateCategories) {
                     ?>
                     <button type="button" class="button secondary-button thin mobile-grow" id="translateCategories"
-                        onClick="translateCategories()">
+                        onClick="translateCategoriesButton()">
                         <i class="fa-solid fa-language"></i>
                         <?= translate('translate_categories', $i18n) ?>
                     </button>
@@ -1471,7 +1471,7 @@ if ($budgetPeriodAnchorDate === '1970-01-01' || !preg_match('/^\d{4}-\d{2}-\d{2}
                 ?>
                 <input type="button" id="runAiRecommendations"
                     class="secondary-button thin mobile-grow-force <?= !$canBeExecuted ? 'hidden' : '' ?>"
-                    onclick="runAiRecommendations()" value="<?= translate('generate_recommendations', $i18n) ?>" />
+                    onclick="runAiRecommendationsButton()" value="<?= translate('generate_recommendations', $i18n) ?>" />
                 <div id="aiSpinner" class="spinner ai-spinner hidden"></div>
 
                 <input type="submit" class="thin mobile-grow-force" value="<?= translate('save', $i18n) ?>"

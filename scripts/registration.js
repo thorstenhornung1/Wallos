@@ -140,7 +140,7 @@ function onRestoreFileSelected() {
   label.textContent = input.files[0] ? input.files[0].name : '';
 }
 
-function restoreDB() {
+function restoreDBButton() {
   const input = document.getElementById('restoreDBFile');
   const file = input.files[0];
 

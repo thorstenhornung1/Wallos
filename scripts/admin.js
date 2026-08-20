@@ -36,7 +36,7 @@ function readCheckboxValue(id) {
 }
 
 function testSmtpSettingsButton() {
-  const button = document.getElementById("testSmtpSettingsButton");
+  const button = document.getElementById("testSmtpSettings");
   button.disabled = true;
 
   // Resolved server side, so the test proves the transport Wallos will use —
@@ -45,7 +45,7 @@ function testSmtpSettingsButton() {
 }
 
 function saveSmtpSettingsButton() {
-  const button = document.getElementById("saveSmtpSettingsButton");
+  const button = document.getElementById("saveSmtpSettings");
   button.disabled = true;
 
   const encryptionInput = document.querySelector('input[name="encryption"]:checked');
@@ -105,7 +105,7 @@ function saveInstanceIntegrationsButton() {
   makeFetchCall('endpoints/admin/saveintegrationsettings.php', data, button);
 }
 
-function backupDB() {
+function backupDBButton() {
   const button = document.getElementById("backupDB");
   button.disabled = true;
 
@@ -157,7 +157,7 @@ function openRestoreDBFileSelect() {
   document.getElementById('restoreDBFile').click();
 };
 
-function restoreDB() {
+function restoreDBButton() {
   const input = document.getElementById('restoreDBFile');
   const file = input.files[0];
 
@@ -249,7 +249,7 @@ function saveAccountRegistrationsButton() {
 }
 
 function saveSecuritySettingsButton() {
-  const button = document.getElementById('saveSecuritySettingsButton');
+  const button = document.getElementById('saveSecuritySettings');
   button.disabled = true;
 
   const allowlist = document.getElementById('local_webhook_notifications_allowlist').value;
@@ -312,7 +312,7 @@ function removeUser(userId) {
 }
 
 function addUserButton() {
-  const button = document.getElementById('addUserButton');
+  const button = document.getElementById('addUser');
   button.disabled = true;
 
   const username = document.getElementById('newUsername').value;
@@ -350,7 +350,7 @@ function addUserButton() {
     });
 }
 
-function deleteUnusedLogos() {
+function deleteUnusedLogosButton() {
   const button = document.getElementById('deleteUnusedLogos');
   button.disabled = true;
 
@@ -462,7 +462,7 @@ function toggleOidcEnabled() {
 }
 
 function saveOidcSettingsButton() {
-  const button = document.getElementById("saveOidcSettingsButton");
+  const button = document.getElementById("saveOidcSettings");
   button.disabled = true;
 
   const oidcName = document.getElementById("oidcName").value;

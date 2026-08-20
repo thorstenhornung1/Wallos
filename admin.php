@@ -241,7 +241,7 @@ $loginDisabledAllowed = $userCount == 1 && $settings['registrations_open'] == 0;
             <div class="form-group-inline">
                 <input type="password" id="newPassword" autocomplete="off"
                     placeholder="<?= translate('password', $i18n) ?>" />
-                <input type="submit" class="thin" value="<?= translate('add', $i18n) ?>" id="addUserButton"
+                <input type="submit" class="thin" value="<?= translate('add', $i18n) ?>" id="addUser"
                     onClick="addUserButton()" />
             </div>
         </section>
@@ -431,7 +431,7 @@ $loginDisabledAllowed = $userCount == 1 && $settings['registrations_open'] == 0;
             </div>
             <div class="buttons">
                 <input type="submit" class="thin mobile-grow" value="<?= translate('save', $i18n) ?>"
-                    id="saveOidcSettingsButton" onClick="saveOidcSettingsButton()" />
+                    id="saveOidcSettings" onClick="saveOidcSettingsButton()" />
             </div>
         </div>
 
@@ -514,9 +514,9 @@ $loginDisabledAllowed = $userCount == 1 && $settings['registrations_open'] == 0;
             </div>
             <div class="buttons">
                 <input type="button" class="secondary-button thin mobile-grow" value="<?= translate('test', $i18n) ?>"
-                    id="testSmtpSettingsButton" onClick="testSmtpSettingsButton()" />
+                    id="testSmtpSettings" onClick="testSmtpSettingsButton()" />
                 <input type="submit" class="thin mobile-grow" value="<?= translate('save', $i18n) ?>"
-                    id="saveSmtpSettingsButton" onClick="saveSmtpSettingsButton()" />
+                    id="saveSmtpSettings" onClick="saveSmtpSettingsButton()" />
             </div>
             <div class="settings-notes">
                 <p>
@@ -629,7 +629,7 @@ $loginDisabledAllowed = $userCount == 1 && $settings['registrations_open'] == 0;
 
         <div class="buttons">
             <input type="submit" class="thin mobile-grow" value="<?= translate('save', $i18n) ?>"
-                id="saveSecuritySettingsButton" onClick="saveSecuritySettingsButton()" />
+                id="saveSecuritySettings" onClick="saveSecuritySettingsButton()" />
         </div>
 
         <div class="settings-notes">
@@ -766,7 +766,7 @@ $loginDisabledAllowed = $userCount == 1 && $settings['registrations_open'] == 0;
             <h3><?= translate('orphaned_logos', $i18n) ?></h3>
             <div class="form-group-inline">
                 <input type="button" class="button thin mobile-grow" value="<?= translate('delete', $i18n) ?>"
-                    id="deleteUnusedLogos" onClick="deleteUnusedLogos()" <?= $logosToDelete == 0 ? 'disabled' : '' ?> />
+                    id="deleteUnusedLogos" onClick="deleteUnusedLogosButton()" <?= $logosToDelete == 0 ? 'disabled' : '' ?> />
                 <span class="number-of-logos bold"><?= $logosToDelete ?></span>
                 <?= translate('orphaned_logos', $i18n) ?>
             </div>
@@ -805,10 +805,10 @@ $loginDisabledAllowed = $userCount == 1 && $settings['registrations_open'] == 0;
         </header>
         <div class="form-group-inline">
             <input type="button" class="button thin mobile-grow" value="<?= translate('backup', $i18n) ?>" id="backupDB"
-                onClick="backupDB()" />
+                onClick="backupDBButton()" />
             <input type="button" class="secondary-button thin mobile-grow" value="<?= translate('restore', $i18n) ?>"
                 id="restoreDB" onClick="openRestoreDBFileSelect()" />
-            <input type="file" name="restoreDBFile" id="restoreDBFile" style="display: none;" onChange="restoreDB()"
+            <input type="file" name="restoreDBFile" id="restoreDBFile" style="display: none;" onChange="restoreDBButton()"
                 accept=".zip">
         </div>
         <div class="settings-notes">

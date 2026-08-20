@@ -44,7 +44,7 @@ function makeFetchCall(url, data, button) {
 
 }
 
-function saveNotifications() {
+function saveNotificationsButton() {
     const button = document.getElementById("saveNotifications");
     button.disabled = true;
     const days = document.querySelector('#days').value;

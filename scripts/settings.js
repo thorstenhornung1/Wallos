@@ -1,7 +1,7 @@
 const saveIconContent = '<i class="fa-solid fa-check"></i>';
 const deleteIconContent = '<i class="fa-solid fa-trash-can"></i>';
 
-function saveMonthlyBudget() {
+function saveMonthlyBudgetButton() {
   const button = document.getElementById("saveMonthlyBudget");
   button.disabled = true;
 
@@ -38,7 +38,7 @@ function saveMonthlyBudget() {
     });
 }
 
-function savePeriodBudget() {
+function savePeriodBudgetButton() {
   const button = document.getElementById("savePeriodBudget");
   button.disabled = true;
 
@@ -1364,7 +1364,7 @@ function saveAiSettingsButton() {
     });
 }
 
-function translateCategories() {
+function translateCategoriesButton() {
   const button = document.getElementById("translateCategories");
   const originalContent = button.innerHTML;
 
@@ -1401,7 +1401,7 @@ function translateCategories() {
     });
 }
 
-function runAiRecommendations() {
+function runAiRecommendationsButton() {
   const endpoint = 'endpoints/ai/generate_recommendations.php';
   const button = document.querySelector("#runAiRecommendations");
   const spinner = document.querySelector("#aiSpinner");

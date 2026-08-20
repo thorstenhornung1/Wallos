@@ -148,7 +148,7 @@ function enableTotp() {
 }
 
 function openTotpPopup() {
-    const enableTotpButton = document.getElementById('enableTotp');
+    const enableTotpButton = document.getElementById('enableTotpToggle');
     enableTotpButton.disabled = true;
 
     const totpPopup = document.getElementById('totp-popup');
@@ -156,7 +156,7 @@ function openTotpPopup() {
 }
 
 function closeTotpPopup() {
-    const enableTotpButton = document.getElementById('enableTotp');
+    const enableTotpButton = document.getElementById('enableTotpToggle');
     enableTotpButton.disabled = false;
     const totpPopup = document.getElementById('totp-popup');
     totpPopup.classList.remove('is-open');
@@ -207,7 +207,7 @@ function submitTotp() {
         });
 }
 
-function copyBackupCodes() {
+function copyBackupCodesButton() {
     const backupCodes = document.querySelectorAll('#backup-codes li');
     const codes = Array.from(backupCodes).map(code => code.textContent).join('\n');
 
@@ -220,7 +220,7 @@ function copyBackupCodes() {
         });
 }
 
-function downloadBackupCodes() {
+function downloadBackupCodesButton() {
     const backupCodes = document.querySelectorAll('#backup-codes li');
     const codes = Array.from(backupCodes).map(code => code.textContent).join('\n');
     const element = document.createElement('a');
@@ -272,7 +272,7 @@ function submitDisableTotp() {
         });
 }
 
-function regenerateApiKey() {
+function regenerateApiKeyButton() {
   const regenerateButton = document.getElementById("regenerateApiKey");
   regenerateButton.disabled = true;
 

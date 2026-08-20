@@ -531,7 +531,7 @@ if (isset($_POST['username'])) {
                     <span id="restoreFileName" style="font-size: 14px; margin-left: 8px;"></span>
                 </div>
                 <div class="form-group">
-                    <input type="button" value="<?= translate('restore_database', $i18n) ?>" onClick="restoreDB()" />
+                    <input type="button" value="<?= translate('restore_database', $i18n) ?>" onClick="restoreDBButton()" />
                 </div>
             </div>
         </div>
