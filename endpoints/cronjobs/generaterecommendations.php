@@ -416,9 +416,21 @@ PROMPT;
     // or not a single row had landed, so last_successful_run said the run had
     // succeeded for accounts whose recommendations had just been deleted.
     $updateStmt = $db->prepare("UPDATE ai_settings SET last_successful_run = CURRENT_TIMESTAMP WHERE user_id = ?");
+    $stamped = false;
+
     if ($updateStmt !== false) {
         $updateStmt->bindValue(1, $tempUserId, SQLITE3_INTEGER);
-        $updateStmt->execute();
+        $stamped = $updateStmt->execute() !== false;
+    }
+
+    if (!$stamped) {
+        // The commit below still runs: the recommendations are worth keeping
+        // even when the stamp is not. But last_successful_run is what the next
+        // run reads to decide whether this account is due, so a silent failure
+        // means the account is either done again immediately or skipped —
+        // decided by a write nobody looked at (issue #87).
+        wallos_cron_problem('the recommendations for user ' . $tempUserId
+            . ' were stored but the run was not stamped: ' . wallos_cron_reason($db));
     }
 
     if (!$db->commit()) {

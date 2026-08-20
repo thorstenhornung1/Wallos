@@ -150,17 +150,47 @@ function write_audit_tokens($source)
  * Whether a token starts a new statement, so that what follows it is an
  * expression whose value nothing receives.
  *
- * @param array|null $token
+ * The colon is here for `case 1:` and for the alternative syntax, and it is
+ * also the middle of a ternary — where what follows is emphatically not a
+ * statement. `$ok = $stmt === false ? false : $stmt->execute();` reads as a
+ * discarded result to anything that stops at the colon, and reporting a checked
+ * write as unchecked is worse for a ratchet than missing one: it asks for
+ * correct code to be rewritten. wallos_cron_fail sites in the scheduled jobs
+ * are written exactly that way.
+ *
+ * @param array|null                     $token
+ * @param array<int, array>              $tokens the whole stream
+ * @param int                            $index  where $token sits in it
  * @return bool
  */
-function write_audit_starts_statement($token)
+function write_audit_starts_statement($token, array $tokens = [], $index = -1)
 {
     if ($token === null) {
         return true;
     }
 
-    return in_array($token[0], [';', '{', '}', ':'], true)
-        || in_array($token[0], [T_OPEN_TAG, T_ELSE], true);
+    if (in_array($token[0], [';', '{', '}'], true)
+        || in_array($token[0], [T_OPEN_TAG, T_ELSE], true)) {
+        return true;
+    }
+
+    if ($token[0] !== ':' || $index < 0) {
+        return false;
+    }
+
+    // A colon belongs to a ternary when a question mark opened one since the
+    // last real statement boundary.
+    for ($i = $index - 1; $i >= 0; $i--) {
+        if (in_array($tokens[$i][0], [';', '{', '}'], true)) {
+            return true;
+        }
+
+        if ($tokens[$i][0] === '?') {
+            return false;
+        }
+    }
+
+    return true;
 }
 
 /**
@@ -223,7 +253,7 @@ function write_audit_scan($source)
         // the statement before it.
         if (strtolower($name[1]) === 'execute') {
             $j = $i;
-            while ($j > 0 && !write_audit_starts_statement($tokens[$j - 1])) {
+            while ($j > 0 && !write_audit_starts_statement($tokens[$j - 1], $tokens, $j - 1)) {
                 $previous = $tokens[$j - 1][0];
 
                 if (in_array($previous, [T_VARIABLE, T_STRING, T_OBJECT_OPERATOR,
@@ -236,7 +266,7 @@ function write_audit_scan($source)
                 break;
             }
 
-            if (write_audit_starts_statement($tokens[$j - 1] ?? null)) {
+            if (write_audit_starts_statement($tokens[$j - 1] ?? null, $tokens, $j - 1)) {
                 $discarded[] = $name[2];
             }
 

@@ -135,10 +135,27 @@ if ($userData) {
     $userData = $result->fetchArray(SQLITE3_ASSOC);
     if ($userData) {
         // Update existing user with OIDC sub
+        //
+        // The sign-in goes ahead either way: the identity is established by the
+        // token, and refusing here would lock somebody out over a write that
+        // has nothing to do with who they are. But the link is what every later
+        // sign-in matches on instead of falling back to the email address, so a
+        // silent failure means this account keeps being matched the weaker way
+        // — worth a line in the log rather than nothing at all (issue #87).
         $stmt = $db->prepare('UPDATE "user" SET oidc_sub = :oidcSub WHERE id = :userId');
-        $stmt->bindValue(':oidcSub', $oidcSub, SQLITE3_TEXT);
-        $stmt->bindValue(':userId', $userData['id'], SQLITE3_INTEGER);
-        $stmt->execute();
+        $linked = false;
+
+        if ($stmt !== false) {
+            $stmt->bindValue(':oidcSub', $oidcSub, SQLITE3_TEXT);
+            $stmt->bindValue(':userId', $userData['id'], SQLITE3_INTEGER);
+            $linked = $stmt->execute() !== false;
+        }
+
+        if (!$linked) {
+            error_log('Wallos OIDC: signed user ' . $userData['id'] . ' in but could not record the '
+                . 'provider subject, so the account stays matched by email address: '
+                . $db->lastErrorMsg());
+        }
 
         // Log the user in
         require_once('oidc_login.php');

@@ -86,6 +86,29 @@ wallos_test('a read is told from a write, and an unreadable query counts as one'
         'a query this cannot read is counted as a write, because that is the safe way to be wrong');
 });
 
+wallos_test('the middle of a ternary is not the start of a statement', function () {
+    // What this got wrong for a day. The colon is a statement boundary in
+    // `case 1:` and in the alternative syntax, and it is also the middle of a
+    // ternary, where what follows is an expression whose value the assignment
+    // on the left receives. Thirteen checked writes were reported as unchecked
+    // — and reporting correct code as a defect is worse for a ratchet than
+    // missing one, because it asks for the correct code to be rewritten.
+    $ternary = write_audit_scan_snippet(
+        '$ok = $stmt === false ? false : $stmt->execute();');
+
+    assert_same(0, count($ternary['discarded']), 'the result is assigned, whatever the colon suggests');
+
+    // The colon still ends a statement where it really does.
+    $inCase = write_audit_scan_snippet('
+        switch ($x) {
+            case 1:
+                $stmt->execute();
+                break;
+        }');
+
+    assert_same(1, count($inCase['discarded']), 'a discarded result after a case label is still one');
+});
+
 wallos_test('prose about execute() is not a call to it', function () {
     // What a text search gets wrong, and why this file can describe the pattern
     // it counts without counting itself.

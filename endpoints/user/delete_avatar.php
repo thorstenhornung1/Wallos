@@ -49,9 +49,23 @@ if (isset($input['avatar'])) {
         if (file_exists($filePath)) {
             unlink($filePath);
             $delStmt = $db->prepare("DELETE FROM uploaded_avatars WHERE id = :id");
-            $delStmt->bindValue(':id', $ownership['id'], SQLITE3_INTEGER);
-            $delStmt->execute();
-            echo json_encode(array("success" => true, "message" => translate("success", $i18n)));
+            $removed = false;
+
+            if ($delStmt !== false) {
+                $delStmt->bindValue(':id', $ownership['id'], SQLITE3_INTEGER);
+                $removed = $delStmt->execute() !== false;
+            }
+
+            if ($removed) {
+                echo json_encode(array("success" => true, "message" => translate("success", $i18n)));
+            } else {
+                // The file is already gone. Reporting success would leave a row
+                // the avatar list still offers and the page cannot render, and
+                // the user with no way to tell why (issue #87).
+                error_log('Wallos delete_avatar: removed ' . $filePath . ' but its row survived: '
+                    . $db->lastErrorMsg());
+                echo json_encode(array("success" => false, "message" => translate("error", $i18n)));
+            }
         } else {
             echo json_encode(array("success" => false, "message" => translate("error", $i18n)));
         }
