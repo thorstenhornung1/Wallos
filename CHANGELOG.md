@@ -58,6 +58,27 @@ the first time. The test plan is corrected where it cost that run time.
   of the job's own staleness windows: two hours ago is many runs back for a job
   that runs every two minutes and last night for one that runs daily.
 
+### Added
+
+* **dev:** `dev/write-audit.php`, a ratchet on the writes whose outcome nobody
+  reads ([#87](https://github.com/thorstenhornung1/Wallos/issues/87)). It does
+  not fix them — it counts them and holds the number, the way
+  `dev/db-audit.sh` holds the SQLite boundary, so the next one is a failing
+  test rather than the fifth coat of the same defect.
+
+  The answer, on this tree: **66 discarded results and 368 unchecked prepares
+  across 131 files**, of which 304 carry a statement that changes data or one
+  the audit cannot read. That number is what the open design question in #87 —
+  whether the boundary should offer a write returning rows-affected-or-null —
+  should be decided against, rather than an estimate.
+
+  It parses instead of searching: a text search counts 311 discarded results
+  where there are 66, because it cannot tell `$stmt->execute();` from
+  `$ok = $stmt->execute();` or either from a docblock. What it does not see —
+  `changes()` used as a success signal, multi-statement work with no
+  transaction, hardcoded success responses — is written into its header, so a
+  file at zero reads as "free of two countable shapes" rather than as cleared.
+
 ### Changed
 
 * **dev:** `dev/compose.yaml` pointed at `dev/pgsql.sh` for switching a
@@ -82,6 +103,12 @@ the first time. The test plan is corrected where it cost that run time.
 * **test plan:** section 7.2 listed two fixed defects as current limitations. A
   section that does that is itself a finding — a reader takes it as a reason not
   to test — so both are named as fixed instead of quietly deleted.
+* **test report:** the 2026-08-20 run closes on section 6 being blocked by
+  [#91](https://github.com/thorstenhornung1/Wallos/issues/91). That issue was
+  closed the evening before the run and fixed in the release the run tested. The
+  correction is appended rather than edited in, because the error was procedural
+  — the issue's state was taken from the plan instead of being looked up — and
+  that is the part worth keeping.
 
 ## [5.8.2](https://github.com/thorstenhornung1/Wallos/releases/tag/v5.8.2) (2026-08-19)
 
