@@ -760,8 +760,30 @@ printf("tables:     %d\n", (int) $db->scalar("SELECT COUNT(*) FROM information_s
 printf("migrations: %d\n", (int) $db->scalar("SELECT COUNT(*) FROM migrations"));'
 ```
 
-Expected: `pgsql`, 42 tables, 62 migrations. Then run sections 4 through 7
-unchanged — the whole plan applies, and any difference is a finding.
+Expected on a fresh installation: `pgsql`, 42 tables, 64 migrations. Then run
+sections 4 through 7 unchanged — the whole plan applies, and any difference is a
+finding.
+
+**The table count depends on when the database was created, and one difference
+is not a finding.** A PostgreSQL database installed from the 5.8.0 or 5.8.1
+baseline holds a `notifications` table that nothing uses. Migration 000016 was
+meant to drop it and never could: the drop ran while the migration's own read of
+that table was still open, SQLite refused it, and — the actual defect — the
+result was not checked, so the migration recorded itself as applied with the
+table still there. Every SQLite installation made before 5.8.2 carries it too.
+
+So:
+
+| Database | Tables | Migrations |
+|---|---|---|
+| Installed fresh from 5.8.2 or later | 42 | 64 |
+| Installed from the 5.8.0 or 5.8.1 baseline, not yet upgraded | 43 | 63 |
+| Either of the above, after migration 000065 | 42 | 64 |
+
+If you are testing 5.8.2 itself against a database created by 5.8.0 or 5.8.1,
+**43 is correct** — 000065 is not in that release. Report the count you see
+rather than adjusting it; the number matters less than which of these three
+rows your instance is in.
 
 ### 8.2 Moving an existing instance across
 
