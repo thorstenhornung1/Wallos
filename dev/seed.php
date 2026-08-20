@@ -17,20 +17,93 @@ $userCount = isset($argv[1]) ? max(1, (int) $argv[1]) : 10;
 $perUser = isset($argv[2]) ? max(1, (int) $argv[2]) : 100;
 
 require_once __DIR__ . '/../includes/database/connection.php';
+require_once __DIR__ . '/../includes/user_deletion.php';
 $db = wallos_database_connect();
 $db->busyTimeout(5000);
 
 $seedPrefix = 'seed-';
 
+/**
+ * Removes the rows of one table that belong to the listed accounts.
+ *
+ * The table and column names come from wallos_user_deletion_plan(), which
+ * accepts only names matching [A-Za-z_][A-Za-z0-9_]* out of the live schema,
+ * and the ids are cast to int as they are read. Identifiers cannot be bound by
+ * either backend, so this is the one place the script assembles SQL, and it
+ * assembles it from nothing a request can reach.
+ *
+ * @param WallosDatabase $db
+ * @param string         $table
+ * @param string         $column
+ * @param int[]          $ids
+ */
+function seed_delete_owned($db, $table, $column, array $ids)
+{
+    if ($ids === []) {
+        return;
+    }
+
+    $quoted = $table === 'user' ? '"user"' : $table;
+    $statement = 'DELETE FROM ' . $quoted . ' WHERE ' . $column . ' IN (' . implode(',', $ids) . ')';
+
+    $db->exec($statement);
+}
+
+/**
+ * Removes rows a previous seed left on an account that is not itself seeded —
+ * the benchmark writes prefixed rows to the account it measures.
+ *
+ * @param WallosDatabase $db
+ * @param string         $table
+ * @param string         $column
+ * @param string         $prefix
+ */
+function seed_delete_prefixed($db, $table, $column, $prefix)
+{
+    $quoted = $table === 'user' ? '"user"' : $table;
+    $statement = 'DELETE FROM ' . $quoted . ' WHERE ' . $column . ' LIKE :prefix';
+    $delete = $db->prepare($statement);
+
+    if ($delete === false) {
+        return;
+    }
+
+    $delete->bindValue(':prefix', $prefix . '%');
+    $delete->execute();
+}
+
 echo "Removing previously seeded data\n";
-// Order matters: the subscriptions reference the household members and the
-// categories, and "user".main_currency references the currencies, so the rows
-// doing the referencing go first and the currencies go last.
-$db->exec("DELETE FROM subscriptions WHERE name LIKE '" . $seedPrefix . "%'");
-$db->exec("DELETE FROM household WHERE name LIKE '" . $seedPrefix . "%'");
-$db->exec("DELETE FROM categories WHERE name LIKE '" . $seedPrefix . "%'");
-$db->exec("DELETE FROM \"user\" WHERE username LIKE '" . $seedPrefix . "%'");
-$db->exec("DELETE FROM currencies WHERE name LIKE '" . $seedPrefix . "%'");
+
+// The accounts go through the same plan the application deletes accounts with,
+// because a list written out here is a list that goes stale. This one had:
+// it named five tables, email_notifications was not among them, and the
+// benchmark seeds in three tiers — so tiers one and two left eleven
+// notification rows pointing at accounts that no longer existed, every run
+// (issue #98). wallos_user_deletion_plan() derives the tables from the live
+// schema instead, so a table added later is covered without anyone remembering
+// that this file exists.
+$seededAccounts = [];
+$result = $db->query("SELECT id FROM \"user\" WHERE username LIKE '" . $seedPrefix . "%'");
+
+while ($result !== false && $row = $result->fetchArray()) {
+    $seededAccounts[] = (int) $row['id'];
+}
+
+// Collected before the first delete: half the plan runs after the account row
+// itself is gone, and by then nothing names these rows any more.
+foreach (wallos_user_deletion_plan($db) as $step) {
+    seed_delete_owned($db, $step['table'], $step['column'], $seededAccounts);
+}
+
+// Prefixed rows on accounts that stay. Order matters: the subscriptions
+// reference the household members and the categories, and "user".main_currency
+// references the currencies, so the rows doing the referencing go first and the
+// currencies go last.
+seed_delete_prefixed($db, 'subscriptions', 'name', $seedPrefix);
+seed_delete_prefixed($db, 'household', 'name', $seedPrefix);
+seed_delete_prefixed($db, 'categories', 'name', $seedPrefix);
+seed_delete_prefixed($db, 'user', 'username', $seedPrefix);
+seed_delete_prefixed($db, 'currencies', 'name', $seedPrefix);
 
 $started = microtime(true);
 $db->exec('BEGIN');

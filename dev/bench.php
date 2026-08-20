@@ -37,6 +37,7 @@ if (php_sapi_name() !== 'cli') {
 
 require_once __DIR__ . '/../includes/database/connection.php';
 require_once __DIR__ . '/../includes/database/configuration.php';
+require_once __DIR__ . '/../includes/user_deletion.php';
 
 /** Rows this tool creates for one account, replaced on every size change. */
 const BENCH_PREFIX = 'bench-';
@@ -298,6 +299,84 @@ function bench_enable_notifications($db)
  * @param WallosDatabase $db
  * @return array<string, int> table => rows removed
  */
+/**
+ * Removes one table's rows for the listed accounts.
+ *
+ * The ids are bound rather than interpolated. Only the table and column names
+ * are assembled into the statement, because no backend binds an identifier, and
+ * they come from wallos_user_deletion_plan(), which takes only names matching
+ * [A-Za-z_][A-Za-z0-9_]* out of the live schema.
+ *
+ * @param WallosDatabase $db
+ * @param string         $table
+ * @param string         $column
+ * @param int[]          $ids
+ */
+function bench_delete_owned($db, $table, $column, array $ids)
+{
+    if ($ids === []) {
+        return;
+    }
+
+    $placeholders = implode(',', array_fill(0, count($ids), '?'));
+    $delete = $db->prepare('DELETE FROM ' . $table . ' WHERE ' . $column . ' IN (' . $placeholders . ')');
+
+    if ($delete === false) {
+        return;
+    }
+
+    foreach (array_values($ids) as $position => $id) {
+        $delete->bindValue($position + 1, (int) $id);
+    }
+
+    $delete->execute();
+}
+
+/**
+ * Rows in the per-account tables whose account no longer exists.
+ *
+ * The cleanup used to say what it had removed and stop there, which is how
+ * eleven notification rows per run went unnoticed (issue #98): the figure was
+ * true and answered a different question than the one that mattered. This asks
+ * the one that mattered — is anything left pointing at an account that is gone
+ * — and asks it of every table with a user_id rather than of the one somebody
+ * remembered.
+ *
+ * It counts rather than deletes. Orphans from another source are not this
+ * script's to clean up, and a benchmark that quietly repairs a database is
+ * worse than one that leaves a mess it names.
+ *
+ * @param WallosDatabase $db
+ * @return array<string, int> table => orphan rows
+ */
+function bench_orphans($db)
+{
+    $orphans = [];
+
+    foreach (wallos_user_deletion_plan($db) as $step) {
+        if ($step['table'] === 'user') {
+            continue;
+        }
+
+        // NULL and 0 are excluded on purpose. Older installations carry system
+        // rows — payment methods in particular — that belong to nobody by
+        // convention rather than by accident, and reporting them as orphans
+        // would make this report noise on exactly the installations that need
+        // it. An orphan is a row naming an account that does not exist.
+        $column = 't.' . $step['column'];
+        $count = 'SELECT COUNT(*) FROM ' . $step['table'] . ' t'
+            . ' WHERE ' . $column . ' IS NOT NULL AND ' . $column . ' <> 0'
+            . ' AND NOT EXISTS (SELECT 1 FROM "user" u WHERE u.id = ' . $column . ')';
+        $found = (int) $db->scalar($count);
+
+        if ($found > 0) {
+            $orphans[$step['table']] = $found;
+        }
+    }
+
+    return $orphans;
+}
+
 function bench_cleanup($db)
 {
     // The fourth element is what keeps a cleanup from creating the very thing
@@ -328,9 +407,28 @@ function bench_cleanup($db)
     }
 
     if ($seededAccounts !== []) {
-        $before = (int) $db->scalar('SELECT COUNT(*) FROM email_notifications');
-        $db->exec('DELETE FROM email_notifications WHERE user_id IN (' . implode(',', $seededAccounts) . ')');
-        $removed['email_notifications'] = $before - (int) $db->scalar('SELECT COUNT(*) FROM email_notifications');
+        // Every per-account table except the five below, which the ordered plan
+        // handles with the guards their foreign keys need. Named one at a time,
+        // this was email_notifications alone — correct, and the shape that
+        // leaves the next table behind. dev/seed.php missed the same table for
+        // the same reason (issue #98), so both now ask the schema instead:
+        // wallos_user_deletion_plan() lists every base table with a user_id.
+        $ordered = ['subscriptions', 'household', 'categories', 'user', 'currencies'];
+
+        foreach (wallos_user_deletion_plan($db) as $step) {
+            if (in_array($step['table'], $ordered, true)) {
+                continue;
+            }
+
+            $count = 'SELECT COUNT(*) FROM ' . $step['table'];
+            $before = (int) $db->scalar($count);
+            bench_delete_owned($db, $step['table'], $step['column'], $seededAccounts);
+            $after = (int) $db->scalar($count);
+
+            if ($before - $after > 0) {
+                $removed[$step['table']] = $before - $after;
+            }
+        }
     }
 
     foreach ($plan as $step) {
@@ -572,6 +670,23 @@ switch ($command) {
         foreach ($removed as $table => $rows) {
             printf("  %-22s %d row(s) removed\n", $table, $rows);
         }
+
+        // What was removed is not the same question as what is left. Reporting
+        // only the first is how eleven orphaned notification rows survived
+        // every run of this script (issue #98) behind a line that was true.
+        $orphans = bench_orphans($db);
+
+        if ($orphans !== []) {
+            printf("\n  Rows left pointing at an account that no longer exists:\n");
+
+            foreach ($orphans as $table => $rows) {
+                printf("  %-22s %d row(s)\n", $table, $rows);
+            }
+
+            printf("  Not removed here: orphans from another source are not this script's to\n"
+                . "  repair, and dev/migrate-to-pgsql.php refuses a database holding them.\n");
+        }
+
         $db->close();
         break;
 
