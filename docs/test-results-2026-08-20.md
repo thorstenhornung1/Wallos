@@ -521,3 +521,30 @@ instead.
 * `dev/benchmark.sh` was not re-run: the tooling defect from
   [#91](https://github.com/thorstenhornung1/Wallos/issues/91) makes its figures
   meaningless on PostgreSQL, and nothing in this release addresses it.
+
+---
+
+## Correction, added 2026-08-20 after the run
+
+**Section 6 was not blocked, and the two statements below about
+[#91](https://github.com/thorstenhornung1/Wallos/issues/91) are wrong.** The
+issue was closed the evening before this run, at 21:54 on 2026-08-19, and fixed
+in the release this run tested: `dev/benchmark.sh` and `dev/e2e.sh` go through
+`wallos_database_connect()`, `dev/bench.php` holds the database half with no way
+to name a database at all, and `dev/sh-audit.sh` runs in CI and reports zero.
+5.8.2 is exactly the release that addresses it.
+
+The error was procedural rather than technical: the issue's state was taken from
+the plan and from the previous run's notes instead of being looked up. Recorded
+here rather than edited away, because a finding that "nothing in this release
+addresses it" is the kind of statement the next run inherits — and this one
+would have left the only unmeasured section unmeasured for a second time.
+
+What that means for the next run: **section 6 is the first thing to do.** It is
+the only part of the plan with no PostgreSQL figures at all, and the table in
+the plan is from SQLite on a development container. Whatever it produces is the
+first measurement of this application on the backend it is being moved to.
+
+The other correction is smaller: 8.1's finding that no migration removes the
+leftover `notifications` table was true when measured and stopped being true
+that same morning — migration 000065 landed at 05:47 and is in 5.8.3.
