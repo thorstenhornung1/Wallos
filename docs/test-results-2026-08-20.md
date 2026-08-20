@@ -410,6 +410,88 @@ disclose file paths and line numbers rather than data. Recorded rather than
 filed: it is pre-existing behaviour, not something this release changed, and the
 same shape exists upstream.
 
+### 7.1 — administrators from a group claim
+
+Configured `admin_claim = groups`, `admin_value = admin`, then signed in through
+Authentik. Three accounts, three different outcomes:
+
+```
+ id  | username         | rolle | quelle | created_at
+   1 | dummy            | admin | local  | 2026-08-19 05:57:34
+ 119 | admin            | admin | oidc   | 2026-08-20 05:50:35
+ 120 | thorsten.hornung | -     | -      |
+```
+
+All three lines are needed.
+
+`admin` (119) carries `groups: ["family","admin","paperless"]` and received the
+role with source **`oidc`** — the claim was read and matched.
+
+`thorsten.hornung` (120) signed in through the same provider and received
+**nothing**, which rules out the role being handed to every OIDC account.
+Without this line the first proves much less than it looks.
+
+`dummy` (1) keeps its role with source **`local`** and yesterday's timestamp.
+That is the way back in if the claim name is ever wrong: a misconfigured
+provider must not be able to lock the operator out of their own administration.
+
+### 7.3 — RP-initiated logout
+
+Works, in a clean browser session:
+
+```
+07:23:49  GET  /logout.php              302   -> login.php?logged_out=1
+07:23:50  POST /backchannel-logout.php  200
+          -> 0 session(s) revoked
+open oidc_sessions: 0
+```
+
+The `0 session(s) revoked` is the expected outcome here, not a miss: `logout.php`
+had already ended the session a second before Authentik's notification arrived.
+Nothing left to revoke is a correct answer.
+
+Both directions are now covered, and that is worth more than the two results
+separately: an implementation that handles only one of them looks equally good
+in the other's test.
+
+### 7.2 — the section is out of date
+
+Both limitations it lists are fixed:
+
+* the locale of an auto-created user (#34/#35/#40) was fixed in 5.6.0 and
+  verified on 2026-08-16 through both the instance default and the `locale`
+  claim, separately
+* "logging out in Authentik leaves the Wallos session alive" (#37/#49) is what
+  back-channel logout addresses, verified above
+
+Left in the report rather than silently corrected in the plan, because a section
+that lists fixed defects as current is itself a finding — a reader takes it as a
+reason not to test.
+
+### A dead button, found while configuring 7.1
+
+The OIDC settings could not be saved through the interface. Filed as
+[#95](https://github.com/thorstenhornung1/Wallos/issues/95):
+
+```
+[Error] TypeError: saveOidcSettingsButton is not a function.
+        (In 'saveOidcSettingsButton()', 'saveOidcSettingsButton' is an
+         instance of HTMLInputElement)
+        onclick (admin.php:615)
+```
+
+The element carries `id="saveOidcSettingsButton"` and the function in
+`scripts/admin.js` has the same name. Named access on the window object makes
+the element shadow the function, so the inline handler calls something that is
+not callable. Seven buttons share the pattern; the ones that work differ in
+exactly this respect.
+
+Three things were ruled out before filing, so the fix is not looked for in the
+wrong place: the endpoint writes correctly when called directly, all 19 form
+ids are present in the rendered page, and the `fetch` sets the CSRF header and
+reports both outcomes. The configuration for 7.1 was written through the API
+instead.
+
 ## Conclusions, kept separate from the observations above
 
 * **All three defects from the previous run are fixed**, each verified by the
