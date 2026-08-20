@@ -21,14 +21,27 @@ if (isset($_SESSION['from_oidc']) && $_SESSION['from_oidc'] === true) {
     $logoutUrl = $oidcSettings['logout_url'] ?? '';
 }
 
-// get token from cookie to remove from DB
-if (isset($_SESSION['token'])) {
+// Revoke the remember-me token before the session goes away.
+//
+// $userId was never assigned in this file, so the statement bound null and
+// "user_id = null" matched no row: every logout left a usable token behind and
+// the next request signed the user straight back in. The id comes from the
+// session, which is where login.php put it.
+//
+// The result is checked because a failed revocation and nothing to revoke are
+// different outcomes, and only one of them is safe to ignore.
+if (isset($_SESSION['token'], $_SESSION['userId'])) {
     $token = $_SESSION['token'];
+    $userId = $_SESSION['userId'];
     $sql = "DELETE FROM login_tokens WHERE token = :token AND user_id = :userId";
     $stmt = $db->prepare($sql);
     $stmt->bindParam(':token', $token, SQLITE3_TEXT);
     $stmt->bindParam(':userId', $userId, SQLITE3_INTEGER);
-    $stmt->execute();
+
+    if ($stmt->execute() === false) {
+        error_log('Wallos: could not revoke the login token on logout for user ' . $userId
+            . '; the remember-me cookie may still be usable');
+    }
 }
 $_SESSION = array();
 session_destroy();
