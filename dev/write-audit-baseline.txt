@@ -8,7 +8,7 @@
 #
 # Do not edit by hand — run dev/write-audit.php --update and commit the diff.
 #
-# 129 file(s), 47 discarded result(s), 346 unchecked prepare(s).
+# 128 file(s), 39 discarded result(s), 332 unchecked prepare(s).
 
 admin.php	0	4
 api/admin/get_admin_settings.php	0	1
@@ -20,14 +20,14 @@ api/categories/set_categories.php	0	7
 api/currencies/get_currencies.php	0	3
 api/currencies/set_currencies.php	0	6
 api/fixer/get_fixer.php	0	2
-api/fixer/set_fixer.php	2	5
+api/fixer/set_fixer.php	0	3
 api/household/get_household.php	0	3
 api/household/set_household.php	0	6
 api/notifications/get_notification_settings.php	0	10
 api/payment_methods/get_payment_methods.php	0	3
 api/payment_methods/set_payment_methods.php	0	7
 api/settings/get_settings.php	0	4
-api/settings/set_settings.php	4	7
+api/settings/set_settings.php	0	3
 api/status/version.php	0	1
 api/subscriptions/get_ical_feed.php	0	8
 api/subscriptions/get_monthly_cost.php	0	4
@@ -38,7 +38,6 @@ api/subscriptions/set_subscriptions.php	1	9
 api/users/get_user.php	0	1
 api/users/set_budget.php	0	2
 calendar.php	0	4
-endpoints/admin/adduser.php	2	8
 endpoints/admin/deleteunusedlogos.php	0	2
 endpoints/admin/enableoidc.php	1	1
 endpoints/admin/saveopenregistrations.php	0	2

@@ -138,10 +138,32 @@ if ($provider === 1 && isset($http_response_header)) {
 $apiData = json_decode($response, true);
 if (isset($apiData['success']) && $apiData['success'] == true) {
     // Delete existing settings first
+    //
+    // Checked, because the insert that follows is: a failed delete leaves the
+    // account with two provider keys and nothing saying which one is used
+    // (issue #87). The insert already reported its own failure, which made this
+    // the one half of the pair that could fail quietly.
     $removeSql = "DELETE FROM fixer WHERE user_id = :userId";
     $removeStmt = $db->prepare($removeSql);
-    $removeStmt->bindParam(':userId', $userId, SQLITE3_INTEGER);
-    $removeStmt->execute();
+    $removed = false;
+
+    if ($removeStmt !== false) {
+        $removeStmt->bindParam(':userId', $userId, SQLITE3_INTEGER);
+        $removed = $removeStmt->execute() !== false;
+    }
+
+    if (!$removed) {
+        error_log('Wallos set_fixer: could not remove the previous provider key for user '
+            . $userId . ': ' . $db->lastErrorMsg());
+
+        echo json_encode([
+            'success' => false,
+            'title' => 'Database error',
+            'message' => 'The previous provider key could not be replaced.',
+        ]);
+
+        exit;
+    }
 
     // Insert new settings
     $insertSql = "INSERT INTO fixer (api_key, provider, user_id) VALUES (:api_key, :provider, :userId)";
@@ -160,7 +182,15 @@ if (isset($apiData['success']) && $apiData['success'] == true) {
             $usageStmt->bindValue(':limit', $usageLimit, SQLITE3_INTEGER);
             $usageStmt->bindValue(':updatedAt', date('Y-m-d H:i:s'), SQLITE3_TEXT);
             $usageStmt->bindValue(':userId', $userId, SQLITE3_INTEGER);
-            $usageStmt->execute();
+
+            // Quota is what the settings page shows to explain why refreshes
+            // stopped. A figure that silently stayed where it was is worse than
+            // none at all — but the key itself is saved, so this reports rather
+            // than failing the request.
+            if ($usageStmt->execute() === false) {
+                error_log('Wallos set_fixer: the provider key was saved but its quota was not recorded for user '
+                    . $userId . ': ' . $db->lastErrorMsg());
+            }
         }
 
         echo json_encode([

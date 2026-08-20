@@ -76,18 +76,68 @@ if (!$user) {
 
 $userId = $user['id'];
 
+/**
+ * Ends the request when a write did not happen.
+ *
+ * The four writes below used to discard their results and fall through to the
+ * unconditional success response at the bottom of this file: a user saved a
+ * colour scheme, was told it had been saved, and found it gone on the next
+ * page load (issue #87). The settings UPDATE further down was the only one that
+ * ever checked, and it is the model for these.
+ *
+ * A delete and an insert are two statements without a transaction around them,
+ * so a failure between them leaves the old value gone and the new one unwritten.
+ * The message says which of the two happened, because "failed" and "failed and
+ * took your previous setting with it" are different things to be told.
+ *
+ * @param bool   $ok
+ * @param string $what
+ * @param bool   $previousRemoved
+ * @return void
+ */
+function settings_require_write($db, $ok, $what, $previousRemoved = false)
+{
+    if ($ok) {
+        return;
+    }
+
+    error_log('Wallos set_settings: could not save ' . $what . ': ' . $db->lastErrorMsg());
+
+    echo json_encode([
+        'success' => false,
+        'title' => 'Database error',
+        'message' => $previousRemoved
+            ? 'Failed to save your ' . $what . ', and the previous one was removed.'
+            : 'Failed to save your ' . $what . '.',
+    ]);
+
+    exit;
+}
+
 // 1. Process Custom CSS
 if (isset($_POST['css'])) {
     $customCss = $_POST['css'];
     
     $stmtDelCss = $db->prepare('DELETE FROM custom_css_style WHERE user_id = :userId');
-    $stmtDelCss->bindValue(':userId', $userId, SQLITE3_INTEGER);
-    $stmtDelCss->execute();
+    $removed = false;
+
+    if ($stmtDelCss !== false) {
+        $stmtDelCss->bindValue(':userId', $userId, SQLITE3_INTEGER);
+        $removed = $stmtDelCss->execute() !== false;
+    }
+
+    settings_require_write($db, $removed, 'custom CSS');
 
     $stmtInsCss = $db->prepare('INSERT INTO custom_css_style (css, user_id) VALUES (:customCss, :userId)');
-    $stmtInsCss->bindValue(':customCss', $customCss, SQLITE3_TEXT);
-    $stmtInsCss->bindValue(':userId', $userId, SQLITE3_INTEGER);
-    $stmtInsCss->execute();
+    $written = false;
+
+    if ($stmtInsCss !== false) {
+        $stmtInsCss->bindValue(':customCss', $customCss, SQLITE3_TEXT);
+        $stmtInsCss->bindValue(':userId', $userId, SQLITE3_INTEGER);
+        $written = $stmtInsCss->execute() !== false;
+    }
+
+    settings_require_write($db, $written, 'custom CSS', true);
 }
 
 // 2. Process Custom Colors
@@ -131,15 +181,27 @@ if (isset($_POST['main_color']) || isset($_POST['accent_color']) || isset($_POST
 
     // Delete & Insert
     $delColors = $db->prepare('DELETE FROM custom_colors WHERE user_id = :userId');
-    $delColors->bindValue(':userId', $userId, SQLITE3_INTEGER);
-    $delColors->execute();
+    $removed = false;
+
+    if ($delColors !== false) {
+        $delColors->bindValue(':userId', $userId, SQLITE3_INTEGER);
+        $removed = $delColors->execute() !== false;
+    }
+
+    settings_require_write($db, $removed, 'colour scheme');
 
     $insColors = $db->prepare('INSERT INTO custom_colors (main_color, accent_color, hover_color, user_id) VALUES (:main_color, :accent_color, :hover_color, :userId)');
-    $insColors->bindValue(':main_color', $main_color, SQLITE3_TEXT);
-    $insColors->bindValue(':accent_color', $accent_color, SQLITE3_TEXT);
-    $insColors->bindValue(':hover_color', $hover_color, SQLITE3_TEXT);
-    $insColors->bindValue(':userId', $userId, SQLITE3_INTEGER);
-    $insColors->execute();
+    $written = false;
+
+    if ($insColors !== false) {
+        $insColors->bindValue(':main_color', $main_color, SQLITE3_TEXT);
+        $insColors->bindValue(':accent_color', $accent_color, SQLITE3_TEXT);
+        $insColors->bindValue(':hover_color', $hover_color, SQLITE3_TEXT);
+        $insColors->bindValue(':userId', $userId, SQLITE3_INTEGER);
+        $written = $insColors->execute() !== false;
+    }
+
+    settings_require_write($db, $written, 'colour scheme', true);
 }
 
 // 3. Process Settings table updates

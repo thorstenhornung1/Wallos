@@ -128,19 +128,42 @@ if ($result) {
 
         if ($mainCurrencyId !== null) {
             // Update user main currency
+            //
+            // Checked for the same reason registration.php checks it: this is
+            // what moves the account off the currency it was created against,
+            // and failing silently leaves main_currency naming a row that
+            // belongs to somebody else (#82, #93).
             $query = "UPDATE \"user\" SET main_currency = :main_currency WHERE id = :user_id";
             $stmt = $db->prepare($query);
-            $stmt->bindValue(':main_currency', $mainCurrencyId, SQLITE3_INTEGER);
-            $stmt->bindValue(':user_id', $newUserId, SQLITE3_INTEGER);
-            $stmt->execute();
+            $moved = false;
+
+            if ($stmt !== false) {
+                $stmt->bindValue(':main_currency', $mainCurrencyId, SQLITE3_INTEGER);
+                $stmt->bindValue(':user_id', $newUserId, SQLITE3_INTEGER);
+                $moved = $stmt->execute() !== false;
+            }
+
+            if (!$moved) {
+                error_log('Wallos adduser: user ' . $newUserId . ' still points at the currency it was '
+                    . 'created against, which belongs to another account: ' . $db->lastErrorMsg());
+            }
         }
 
         // Add settings for that user
         $query = "INSERT INTO settings (dark_theme, monthly_price, convert_currency, remove_background, color_theme, hide_disabled, user_id, disabled_to_bottom, show_original_price, mobile_nav, week_starts_sunday) 
                 VALUES (2, 0, 0, 0, 'blue', 0, :user_id, 0, 0, 0, 0)";
         $stmt = $db->prepare($query);
-        $stmt->bindValue(':user_id', $newUserId, SQLITE3_INTEGER);
-        $stmt->execute();
+        $settingsWritten = false;
+
+        if ($stmt !== false) {
+            $stmt->bindValue(':user_id', $newUserId, SQLITE3_INTEGER);
+            $settingsWritten = $stmt->execute() !== false;
+        }
+
+        if (!$settingsWritten) {
+            error_log('Wallos adduser: could not create the settings row for user '
+                . $newUserId . ': ' . $db->lastErrorMsg());
+        }
 
         // If email verification is required add the user to the email_verification table
         $query = "SELECT * FROM admin";
