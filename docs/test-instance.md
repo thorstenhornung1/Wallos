@@ -436,11 +436,43 @@ hardware, and explicitly not a PostgreSQL baseline to compare against:
 | 10 | 27 ms | 220 ms |
 | 100 | 25 ms | 229 ms |
 
+### What one PostgreSQL run looked like
+
+Taken on the development container after 5.8.3 (PostgreSQL 14, Podman on a
+laptop), so the same caveat applies twice over — a shape, not a target. It is
+here because it answers a question the SQLite table cannot.
+
+| entries | list | stats | calendar | (SQLite, above) |
+|---|---|---|---|---|
+| 100 | 38 ms | 19 ms | 19 ms | 30 / 11 / 9 ms |
+| 1000 | 185 ms | 42 ms | 36 ms | 179 / 35 / 29 ms |
+| 5000 | 877 ms | 147 ms | 122 ms | 875 / 147 / 116 ms |
+
+| users | notify cron | (SQLite, above) |
+|---|---|---|
+| baseline (empty script) | 20 ms | 12 ms |
+| 1 | 61 ms | 25 ms |
+| 10 | 105 ms | 27 ms |
+| 100 | **306 ms** | 25 ms |
+
+**The list is the same on both backends and the cron is not.** At 5000 entries
+the two are two milliseconds apart, which says the time goes into rendering the
+document rather than into the query. The notification cron is flat on SQLite and
+grows by about 2.5 ms per user on PostgreSQL: six queries per user inside the
+loop, which cost almost nothing in a library running in the same process and a
+network round trip each against a server
+([#99](https://github.com/thorstenhornung1/Wallos/issues/99)).
+
+So if your run shows a growing cron column, that is the finding reproducing, not
+a measurement error. At a hundred users it is 306 ms and harmless; the shape is
+what matters.
+
 What the numbers say:
 
-- **The cron is flat.** 1 user and 100 users cost the same, about 13 ms above
-  the bare interpreter start. Notification settings are read once per run rather
-  than once per user, so adding users adds nothing measurable.
+- **The cron is flat on SQLite** — 1 user and 100 users cost the same, about
+  13 ms above the bare interpreter start, because notification settings are read
+  once per run rather than once per user. On PostgreSQL it is not, for the
+  reason above: the same loop, a thousand times the cost per query.
 
   The cron timings are taken from inside a PHP process. An earlier version of
   the script used `date +%s%N` from the shell, which the Alpine-based image does
