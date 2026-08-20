@@ -1,6 +1,7 @@
 <?php
 require_once 'includes/connect.php';
 require_once 'includes/checkuser.php';
+require_once 'includes/totp_state.php';
 
 require_once 'includes/i18n/languages.php';
 require_once 'includes/i18n/getlang.php';
@@ -55,10 +56,15 @@ if (isset($_POST['one-time-code'])) {
     $maxTotpAttempts = 5;
     $totpLockoutSeconds = 30;
 
-    $statement = $db->prepare('SELECT totp_secret, backup_codes, failed_attempts, lockout_until FROM totp WHERE user_id = :id');
-    $statement->bindValue(':id', $_SESSION['totp_user_id'], SQLITE3_INTEGER);
-    $result = $statement->execute();
-    $row = $result->fetchArray(SQLITE3_ASSOC);
+    $row = wallos_totp_load_state($db, $_SESSION['totp_user_id']);
+    if ($row === null) {
+        // No enrolment, or the row could not be read. Either way there is
+        // nothing to verify against, and continuing would compare a submitted
+        // code against null.
+        $db->close();
+        header('Location: login.php');
+        exit();
+    }
     $totp_secret = $row['totp_secret'];
     $backupCodes = json_decode($row['backup_codes'], true);
     $failedAttempts = (int) ($row['failed_attempts'] ?? 0);
@@ -71,10 +77,7 @@ if (isset($_POST['one-time-code'])) {
     // here, which is far larger than any current step, so normalise those by
     // dividing by the period.
     $currentStep = intdiv(time(), 30);
-    $lastUsedStep = (int) ($row['last_totp_used'] ?? 0);
-    if ($lastUsedStep > $currentStep) {
-        $lastUsedStep = intdiv($lastUsedStep, 30);
-    }
+    $lastUsedStep = wallos_totp_last_used_step($row['last_totp_used'] ?? 0, $currentStep);
 
     require_once 'libs/OTPHP/FactoryInterface.php';
     require_once 'libs/OTPHP/Factory.php';
@@ -104,81 +107,80 @@ if (isset($_POST['one-time-code'])) {
         // library's verify() only returns a boolean, but we need the step to
         // reject reuse of an already-consumed code (replay). This mirrors the
         // library's leeway logic: check the previous, current and next step.
-        $totpPeriod = 30;
-        $totpLeeway = 15;
-        $now = time();
-        $matchedStep = null;
-        foreach ([$now - $totpLeeway, $now, $now + $totpLeeway] as $candidate) {
-            if ($candidate < 0) {
-                continue;
-            }
-            if (hash_equals($totp->at($candidate), (string) $totp_code)) {
-                $matchedStep = intdiv($candidate, $totpPeriod);
-                break;
-            }
-        }
+        $matchedStep = wallos_totp_matched_step($totp, $totp_code, time());
 
         $valid = $matchedStep !== null;
 
-        if ($valid && $matchedStep <= $lastUsedStep) {
+        if ($valid && wallos_totp_step_is_replay($matchedStep, $lastUsedStep)) {
             // This code's time-step has already been used; reject the replay.
             $valid = false;
         }
 
         // If totp is not valid check backup codes
         if (!$valid) {
-            if (in_array($totp_code, $backupCodes)) {
-                $key = array_search($totp_code, $backupCodes);
-                unset($backupCodes[$key]);
-                $backupCodes = array_values($backupCodes);
-
-                $statement = $db->prepare('UPDATE totp SET backup_codes = :backup_codes WHERE user_id = :id');
-                $statement->bindValue(':backup_codes', json_encode($backupCodes), SQLITE3_TEXT);
-                $statement->bindValue(':id', $_SESSION['totp_user_id'], SQLITE3_INTEGER);
-                $statement->execute();
-
-                $valid = true;
-            }
+            // A backup code counts only once it has actually been struck off.
+            // Accepting one whose removal failed would leave a single-use code
+            // usable indefinitely.
+            $valid = wallos_totp_consume_backup_code(
+                $db,
+                $_SESSION['totp_user_id'],
+                $backupCodes,
+                $totp_code
+            );
         } else {
             // Record the matched time-step so the same code cannot be reused.
-            $statement = $db->prepare('UPDATE totp SET last_totp_used = :last_totp_used WHERE user_id = :id');
-            $statement->bindValue(':last_totp_used', $matchedStep, SQLITE3_INTEGER);
-            $statement->bindValue(':id', $_SESSION['totp_user_id'], SQLITE3_INTEGER);
-            $statement->execute();
+            // The login proceeds if this cannot be stored — the credential was
+            // genuine — but the replay window is then unguarded, so say so.
+            if (!wallos_totp_consume_step($db, $_SESSION['totp_user_id'], $matchedStep)) {
+                error_log('Wallos: could not record the used TOTP step for user '
+                    . (int) $_SESSION['totp_user_id'] . '; this code stays replayable until it expires');
+            }
         }
 
         // Update brute-force counters based on the result of this attempt.
         if ($valid) {
-            $counterStmt = $db->prepare('UPDATE totp SET failed_attempts = 0, lockout_until = 0 WHERE user_id = :id');
-            $counterStmt->bindValue(':id', $_SESSION['totp_user_id'], SQLITE3_INTEGER);
-            $counterStmt->execute();
+            if (!wallos_totp_reset_attempts($db, $_SESSION['totp_user_id'])) {
+                error_log('Wallos: could not reset TOTP failure count for user '
+                    . (int) $_SESSION['totp_user_id']);
+            }
         } else {
             $invalidTotp = true;
             $failedAttempts++;
 
-            if ($failedAttempts >= $maxTotpAttempts) {
-                // Trip the lockout and reset the counter so a fresh window
-                // begins once the lockout expires.
-                $counterStmt = $db->prepare('UPDATE totp SET failed_attempts = 0, lockout_until = :lockout WHERE user_id = :id');
-                $counterStmt->bindValue(':lockout', time() + $totpLockoutSeconds, SQLITE3_INTEGER);
-                $counterStmt->bindValue(':id', $_SESSION['totp_user_id'], SQLITE3_INTEGER);
-                $counterStmt->execute();
-                $totpLocked = true;
-            } else {
-                $counterStmt = $db->prepare('UPDATE totp SET failed_attempts = :attempts WHERE user_id = :id');
-                $counterStmt->bindValue(':attempts', $failedAttempts, SQLITE3_INTEGER);
-                $counterStmt->bindValue(':id', $_SESSION['totp_user_id'], SQLITE3_INTEGER);
-                $counterStmt->execute();
+            $failure = wallos_totp_record_failure(
+                $db,
+                $_SESSION['totp_user_id'],
+                $failedAttempts,
+                $maxTotpAttempts,
+                $totpLockoutSeconds
+            );
+            $totpLocked = $failure['locked'];
+
+            if (!$failure['stored']) {
+                // The counter did not move, so brute-force protection is not
+                // holding. Nothing visible changes for the attacker; this line
+                // is the only trace.
+                error_log('Wallos: could not record a failed TOTP attempt for user '
+                    . (int) $_SESSION['totp_user_id'] . '; rate limiting is not in effect');
             }
         }
     }
 
     if ($valid) {
-        $query = "SELECT id, username, main_currency, language FROM user WHERE id = :id";
+        $query = "SELECT id, username, main_currency, language FROM \"user\" WHERE id = :id";
         $stmt = $db->prepare($query);
         $stmt->bindValue(':id', $_SESSION['totp_user_id'], SQLITE3_INTEGER);
         $result = $stmt->execute();
-        $user = $result->fetchArray(SQLITE3_ASSOC);
+        $user = $result === false ? false : $result->fetchArray(SQLITE3_ASSOC);
+
+        if ($user === false) {
+            // The second factor was correct but the account behind it cannot be
+            // read. Establishing a session from the resulting nulls would log
+            // somebody in as nobody.
+            $db->close();
+            header('Location: login.php');
+            exit();
+        }
 
         session_regenerate_id(true);
         $_SESSION['username'] = $user['username'];
@@ -192,14 +194,22 @@ if (isset($_POST['one-time-code'])) {
             $addLoginTokensStmt = $db->prepare($addLoginTokens);
             $addLoginTokensStmt->bindParam(':userId', $user['id'], SQLITE3_INTEGER);
             $addLoginTokensStmt->bindParam(':token', $token, SQLITE3_TEXT);
-            $addLoginTokensStmt->execute();
-            $cookieExpire = time() + (30 * 24 * 60 * 60);
-            $cookieValue = $user['username'] . "|" . $token . "|" . $user['main_currency'];
-            setcookie('wallos_login', $cookieValue, [
-                'expires'  => $cookieExpire,
-                'samesite' => 'Lax',
-                'httponly' => true,
-            ]);
+
+            // Only hand out the cookie if its token was stored. A cookie with
+            // no row behind it is not insecure, but it silently stops working:
+            // the user ticked "remember me" and gets asked to log in anyway,
+            // with nothing to explain why.
+            if ($addLoginTokensStmt->execute() !== false) {
+                $cookieExpire = time() + (30 * 24 * 60 * 60);
+                $cookieValue = $user['username'] . "|" . $token . "|" . $user['main_currency'];
+                setcookie('wallos_login', $cookieValue, [
+                    'expires'  => $cookieExpire,
+                    'samesite' => 'Lax',
+                    'httponly' => true,
+                ]);
+            } else {
+                error_log('Wallos: could not store a remember-me token for user ' . (int) $user['id']);
+            }
             unset($_SESSION['pending_remember_me']);
         }
 
@@ -219,11 +229,13 @@ if (isset($_POST['one-time-code'])) {
         $stmt = $db->prepare($query);
         $stmt->bindValue(':id', $_SESSION['totp_user_id'], SQLITE3_INTEGER);
         $result = $stmt->execute();
-        $settings = $result->fetchArray(SQLITE3_ASSOC);
-        setcookie('colorTheme', $settings['color_theme'], [
-            'expires' => $cookieExpire,
-            'samesite' => 'Lax'
-        ]);
+        $settings = $result === false ? false : $result->fetchArray(SQLITE3_ASSOC);
+        if ($settings !== false && isset($settings['color_theme'])) {
+            setcookie('colorTheme', $settings['color_theme'], [
+                'expires' => $cookieExpire,
+                'samesite' => 'Lax'
+            ]);
+        }
 
         unset($_SESSION['totp_user_id']);
 
