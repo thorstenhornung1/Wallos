@@ -436,36 +436,54 @@ hardware, and explicitly not a PostgreSQL baseline to compare against:
 | 10 | 27 ms | 220 ms |
 | 100 | 25 ms | 229 ms |
 
-### What one PostgreSQL run looked like
+### What PostgreSQL runs looked like
 
-Taken on the development container after 5.8.3 (PostgreSQL 14, Podman on a
-laptop), so the same caveat applies twice over — a shape, not a target. It is
-here because it answers a question the SQLite table cannot.
+Two of them, on very different hardware. The absolute numbers are not
+comparable and are not meant to be; the shape is, and it is the same both times.
 
-| entries | list | stats | calendar | (SQLite, above) |
-|---|---|---|---|---|
-| 100 | 38 ms | 19 ms | 19 ms | 30 / 11 / 9 ms |
-| 1000 | 185 ms | 42 ms | 36 ms | 179 / 35 / 29 ms |
-| 5000 | 877 ms | 147 ms | 122 ms | 875 / 147 / 116 ms |
+**The test instance** (PostgreSQL 18, Docker Swarm, database on the same node
+over an overlay network), from the 2026-08-20 night run:
 
-| users | notify cron | (SQLite, above) |
-|---|---|---|
-| baseline (empty script) | 20 ms | 12 ms |
-| 1 | 61 ms | 25 ms |
-| 10 | 105 ms | 27 ms |
-| 100 | **306 ms** | 25 ms |
+| entries | list | stats | calendar |
+|---|---|---|---|
+| 100 | 78 ms | 45 ms | 42 ms |
+| 1000 | 270 ms | 85 ms | 70 ms |
+| 5000 | 1300 ms | 423 ms | 411 ms |
 
-**The list is the same on both backends and the cron is not.** At 5000 entries
-the two are two milliseconds apart, which says the time goes into rendering the
-document rather than into the query. The notification cron is flat on SQLite and
-grows by about 2.5 ms per user on PostgreSQL: six queries per user inside the
-loop, which cost almost nothing in a library running in the same process and a
-network round trip each against a server
-([#99](https://github.com/thorstenhornung1/Wallos/issues/99)).
+| users | notify cron |
+|---|---|
+| baseline (empty script) | 42 ms |
+| 1 | 587 ms |
+| 10 | 873 ms |
+| 100 | **1576 ms** |
+
+**A development container** (PostgreSQL 14, Podman on a laptop, database over
+localhost):
+
+| users | notify cron |
+|---|---|
+| baseline (empty script) | 20 ms |
+| 1 | 61 ms |
+| 10 | 105 ms |
+| 100 | **306 ms** |
+
+**The list behaves; the cron does not.** On the laptop the list is within two
+milliseconds of the SQLite figures at 5000 entries, which says the time goes
+into rendering the document rather than into the query.
+
+The notification cron is flat on SQLite and grows with the number of accounts on
+PostgreSQL — about 10 ms per user on the test instance, about 2.5 ms on the
+laptop. That ratio is the diagnosis rather than noise: the job runs six queries
+per user inside its loop, which cost almost nothing in a library running in the
+same process and one network round trip each against a server, so the per-user
+cost tracks the latency between the application and the database
+([#99](https://github.com/thorstenhornung1/Wallos/issues/99)). A database on
+another host will be worse again.
 
 So if your run shows a growing cron column, that is the finding reproducing, not
-a measurement error. At a hundred users it is 306 ms and harmless; the shape is
-what matters.
+a measurement error. At a hundred accounts it is comfortable either way; the
+shape is what matters, and it is worth re-measuring if an installation grows an
+order of magnitude.
 
 What the numbers say:
 
