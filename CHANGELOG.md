@@ -31,10 +31,11 @@ exploit — and instrumenting the scheduled jobs found eleven more.
   for, so the value was always null and the comparison always ran against 0.
   Since a time-step is a number in the tens of millions, no code was ever
   rejected as reused: a code observed once — shoulder-surfed, relayed, captured
-  by a proxy — stayed valid for the whole leeway window, about seven and a half
-  minutes either side. This needed no failure of any kind to exploit, and
-  nothing in the code, the comments or the logs suggested the feature was not
-  working
+  by a proxy — could be replayed for as long as it was accepted at all, which
+  with the ±15 s leeway is 60 seconds rather than the 30 of its own step.
+  RFC 6238 section 5.2 requires that a code be accepted only once. This needed
+  no failure of any kind to exploit, and nothing in the code, the comments or
+  the logs suggested the feature was not working
 * **auth:** a backup code whose removal failed was still accepted, which turns a
   single-use code into a permanent one. It now counts only once struck off
 * **auth:** `disable_totp.php` ran two unchecked writes and reported success

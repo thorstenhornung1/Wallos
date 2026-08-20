@@ -179,8 +179,9 @@ Three things are worth separating here.
 first: the code that had just been accepted by `verify` was refused a minute
 later. It is the replay guard working — enrolment consumes the time-step, and
 `last_totp_used` records it. Before 5.8.1 that column was never read: the
-comparison always ran against 0, so an observed code stayed usable for about
-seven and a half minutes.
+comparison always ran against 0, so an observed code could be replayed for as
+long as it was accepted at all — 60 seconds, given the ±15 s leeway around a
+30-second step.
 
 **A guard that refuses everything would produce the same evidence.** 4g exists
 for that reason: a fresh code in a new time window is accepted. Without it, 4c
