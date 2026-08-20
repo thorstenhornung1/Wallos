@@ -45,6 +45,11 @@ Migration `000064` ran on first start of the new image.
 | 5 password reset | **pass** | token consumed, old password dead, replay refused |
 | 6 privilege separation | **pass** | `755 root:root`, write to code denied, write to `db/` allowed |
 | 8.1 fresh PostgreSQL instance | **pass with a caveat** | 43 tables, not 42 — see below |
+| 5.1 / 5.3 instance SMTP, database stays empty | **pass** | mail sent, `admin` row still empty |
+| 5.2 secret never reaches the browser | **pass** (2 pages + API) | 209 KB / 104 KB / 1108 B, 0 hits each |
+| 5.4 / 5.5 inheritance and own transport | **pass** | same recipient, two senders |
+| 5.6 notifications actually go out | **pass — first time ever** | `Difference: 1` → mail delivered |
+| 5.7 broken secret file does not fall back | **pass**, now on both paths | refused at the button *and* in the cron |
 
 ## Details
 
@@ -249,6 +254,70 @@ removes the table from one that already exists. Harmless, but it means the
 plan's expected value of 42 holds only for instances created from 5.8.2 onward.
 An instance created between 5.8.0 and 5.8.2 will report 43 and be correct.
 
+### 5.1 to 5.7 — re-run against 5.8.2
+
+These were last exercised against 5.8.0 on 2026-08-19 and are repeated here
+because the assignment asks for sections 4 through 9, not only the six focus
+points.
+
+```
+5.1 instance SMTP        {"success":true,...}
+5.3 admin row            smtp_address=[]  from_email=[]
+5.4 dummy2 inherits      {"success":true,...}
+5.5 dummy2 own transport {"success":true,...}
+5.2 settings.php         209338 bytes | smtp:0 oidc:0 db:0
+    admin.php            104264 bytes | smtp:0 oidc:0 db:0
+    get_oidc_settings      1108 bytes | oidc:0
+```
+
+Mailbox afterwards — same recipient reached by two different senders, which is
+what separates inheritance from a shared transport:
+
+```
+wallos@test.hornung-bn.de  -> dummy@example.com    Wallos Notification
+user2@test.hornung-bn.de   -> dummy2@example.com   Wallos Benachrichtigung
+wallos@test.hornung-bn.de  -> dummy2@example.com   Wallos Benachrichtigung
+wallos@test.hornung-bn.de  -> dummy@example.com    Wallos Benachrichtigung
+```
+
+**5.6 passed for the first time.** On 2026-08-19 it was blocked: the cron died
+at line 252 and the first `$mail->send()` is at line 367, so no partial delivery
+existed to measure. Now:
+
+```
+Subscription: Melde-Test
+Next payment date: 2026-08-21   Current date: 2026-08-20   Difference: 1
+Email Notifications sent
+exit=0
+```
+
+and the message arrives — `Wallos Notification` to `dummy@example.com`. This is
+the end-to-end confirmation for
+[#90](https://github.com/thorstenhornung1/Wallos/issues/90): not merely that the
+job no longer crashes, but that it delivers.
+
+**5.7 now refuses on both paths.** With `WALLOS_SMTP_PASSWORD_FILE` pointed at a
+file that does not exist:
+
+```
+test button:
+  {"success":false,"message":"Secret file is not readable: /run/secrets/does-not-exist"}
+
+cron:
+  Email notifications not sent: Secret file is not readable: /run/secrets/does-not-exist
+  [Wallos cron] ERROR job=sendnotifications duration=89ms the mail transport of
+  user 1 is unusable, so no email notification was sent: ...
+
+Mailpit: 0 messages
+```
+
+The second block is new. On 2026-08-19 the refusal was verified only through the
+test button; the scheduled path would have failed silently. A job that delivers
+nothing because a secret is unreadable is indistinguishable from a quiet night
+unless it says so — which is the reasoning recorded in migration 000064.
+
+Restoring the path made delivery work again in the same run.
+
 ## Conclusions, kept separate from the observations above
 
 * **All three defects from the previous run are fixed**, each verified by the
@@ -256,8 +325,14 @@ An instance created between 5.8.0 and 5.8.2 will report 43 and be correct.
 * **The 5.8.1 security fixes hold where they can be reached without a browser.**
   TOTP replay, backup-code single use, the 2FA disable half-state, password
   reset token consumption and account enumeration all behave as described.
-* **One point remains genuinely open**, not skipped: back-channel revocation
-  against a live endpoint. It cannot be reached from a local account by design.
+* **Sections 4 through 9 are covered except two.** 5.1-5.8, 7.4's refusal path,
+  7.5's secret check, 8.1 and 9 all ran against 5.8.2.
+* **Two remain genuinely open, neither skipped.** Back-channel revocation at
+  runtime cannot be reached from a local account by design. Section 6 cannot
+  produce a valid figure while
+  [#91](https://github.com/thorstenhornung1/Wallos/issues/91) stands — the
+  benchmark writes its fixtures to SQLite and measures pages that read
+  PostgreSQL.
 * **Two preconditions cost more time than the tests themselves** — `server_url`
   for the password reset, and the fact that enrolment consumes a TOTP code.
   Both are correct behaviour and neither is documented where a tester looks.
