@@ -627,6 +627,18 @@ To check it end to end: sign in through Authentik, then terminate that session
 in Authentik's admin interface, then reload any Wallos page. You should land on
 the login screen.
 
+**Precondition, or the whole feature is inert.** `passwordreset.php` redirects
+away silently unless the instance SMTP configuration is valid **and**
+`admin.server_url` is set. On a fresh instance that column is empty, so every
+request answers `302` with no token, no mail and no message on the page. Set it
+before testing:
+
+```sh
+$EXEC php -r 'require "/var/www/html/includes/database/connection.php";
+$db = wallos_database_connect();
+$db->exec("UPDATE admin SET server_url = \'https://test.hornung-bn.de\'");'
+```
+
 ### 7.5 The three fixes from 5.8.0, checked deliberately
 
 These were security defects in code that already had passing tests. Each one is
@@ -674,6 +686,11 @@ Expected: `0` from both. The API answers `client_secret_set: true` instead of
 the value. The field on the page is an empty password input — saving it empty
 keeps what is stored, so confirm that too: save the OIDC form without touching
 the secret, then sign in through Authentik again.
+
+**Enrolment consumes a TOTP code.** The code accepted by the enrolment step
+cannot then be used to sign in — the replay guard has recorded its time step.
+Wait for the next 30-second window before the login attempt, or the test reads
+as a failure when it is the guard working.
 
 **Account deletion removes every row.** Twelve tables were missing from both
 deletion paths, and two more from the self-service one — including
