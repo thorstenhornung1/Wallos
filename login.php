@@ -459,11 +459,23 @@ if (isset($_GET['error'])) {
                     ?>
                 </div>
                 <?php
-                if ($loginFailed) {
+                // verifyemail.php sends people here with validated=false when the
+                // token could not be consumed. Without this they would arrive at
+                // a form that simply refuses them, having just followed a link
+                // that said their address was being confirmed.
+                $verificationFailed = isset($_GET['validated']) && $_GET['validated'] === 'false';
+
+                if ($loginFailed || $verificationFailed) {
                     ?>
                     <ul class="error-box">
                         <?php
-                        if ($userEmailWaitingVerification) {
+                        if ($verificationFailed) {
+                            ?>
+                            <li><i
+                                    class="fa-solid fa-triangle-exclamation"></i><?= translate('email_verification_failed', $i18n) ?>
+                            </li>
+                            <?php
+                        } elseif ($userEmailWaitingVerification) {
                             ?>
                             <li><i
                                     class="fa-solid fa-triangle-exclamation"></i><?= translate('user_email_waiting_verification', $i18n) ?>

@@ -273,10 +273,24 @@ if (
         $avatar = resizeAndUploadAvatar($_FILES['profile_pic'], '../../images/uploads/logos/avatars/', $name);
 
         if ($avatar !== "") {
+            // The uploaded file is already on disk; this row is what makes it
+            // the account's own. Migration 000044 added the table to stop one
+            // account deleting another's avatar, so a row that never appears
+            // means an uploaded file nobody owns — and the avatar list never
+            // offers it back (issue #87).
             $stmt = $db->prepare("INSERT INTO uploaded_avatars (user_id, path) VALUES (:userId, :path)");
-            $stmt->bindParam(':userId', $userId, SQLITE3_INTEGER);
-            $stmt->bindParam(':path', $avatar, SQLITE3_TEXT);
-            $stmt->execute();
+            $recorded = false;
+
+            if ($stmt !== false) {
+                $stmt->bindParam(':userId', $userId, SQLITE3_INTEGER);
+                $stmt->bindParam(':path', $avatar, SQLITE3_TEXT);
+                $recorded = $stmt->execute() !== false;
+            }
+
+            if (!$recorded) {
+                error_log('Wallos save_user: stored the avatar at ' . $avatar . ' for user ' . $userId
+                    . ' but could not record it: ' . $db->lastErrorMsg());
+            }
         }
     }
 

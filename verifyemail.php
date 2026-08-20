@@ -53,11 +53,29 @@ if (isset($_GET['email']) && isset($_GET['token'])) {
     $row = $result->fetchArray(SQLITE3_ASSOC);
 
     if ($row) {
+        // Removing the row *is* the verification: an account counts as verified
+        // when it no longer has one. So a failed delete leaves the account
+        // exactly as unverified as before — and this used to send the person to
+        // login.php?validated=true regardless, where the login then refuses
+        // them with no way to find out why (issue #87). It also leaves a token
+        // that is still usable, where it should have been spent.
         $query = "DELETE FROM email_verification WHERE email = :email AND token = :token";
         $stmt = $db->prepare($query);
-        $stmt->bindValue(':email', $email, SQLITE3_TEXT);
-        $stmt->bindValue(':token', $token, SQLITE3_TEXT);
-        $stmt->execute();
+        $verified = false;
+
+        if ($stmt !== false) {
+            $stmt->bindValue(':email', $email, SQLITE3_TEXT);
+            $stmt->bindValue(':token', $token, SQLITE3_TEXT);
+            $verified = $stmt->execute() !== false;
+        }
+
+        if (!$verified) {
+            error_log('Wallos verifyemail: could not consume the verification token for '
+                . $email . ', so the account stays unverified: ' . $db->lastErrorMsg());
+
+            header("Location: login.php?validated=false");
+            exit;
+        }
 
         $validated = true;
 
