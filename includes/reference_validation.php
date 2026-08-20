@@ -334,3 +334,82 @@ function wallos_validate_subscription_input($db, $userId, array $input)
 
     return ['valid' => true, 'values' => $values];
 }
+
+/**
+ * The subscription column that points at a table, or null if none does.
+ *
+ * The mapping is wallos_subscription_reference_fields() read backwards. It is
+ * derived rather than repeated so that a table added to the write side cannot
+ * be forgotten on the delete side, which is the whole shape of issue #93.
+ *
+ * @param string $table
+ * @return string|null
+ */
+function wallos_subscription_reference_column($table)
+{
+    foreach (wallos_subscription_reference_fields() as $column => $rules) {
+        if ($rules['table'] === $table) {
+            return $column;
+        }
+    }
+
+    return null;
+}
+
+/**
+ * How many subscriptions still point at a row that is about to be deleted.
+ *
+ * Four endpoints and four REST paths delete a row a subscription can reference,
+ * and each one carried its own copy of this count — except
+ * endpoints/payments/delete.php, which carried none and answered success while
+ * leaving every referencing subscription pointing at nothing (issue #93). One
+ * function is the answer to "three did, one did not": the check cannot be
+ * forgotten at a call site that does not contain it.
+ *
+ * **The count deliberately ignores who owns the subscription.** The per-owner
+ * count the other three used answers a different question than the one the
+ * caller is asking. A subscription belonging to somebody else satisfies the
+ * foreign key just as well, and deleting the row out from under it produces
+ * exactly the dangling reference that dev/migrate-to-pgsql.php refuses to
+ * migrate — damage done through an ordinary interface action, surfacing months
+ * later as a blocked migration. Cross-account references cannot be created any
+ * more (issue #82), so on a healthy installation the two counts are the same
+ * number; where they differ, the difference is a defect, and refusing is what
+ * keeps it from getting worse.
+ *
+ * That case would otherwise be unexplainable from the outside — the owner sees
+ * "in use" and none of their own subscriptions using it — so it says so in the
+ * log rather than leaving the operator to guess.
+ *
+ * @param WallosDatabase $db
+ * @param string         $table  A table name from wallos_subscription_reference_fields().
+ * @param int            $id     The row about to be deleted.
+ * @param int            $userId The caller, for the log line only.
+ * @return int
+ */
+function wallos_subscriptions_referencing($db, $table, $id, $userId)
+{
+    $column = wallos_subscription_reference_column($table);
+
+    if ($column === null) {
+        return 0;
+    }
+
+    $id = (int) $id;
+
+    // The column name comes from the list above and never from a request, so
+    // there is nothing here a placeholder could stand in for.
+    $total = (int) $db->scalar('SELECT COUNT(*) FROM subscriptions WHERE ' . $column . ' = :id',
+        [':id' => $id]);
+    $own = (int) $db->scalar('SELECT COUNT(*) FROM subscriptions WHERE ' . $column . ' = :id AND user_id = :user',
+        [':id' => $id, ':user' => (int) $userId]);
+
+    if ($total > $own) {
+        error_log(sprintf('Wallos: %s %d cannot be deleted by user %d because %d subscription(s) of '
+            . 'another account reference it. Cross-account references are a defect (issue #82); '
+            . 'the rows need repairing before this row can be removed.',
+            $table, $id, (int) $userId, $total - $own));
+    }
+
+    return $total;
+}

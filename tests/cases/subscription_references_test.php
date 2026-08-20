@@ -349,3 +349,145 @@ wallos_test('the other unchecked foreign keys are checked at their write sites',
     assert_contains("bindValue(':payer', \$payerId", $seed,
         'the seed script binds a household member id into payer_user_id');
 });
+
+/**
+ * A subscription belonging to $userId that points at the four reference rows
+ * given, so a case can then ask whether deleting one of them is refused.
+ *
+ * Written straight into the table rather than through
+ * wallos_validate_subscription_input(), because one of the cases needs a
+ * cross-account reference — a row validation would refuse today, and which
+ * every installation predating issue #82 can still be carrying.
+ *
+ * @param WallosDatabase $db
+ * @param int            $userId
+ * @param array          $references
+ */
+function subscription_references_insert($db, $userId, array $references)
+{
+    $stmt = $db->prepare('INSERT INTO subscriptions
+                          (name, price, currency_id, next_payment, cycle, frequency,
+                           payer_user_id, category_id, payment_method_id, notify, inactive,
+                           auto_renew, user_id)
+                          VALUES (:name, 1.0, :currency, :next, 3, 1, :payer, :category,
+                                  :method, 0, 0, 0, :user)');
+    $stmt->bindValue(':name', 'reference fixture');
+    $stmt->bindValue(':currency', (int) $references['currency']);
+    $stmt->bindValue(':next', '2099-01-01');
+    $stmt->bindValue(':payer', (int) $references['household']);
+    $stmt->bindValue(':category', (int) $references['category']);
+    $stmt->bindValue(':method', (int) $references['payment_method']);
+    $stmt->bindValue(':user', (int) $userId);
+    $stmt->execute();
+}
+
+wallos_test('a referenced row is counted before it can be deleted', function () {
+    $db = wallos_test_open_database();
+    $fixture = subscription_references_fixture($db);
+    subscription_references_insert($db, 1, $fixture['alice']);
+
+    // All four, because the endpoint that forgot its count (issue #93) was the
+    // payment method, and a case covering only that one would not notice the
+    // next table added to the write side without the delete side.
+    assert_same(1, wallos_subscriptions_referencing($db, 'payment_methods', $fixture['alice']['payment_method'], 1),
+        'the payment method the subscription uses is in use');
+    assert_same(1, wallos_subscriptions_referencing($db, 'categories', $fixture['alice']['category'], 1),
+        'so is its category');
+    assert_same(1, wallos_subscriptions_referencing($db, 'currencies', $fixture['alice']['currency'], 1),
+        'so is its currency');
+    assert_same(1, wallos_subscriptions_referencing($db, 'household', $fixture['alice']['household'], 1),
+        'so is its household member');
+
+    // The negative control: without it, a function returning a positive number
+    // for everything would pass the four assertions above.
+    assert_same(0, wallos_subscriptions_referencing($db, 'payment_methods', $fixture['bob']['payment_method'], 2),
+        "a row nothing points at is not in use");
+
+    $db->close();
+});
+
+wallos_test('a reference from another account counts too', function () {
+    $db = wallos_test_open_database();
+    $fixture = subscription_references_fixture($db);
+
+    // Bob's subscription pointing at Alice's payment method. Issue #82 closed
+    // the way this gets created; what it left behind is installations where the
+    // row already exists. Counting only the owner's own subscriptions — which
+    // is what all four endpoints did — reports the method as unused, deletes
+    // it, and leaves Bob's subscription pointing at nothing. On PostgreSQL that
+    // is what dev/migrate-to-pgsql.php later refuses to migrate.
+    $borrowed = $fixture['bob'];
+    $borrowed['payment_method'] = $fixture['alice']['payment_method'];
+    subscription_references_insert($db, 2, $borrowed);
+
+    assert_same(1, wallos_subscriptions_referencing($db, 'payment_methods', $fixture['alice']['payment_method'], 1),
+        "another account's subscription keeps the row in use");
+    assert_same(0, wallos_subscriptions_referencing($db, 'categories', $fixture['alice']['category'], 1),
+        'and a row that really is unreferenced still reads as unused');
+
+    $db->close();
+});
+
+wallos_test('every delete path asks the shared count', function () {
+    // The gate that makes the sweep hold: it finds the delete paths by looking
+    // for the statement, so a ninth one added later is covered without this
+    // list being updated. Issue #93 was one file out of eight carrying no check
+    // at all, and nothing in the codebase could have told anyone that.
+    $tables = ['categories', 'currencies', 'household', 'payment_methods'];
+    $found = [];
+
+    foreach (['endpoints', 'api'] as $directory) {
+        $iterator = new RecursiveIteratorIterator(
+            new RecursiveDirectoryIterator(WALLOS_ROOT . '/' . $directory));
+
+        foreach ($iterator as $file) {
+            if ($file->getExtension() !== 'php') {
+                continue;
+            }
+
+            $source = file_get_contents($file->getPathname());
+            $path = str_replace(WALLOS_ROOT . '/', '', $file->getPathname());
+
+            foreach ($tables as $table) {
+                if (preg_match('/DELETE\s+FROM\s+' . $table . '\s+WHERE/i', $source) !== 1) {
+                    continue;
+                }
+
+                $found[] = $path;
+                assert_contains("wallos_subscriptions_referencing(\$db, '" . $table . "'", $source,
+                    $path . ' counts what references the ' . $table . ' row before deleting it');
+            }
+        }
+    }
+
+    // Four tables, two paths each. A number rather than a list, because the
+    // point is that none of them went missing — a gate that finds nothing
+    // passes every assertion above it.
+    assert_same(8, count($found), 'all eight delete paths were found and checked');
+
+    // And none of them kept a private copy that could drift from the shared one.
+    foreach (array_unique($found) as $path) {
+        assert_not_contains('COUNT(*) FROM subscriptions WHERE', file_get_contents(WALLOS_ROOT . '/' . $path),
+            $path . ' no longer carries its own count');
+    }
+});
+
+wallos_test('the payment method endpoint refuses and reports honestly', function () {
+    $source = file_get_contents(WALLOS_ROOT . '/endpoints/payments/delete.php');
+
+    assert_contains('payment_method_in_use', $source,
+        'it names the reason the way its three siblings do');
+
+    // The other half of issue #93: it answered success whatever happened. A
+    // DELETE matching no row means the id belongs to somebody else or to the
+    // system rows older installations carry with user_id 0, and reporting that
+    // as "removed" leaves the method on the list after a reload.
+    assert_contains('$db->changes() === 0', $source,
+        'a delete that matched nothing is not reported as a deletion');
+    assert_contains('$deleteStmt->execute() === false', $source,
+        'and a failed delete is not reported as one either');
+
+    require WALLOS_ROOT . '/includes/i18n/en.php';
+    assert_true(array_key_exists('payment_method_in_use', $i18n),
+        'the message it sends exists in the default language');
+});

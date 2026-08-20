@@ -11,23 +11,23 @@
 #
 # Do not edit by hand — run dev/db-audit.sh --update and commit the diff.
 #
-# total: 1560 matches in 226 file(s)
+# total: 1544 matches in 225 file(s)
 admin.php	5
 api/admin/get_admin_settings.php	1
 api/admin/set_admin_settings.php	20
 api/admin/set_disable_password_login.php	1
 api/admin/set_oidc_settings.php	1
 api/categories/get_categories.php	3
-api/categories/set_categories.php	21
+api/categories/set_categories.php	19
 api/currencies/get_currencies.php	3
-api/currencies/set_currencies.php	24
+api/currencies/set_currencies.php	22
 api/fixer/get_fixer.php	2
 api/fixer/set_fixer.php	11
 api/household/get_household.php	3
-api/household/set_household.php	20
+api/household/set_household.php	18
 api/notifications/get_notification_settings.php	10
 api/payment_methods/get_payment_methods.php	3
-api/payment_methods/set_payment_methods.php	23
+api/payment_methods/set_payment_methods.php	21
 api/settings/get_settings.php	4
 api/settings/set_settings.php	16
 api/status/version.php	1
@@ -56,7 +56,7 @@ endpoints/ai/delete_recommendation.php	2
 endpoints/ai/generate_recommendations.php	16
 endpoints/ai/save_settings.php	14
 endpoints/ai/translate_categories.php	7
-endpoints/categories/category.php	16
+endpoints/categories/category.php	14
 endpoints/cronjobs/createdatabase.php	6
 endpoints/cronjobs/generaterecommendations.php	19
 endpoints/cronjobs/sendcancellationnotifications.php	13
@@ -66,12 +66,12 @@ endpoints/cronjobs/sendverificationemails.php	3
 endpoints/cronjobs/storetotalyearlycost.php	7
 endpoints/cronjobs/updateexchange.php	1
 endpoints/cronjobs/updatenextpayment.php	3
-endpoints/currency/currency.php	17
+endpoints/currency/currency.php	15
 endpoints/currency/fixer_api_key.php	8
 endpoints/currency/update_exchange.php	1
 endpoints/db/import.php	2
 endpoints/db/migrate.php	1
-endpoints/household/household.php	11
+endpoints/household/household.php	9
 endpoints/logos/google_search.php	2
 endpoints/notifications/savediscordnotifications.php	6
 endpoints/notifications/saveemailnotifications.php	11
@@ -86,7 +86,6 @@ endpoints/notifications/savetelegramnotifications.php	5
 endpoints/notifications/savewebhooknotifications.php	8
 endpoints/notifications/testemailnotifications.php	2
 endpoints/payments/add.php	6
-endpoints/payments/delete.php	2
 endpoints/payments/get.php	4
 endpoints/payments/rename.php	3
 endpoints/payments/sort.php	3

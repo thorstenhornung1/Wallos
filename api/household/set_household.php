@@ -25,6 +25,7 @@ Example response:
 
 require_once '../../includes/connect_endpoint.php';
 require_once '../../includes/inputvalidation.php';
+require_once '../../includes/reference_validation.php';
 
 header('Content-Type: application/json; charset=UTF-8');
 
@@ -216,14 +217,9 @@ switch ($action) {
             exit;
         }
 
-        // Check if in use
-        $checkUseSql = "SELECT COUNT(*) FROM subscriptions WHERE payer_user_id = :memberId AND user_id = :userId";
-        $checkUseStmt = $db->prepare($checkUseSql);
-        $checkUseStmt->bindParam(':memberId', $memberId, SQLITE3_INTEGER);
-        $checkUseStmt->bindParam(':userId', $userId, SQLITE3_INTEGER);
-        $checkUseResult = $checkUseStmt->execute();
-        $row = $checkUseResult->fetchArray();
-        $count = $row[0] ?? 0;
+        // One count for all eight delete paths, so the one that carried
+        // none (issue #93) cannot be the odd one out again.
+        $count = wallos_subscriptions_referencing($db, 'household', $memberId, $userId);
 
         if ($count > 0) {
             echo json_encode([

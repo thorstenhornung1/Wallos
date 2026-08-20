@@ -2,6 +2,7 @@
 require_once '../../includes/connect_endpoint.php';
 require_once '../../includes/inputvalidation.php';
 require_once '../../includes/validate_endpoint.php';
+require_once '../../includes/reference_validation.php';
 
 $action = $_POST['action'] ?? '';
 
@@ -93,13 +94,9 @@ function handleDeleteCurrency($db, $userId, $i18n)
         $mainCurrencyId = $row['main_currency'];
 
         $currencyId = $_POST['currencyId'];
-        $checkQuery = "SELECT COUNT(*) FROM subscriptions WHERE currency_id = :currencyId AND user_id = :userId";
-        $checkStmt = $db->prepare($checkQuery);
-        $checkStmt->bindParam(':currencyId', $currencyId, SQLITE3_INTEGER);
-        $checkStmt->bindParam(':userId', $userId, SQLITE3_INTEGER);
-        $checkResult = $checkStmt->execute();
-        $row = $checkResult->fetchArray();
-        $count = $row[0];
+        // One count for all eight delete paths, so the one that carried none
+        // (issue #93) cannot be the odd one out again.
+        $count = wallos_subscriptions_referencing($db, 'currencies', $currencyId, $userId);
 
         if ($count > 0) {
             $response = [

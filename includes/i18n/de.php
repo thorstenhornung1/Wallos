@@ -309,6 +309,7 @@ $i18n = [
     "add_custom_payment" => "Eigene Zahlungsmethode hinzufügen",
     "payment_method_name" => "Name der Zahlungsmethode",
     "payment_method_added_successfuly" => "Zahlungsmethode erfolgreich hinzugefügt",
+    "payment_method_in_use" => "Zahlungsmethode wird in Abonnements verwendet und kann nicht gelöscht werden",
     "payment_method_removed" => "Zahlungsmethode gelöscht",
     "disable" => "Deaktivieren",
     "enable" => "Aktivieren",

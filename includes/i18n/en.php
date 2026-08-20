@@ -336,6 +336,7 @@ $i18n = [
     "add_custom_payment" => "Add Custom Payment Method",
     "payment_method_name" => "Payment Method Name",
     "payment_method_added_successfuly" => "Payment method added successfully",
+    "payment_method_in_use" => "Payment method is in use in subscriptions and can't be removed",
     "payment_method_removed" => "Payment method removed",
     "disable" => "Disable",
     "enable" => "Enable",
