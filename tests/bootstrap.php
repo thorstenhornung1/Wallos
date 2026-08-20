@@ -749,3 +749,73 @@ function wallos_test_currency_id($userId, $index)
 {
     return 9000 + ($userId * 10) + $index;
 }
+
+/**
+ * Makes a write to a table fail, on either backend.
+ *
+ * Checked return values need a write that actually fails, and the only honest
+ * way to produce one is to make the database refuse it. These cases used a
+ * SQLite RAISE(ABORT) trigger and so ran on one backend, which left the
+ * PostgreSQL side of exactly the code paths that behave differently there
+ * untested — PostgreSQL aborts the whole transaction on the first error, where
+ * SQLite lets the statement fail on its own.
+ *
+ * Only one block may be in place at a time; that is all any case needs, and it
+ * keeps cleanup from having to track a set.
+ *
+ * @param WallosDatabase $db
+ * @param string         $table
+ * @param string         $operation INSERT, UPDATE or DELETE
+ * @param string|null    $column    narrows an UPDATE to one column
+ * @return void
+ */
+function wallos_test_block_writes($db, $table, $operation, $column = null)
+{
+    $operation = strtoupper($operation);
+    $of = ($column !== null && $operation === 'UPDATE') ? ' OF "' . $column . '"' : '';
+
+    if ($db->driver() === 'sqlite') {
+        // SQLite names a trigger in its own namespace and drops it by name.
+        $db->exec('CREATE TRIGGER wallos_test_block BEFORE ' . $operation . $of . ' ON "' . $table . '"
+                   BEGIN SELECT RAISE(ABORT, \'blocked by test\'); END');
+
+        return;
+    }
+
+    // FOR EACH ROW, so a statement matching no rows is not blocked. That
+    // matches SQLite and it matches what is being tested: a write that fails,
+    // not a write with nothing to do.
+    $db->exec('CREATE OR REPLACE FUNCTION wallos_test_block_fn() RETURNS trigger
+               LANGUAGE plpgsql AS $fn$ BEGIN RAISE EXCEPTION \'blocked by test\'; END $fn$');
+    $db->exec('CREATE TRIGGER wallos_test_block BEFORE ' . $operation . $of . ' ON "' . $table . '"
+               FOR EACH ROW EXECUTE FUNCTION wallos_test_block_fn()');
+}
+
+/**
+ * Removes the block.
+ *
+ * On PostgreSQL a failed statement inside an explicit transaction leaves the
+ * connection unable to run anything until it is rolled back — including this
+ * DROP. Code that handles its own failure has already rolled back by the time a
+ * case gets here; the guard is for the case that did not, so cleanup reports
+ * the original failure rather than a confusing second one.
+ *
+ * @param WallosDatabase $db
+ * @param string         $table
+ * @return void
+ */
+function wallos_test_unblock_writes($db, $table)
+{
+    if ($db->driver() === 'sqlite') {
+        $db->exec('DROP TRIGGER IF EXISTS wallos_test_block');
+
+        return;
+    }
+
+    if (@$db->exec('SELECT 1') === false) {
+        @$db->rollBack();
+    }
+
+    $db->exec('DROP TRIGGER IF EXISTS wallos_test_block ON "' . $table . '"');
+    $db->exec('DROP FUNCTION IF EXISTS wallos_test_block_fn()');
+}

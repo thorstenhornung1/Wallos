@@ -226,23 +226,19 @@ wallos_test('a backup code is not honoured when it could not be struck off', fun
     // An earlier version of this case asserted in both branches of an if, which
     // meant it passed whatever the function did — it did not notice when the
     // check was removed.
-    if (wallos_test_skip_unless_sqlite('needs a RAISE(ABORT) trigger')) {
-        return;
-    }
 
     $db = wallos_test_open_database();
     $userId = 1;
     wallos_test_create_user($db, $userId, 'alice');
     totp_enrol($db, $userId);
 
-    $db->exec('CREATE TRIGGER block_backup_write BEFORE UPDATE OF backup_codes ON totp
-               BEGIN SELECT RAISE(ABORT, \'blocked\'); END');
+    wallos_test_block_writes($db, 'totp', 'UPDATE', 'backup_codes');
 
     $accepted = @wallos_totp_consume_backup_code($db, $userId, ['aaa-111', 'bbb-222'], 'aaa-111');
 
     assert_true($accepted === false, 'a code that could not be struck off is not accepted');
 
-    $db->exec('DROP TRIGGER block_backup_write');
+    wallos_test_unblock_writes($db, 'totp');
     $state = wallos_totp_load_state($db, $userId);
     assert_same(['aaa-111', 'bbb-222'], json_decode($state['backup_codes'], true),
         'and it is still on the account, unspent');
@@ -254,43 +250,35 @@ wallos_test('a step that could not be recorded is reported', function () {
     // The caller lets the login through in this case — the credential was
     // genuine — but it has to know, because the replay window is then
     // unguarded and that is worth a log line.
-    if (wallos_test_skip_unless_sqlite('needs a RAISE(ABORT) trigger')) {
-        return;
-    }
 
     $db = wallos_test_open_database();
     $userId = 1;
     wallos_test_create_user($db, $userId, 'alice');
     totp_enrol($db, $userId);
 
-    $db->exec('CREATE TRIGGER block_step_write BEFORE UPDATE OF last_totp_used ON totp
-               BEGIN SELECT RAISE(ABORT, \'blocked\'); END');
+    wallos_test_block_writes($db, 'totp', 'UPDATE', 'last_totp_used');
 
     assert_true(@wallos_totp_consume_step($db, $userId, 58000100) === false, 'reported as not stored');
 
-    $db->exec('DROP TRIGGER block_step_write');
+    wallos_test_unblock_writes($db, 'totp');
     $db->close();
 });
 
 wallos_test('a failed attempt that could not be counted is reported', function () {
     // Same shape, and the one with the quietest consequence: brute-force
     // protection stops working with nothing visible to anyone.
-    if (wallos_test_skip_unless_sqlite('needs a RAISE(ABORT) trigger')) {
-        return;
-    }
 
     $db = wallos_test_open_database();
     $userId = 1;
     wallos_test_create_user($db, $userId, 'alice');
     totp_enrol($db, $userId);
 
-    $db->exec('CREATE TRIGGER block_counter_write BEFORE UPDATE OF failed_attempts ON totp
-               BEGIN SELECT RAISE(ABORT, \'blocked\'); END');
+    wallos_test_block_writes($db, 'totp', 'UPDATE', 'failed_attempts');
 
     $result = @wallos_totp_record_failure($db, $userId, 2, 5, 30);
     assert_true($result['stored'] === false, 'the caller is told the count did not move');
 
-    $db->exec('DROP TRIGGER block_counter_write');
+    wallos_test_unblock_writes($db, 'totp');
     $db->close();
 });
 
@@ -384,9 +372,6 @@ wallos_test('a half-completed disable leaves nothing behind', function () {
     // login.php sends such an account to totp.php, which finds no secret and no
     // backup codes — no credential in existence can get in. Both call sites
     // reported success unconditionally, so the user was told 2FA was off.
-    if (wallos_test_skip_unless_sqlite('needs a RAISE(ABORT) trigger')) {
-        return;
-    }
 
     $db = wallos_test_open_database();
     $userId = 1;
@@ -395,12 +380,11 @@ wallos_test('a half-completed disable leaves nothing behind', function () {
     $db->exec('UPDATE "user" SET totp_enabled = 1 WHERE id = ' . $userId);
 
     // Let the flag clear, then block the enrolment delete.
-    $db->exec('CREATE TRIGGER block_totp_delete BEFORE DELETE ON totp
-               BEGIN SELECT RAISE(ABORT, \'blocked\'); END');
+    wallos_test_block_writes($db, 'totp', 'DELETE');
 
     assert_true(@wallos_totp_disable($db, $userId) === false, 'reported as failed');
 
-    $db->exec('DROP TRIGGER block_totp_delete');
+    wallos_test_unblock_writes($db, 'totp');
 
     assert_same(1, (int) $db->scalar('SELECT totp_enabled FROM "user" WHERE id = ' . $userId),
         'the flag was rolled back with it');

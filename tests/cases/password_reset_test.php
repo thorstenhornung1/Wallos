@@ -34,22 +34,18 @@ wallos_test('a failed issue leaves the previous token working', function () {
     // The point of the transaction. Without it the delete has already happened
     // when the insert fails, so the account is left with nothing — and the page
     // said an email was sent.
-    if (wallos_test_skip_unless_sqlite('needs a RAISE(ABORT) trigger')) {
-        return;
-    }
 
     $db = wallos_test_open_database();
     wallos_test_create_user($db, 1, 'alice');
 
     assert_true(wallos_issue_password_reset($db, 1, 'alice@example.com', 'still-valid'), 'a token exists');
 
-    $db->exec('CREATE TRIGGER block_reset_insert BEFORE INSERT ON password_resets
-               BEGIN SELECT RAISE(ABORT, \'blocked\'); END');
+    wallos_test_block_writes($db, 'password_resets', 'INSERT');
 
     assert_true(@wallos_issue_password_reset($db, 1, 'alice@example.com', 'never-stored') === false,
         'reported as not issued');
 
-    $db->exec('DROP TRIGGER block_reset_insert');
+    wallos_test_unblock_writes($db, 'password_resets');
 
     assert_same('still-valid', $db->scalar("SELECT token FROM password_resets WHERE email = 'alice@example.com'"),
         'and the token the user may already hold still works');
