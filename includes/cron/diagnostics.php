@@ -178,6 +178,47 @@ function wallos_cron_parse_time($value)
 }
 
 /**
+ * A failure recent enough to say something about a job that is succeeding now.
+ *
+ * Migration 000066 keeps the last failure and a cumulative count in the row,
+ * because the row is replaced on every run and a job that fails intermittently
+ * would otherwise look perfect the morning after it worked.
+ *
+ * "Recent" is three of the job's own staleness windows, not a fixed number of
+ * days: the same rule has to be right for a job that runs hourly and one that
+ * runs monthly. Beyond that the failure is history — worth keeping in the
+ * column, not worth colouring the page over.
+ *
+ * @param array $row           a row from cron_runs
+ * @param int   $now           unix time
+ * @param int   $staleAfter    the job's staleness window in seconds, 0 if unscheduled
+ * @return array{when: string, count: int, detail: string}|null
+ */
+function wallos_cron_recent_failure($row, $now, $staleAfter)
+{
+    $count = (int) ($row['failure_count'] ?? 0);
+    $at = wallos_cron_parse_time((string) ($row['last_failure_at'] ?? ''));
+
+    if ($count === 0 || $at === null) {
+        return null;
+    }
+
+    // An unscheduled job — createdatabase runs once from startup.sh — has no
+    // interval to measure against. A day is the honest default there.
+    $window = $staleAfter > 0 ? $staleAfter * 3 : 86400;
+
+    if ($now - $at > $window) {
+        return null;
+    }
+
+    return [
+        'when' => wallos_cron_describe_age(max(0, $now - $at)) . ' ago',
+        'count' => $count,
+        'detail' => (string) ($row['last_failure_detail'] ?? ''),
+    ];
+}
+
+/**
  * Evaluates the recorded runs.
  *
  * @param array<string, array> $runs job name => row from cron_runs
@@ -191,6 +232,7 @@ function wallos_cron_checks($runs, $now)
     $failed = 0;
     $overdue = 0;
     $silent = 0;
+    $unreliable = 0;
 
     // Jobs cron actually starts. createdatabase runs once from startup.sh and
     // has no interval to be late against, so counting it would stop "every job
@@ -256,14 +298,33 @@ function wallos_cron_checks($runs, $now)
             continue;
         }
 
-        $checks[] = wallos_cron_check($job['label'], WALLOS_CRON_CHECK_OK,
-            'Succeeded ' . $when . ' (' . $job['schedule'] . ')'
-            . ($detail === '' ? '.' : ': ' . $detail));
+        $succeeded = 'Succeeded ' . $when . ' (' . $job['schedule'] . ')'
+            . ($detail === '' ? '.' : ': ' . $detail);
+
+        // A job that succeeded most recently but failed within its last few
+        // runs is the case the single row used to hide: green line, fresh
+        // timestamp, and a job nobody can rely on. The window is measured in
+        // this job's own schedule rather than in days, so an hourly job and a
+        // monthly one are both judged against how often they run.
+        $recent = wallos_cron_recent_failure($row, $now, $job['stale_after']);
+
+        if ($recent !== null) {
+            $unreliable++;
+            $checks[] = wallos_cron_check($job['label'], WALLOS_CRON_CHECK_WARNING,
+                $succeeded . ' It last failed ' . $recent['when'] . ' and has failed '
+                . $recent['count'] . ' time' . ($recent['count'] === 1 ? '' : 's')
+                . ($recent['detail'] === '' ? '.' : ': ' . $recent['detail']));
+
+            continue;
+        }
+
+        $checks[] = wallos_cron_check($job['label'], WALLOS_CRON_CHECK_OK, $succeeded);
     }
 
     // The summary goes first, because a section with twelve green lines and one
     // red one is read top to bottom and the red one is at the bottom.
-    array_unshift($checks, wallos_cron_summary(count($jobs), $failed, $overdue, $silent, $scheduled));
+    array_unshift($checks, wallos_cron_summary(count($jobs), $failed, $overdue, $silent, $scheduled,
+        $unreliable));
 
     return $checks;
 }
@@ -278,7 +339,7 @@ function wallos_cron_checks($runs, $now)
  * @param int $scheduled how many of them cron is supposed to start
  * @return array{label: string, status: string, detail: string}
  */
-function wallos_cron_summary($total, $failed, $overdue, $silent, $scheduled = 0)
+function wallos_cron_summary($total, $failed, $overdue, $silent, $scheduled = 0, $unreliable = 0)
 {
     if ($scheduled > 0 && $overdue === $scheduled) {
         // Every single job overdue is not twelve independent problems. It is
@@ -297,6 +358,12 @@ function wallos_cron_summary($total, $failed, $overdue, $silent, $scheduled = 0)
     }
     if ($silent > 0) {
         $problems[] = $silent . ' never reported';
+    }
+    if ($unreliable > 0) {
+        // Named separately from 'failed', because these are succeeding right
+        // now. Folding the two together would make the summary say something
+        // the job list below it contradicts.
+        $problems[] = $unreliable . ' failing intermittently';
     }
 
     if ($problems === []) {
@@ -342,7 +409,12 @@ function wallos_cron_runs($db)
         return [];
     }
 
-    $result = $db->query('SELECT job, status, started_at, finished_at, duration_ms, detail FROM cron_runs');
+    // The failure columns came with migration 000066; an installation that has
+    // not run it yet must still get its runs rather than an empty page.
+    $result = $db->columnExists('cron_runs', 'failure_count')
+        ? $db->query('SELECT job, status, started_at, finished_at, duration_ms, detail,
+                             last_failure_at, last_failure_detail, failure_count FROM cron_runs')
+        : $db->query('SELECT job, status, started_at, finished_at, duration_ms, detail FROM cron_runs');
 
     if ($result === false) {
         return [];

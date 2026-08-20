@@ -20,7 +20,7 @@
 --   * Every identifier is quoted, because "user" and "order" are reserved words
 --     and a keyword list kept in the generator would be wrong eventually.
 
--- 42 tables, 64 migrations recorded as applied.
+-- 42 tables, 65 migrations recorded as applied.
 
 CREATE TABLE "admin" (
     "id" SERIAL PRIMARY KEY,
@@ -81,6 +81,9 @@ CREATE TABLE "cron_runs" (
     "finished_at" TEXT NOT NULL,
     "duration_ms" INTEGER DEFAULT 0 NOT NULL,
     "detail" TEXT DEFAULT '' NOT NULL,
+    "last_failure_at" TEXT,
+    "last_failure_detail" TEXT DEFAULT '' NOT NULL,
+    "failure_count" INTEGER DEFAULT 0 NOT NULL,
     PRIMARY KEY ("job")
 );
 
@@ -625,7 +628,8 @@ INSERT INTO "migrations" ("id", "migration") VALUES
     (61, 'migrations/000062.php'),
     (62, 'migrations/000063.php'),
     (63, 'migrations/000064.php'),
-    (64, 'migrations/000065.php');
+    (64, 'migrations/000065.php'),
+    (65, 'migrations/000066.php');
 
 INSERT INTO "payment_methods" ("id", "name", "icon", "enabled", "order", "user_id") VALUES
     (1, 'PayPal', 'images/uploads/icons/paypal.png', 1, 1, 1),

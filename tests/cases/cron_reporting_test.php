@@ -110,7 +110,28 @@ function cron_run_fake($status, $secondsAgo, $detail = '')
         'finished_at' => gmdate('Y-m-d H:i:s', time() - $secondsAgo),
         'duration_ms' => 10,
         'detail' => $detail,
+        'last_failure_at' => null,
+        'last_failure_detail' => '',
+        'failure_count' => 0,
     ];
+}
+
+/**
+ * The same row, with a failure behind it that a later success did not erase.
+ *
+ * @param array  $row
+ * @param int    $secondsAgo
+ * @param int    $count
+ * @param string $detail
+ * @return array
+ */
+function cron_run_with_failure($row, $secondsAgo, $count = 1, $detail = '')
+{
+    $row['last_failure_at'] = gmdate('Y-m-d H:i:s', time() - $secondsAgo);
+    $row['last_failure_detail'] = $detail;
+    $row['failure_count'] = $count;
+
+    return $row;
 }
 
 /**
@@ -444,4 +465,107 @@ wallos_test('every cron job reports itself', function () {
         assert_true(wallos_test_file_calls($path, 'wallos_cron_done'),
             $path . ' says when it reached the end');
     }
+});
+
+
+// --- a failure that outlives the next success ------------------------------
+
+wallos_test('a failure is still visible after the job succeeds again', function () {
+    $db = wallos_test_open_database();
+
+    // Through real processes, not a hand-written row: the question is whether
+    // the write path keeps the failure, and the write path is what runs here.
+    cron_run_process("wallos_cron_problem('the transport is unusable');");
+    cron_run_process("wallos_cron_done('sent=2');");
+
+    $row = cron_run_row($db, 'testjob');
+
+    assert_same(WALLOS_CRON_OK, $row['status'], 'the last run is the one that worked');
+    assert_contains('sent=2', $row['detail'], 'and the row describes that run');
+
+    // The half that used to be lost. Before migration 000066 the row above was
+    // the whole record, so the night the job died left nothing behind at all.
+    assert_same(1, (int) $row['failure_count'], 'the failure is still counted');
+    assert_contains('transport is unusable', $row['last_failure_detail'],
+        'and it still says what went wrong');
+    assert_true(trim((string) $row['last_failure_at']) !== '', 'and when');
+
+    $db->close();
+});
+
+wallos_test('a job that never failed carries no failure', function () {
+    // The negative control. Without it, a write path that recorded a failure
+    // unconditionally would pass every assertion above.
+    $db = wallos_test_open_database();
+
+    cron_run_process("wallos_cron_done('nothing queued');");
+    $row = cron_run_row($db, 'testjob');
+
+    assert_same(0, (int) $row['failure_count'], 'a job that only ever worked has no failures');
+    assert_same('', trim((string) ($row['last_failure_at'] ?? '')), 'and no failure time');
+
+    $db->close();
+});
+
+wallos_test('failures accumulate rather than replacing each other', function () {
+    $db = wallos_test_open_database();
+
+    cron_run_process("wallos_cron_problem('first');");
+    cron_run_process("wallos_cron_problem('second');");
+    cron_run_process("wallos_cron_done('recovered');");
+
+    $row = cron_run_row($db, 'testjob');
+
+    assert_same(2, (int) $row['failure_count'], 'both failures are counted');
+    assert_contains('second', $row['last_failure_detail'], 'and the most recent one is the one kept');
+
+    $db->close();
+});
+
+wallos_test('a job succeeding now but failing lately is not reported as healthy', function () {
+    // What the single row hid: green line, fresh timestamp, and a job that
+    // dies every third night. sendnotifications runs daily with a two-day
+    // staleness window, so a failure six hours ago is well inside it.
+    $runs = ['sendnotifications' => cron_run_with_failure(
+        cron_run_fake(WALLOS_CRON_OK, 3600, 'sent=2'), 6 * 3600, 3, 'SMTP timeout')];
+    $checks = wallos_cron_checks($runs, time());
+    $check = cron_run_check($checks, 'Payment notifications');
+
+    assert_same(WALLOS_CRON_CHECK_WARNING, $check['status'], 'succeeding now is not the whole answer');
+    assert_contains('sent=2', $check['detail'], 'the last run is still described');
+    assert_contains('3 times', $check['detail'], 'and so is how often it has failed');
+    assert_contains('SMTP timeout', $check['detail'], 'with the reason');
+
+    $summary = cron_run_check($checks, 'Scheduled jobs');
+    assert_contains('failing intermittently', $summary['detail'],
+        'and the summary does not call the installation healthy');
+});
+
+wallos_test('an old failure is history rather than a warning', function () {
+    // The other side of the window, and the reason it is measured in the job's
+    // own schedule: one failure last spring must not colour the page forever.
+    $runs = ['sendnotifications' => cron_run_with_failure(
+        cron_run_fake(WALLOS_CRON_OK, 3600, 'sent=2'), 30 * 86400, 1, 'SMTP timeout')];
+    $check = cron_run_check(wallos_cron_checks($runs, time()), 'Payment notifications');
+
+    assert_same(WALLOS_CRON_CHECK_OK, $check['status'], 'a failure a month ago is not a current problem');
+    assert_not_contains('SMTP timeout', $check['detail'], 'and is not repeated on the page');
+});
+
+wallos_test('the window follows the schedule, not the calendar', function () {
+    // Verification emails run every two minutes with a 30-minute window, so a
+    // failure two hours ago is many runs back — while for a daily job the same
+    // two hours is the same night. One rule, two right answers.
+    $failure = 2 * 3600;
+    $frequent = ['sendverificationemails' => cron_run_with_failure(
+        cron_run_fake(WALLOS_CRON_OK, 60), $failure)];
+    $daily = ['sendnotifications' => cron_run_with_failure(
+        cron_run_fake(WALLOS_CRON_OK, 60), $failure)];
+
+    assert_same(WALLOS_CRON_CHECK_OK,
+        cron_run_check(wallos_cron_checks($frequent, time()), 'Verification emails')['status'],
+        'for a job running every two minutes, two hours ago is long past');
+    assert_same(WALLOS_CRON_CHECK_WARNING,
+        cron_run_check(wallos_cron_checks($daily, time()), 'Payment notifications')['status'],
+        'for a daily job it is last night');
 });

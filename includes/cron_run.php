@@ -446,14 +446,41 @@ function wallos_cron_write($db, $run, $status, $duration, $detail)
         return false;
     }
 
-    $statement = $db->prepare('INSERT INTO cron_runs (job, status, started_at, finished_at, duration_ms, detail)
-                               VALUES (:job, :status, :startedAt, :finishedAt, :duration, :detail)
-                               ON CONFLICT (job) DO UPDATE SET
-                                   status = :status,
-                                   started_at = :startedAt,
-                                   finished_at = :finishedAt,
-                                   duration_ms = :duration,
-                                   detail = :detail');
+    // A failure is written twice: into the row that describes the last run, and
+    // into three columns a later success does not touch (migration 000066).
+    // Without the second half a job that fails every third night and succeeded
+    // this morning is indistinguishable from one that has never failed — which
+    // is the state this whole file exists to make visible.
+    $failed = $status === WALLOS_CRON_FAILED;
+
+    if ($db->columnExists('cron_runs', 'failure_count')) {
+        $statement = $db->prepare('INSERT INTO cron_runs (job, status, started_at, finished_at, duration_ms,
+                                                          detail, last_failure_at, last_failure_detail,
+                                                          failure_count)
+                                   VALUES (:job, :status, :startedAt, :finishedAt, :duration, :detail,
+                                           :failureAt, :failureDetail, :failureIncrement)
+                                   ON CONFLICT (job) DO UPDATE SET
+                                       status = :status,
+                                       started_at = :startedAt,
+                                       finished_at = :finishedAt,
+                                       duration_ms = :duration,
+                                       detail = :detail,
+                                       last_failure_at = COALESCE(:failureAt, cron_runs.last_failure_at),
+                                       last_failure_detail = CASE WHEN :failureAt IS NULL
+                                           THEN cron_runs.last_failure_detail ELSE :failureDetail END,
+                                       failure_count = cron_runs.failure_count + :failureIncrement');
+    } else {
+        // An installation between 000064 and 000066. Recording the run without
+        // the failure history beats recording nothing.
+        $statement = $db->prepare('INSERT INTO cron_runs (job, status, started_at, finished_at, duration_ms, detail)
+                                   VALUES (:job, :status, :startedAt, :finishedAt, :duration, :detail)
+                                   ON CONFLICT (job) DO UPDATE SET
+                                       status = :status,
+                                       started_at = :startedAt,
+                                       finished_at = :finishedAt,
+                                       duration_ms = :duration,
+                                       detail = :detail');
+    }
 
     if ($statement === false) {
         return false;
@@ -468,6 +495,14 @@ function wallos_cron_write($db, $run, $status, $duration, $detail)
     $statement->bindValue(':finishedAt', gmdate('Y-m-d H:i:s'));
     $statement->bindValue(':duration', $duration);
     $statement->bindValue(':detail', $detail);
+
+    if ($db->columnExists('cron_runs', 'failure_count')) {
+        // NULL on a successful run is what the COALESCE and the CASE above read
+        // to mean "leave the previous failure where it is".
+        $statement->bindValue(':failureAt', $failed ? gmdate('Y-m-d H:i:s') : null);
+        $statement->bindValue(':failureDetail', $failed ? $detail : '');
+        $statement->bindValue(':failureIncrement', $failed ? 1 : 0);
+    }
 
     return $statement->execute() !== false;
 }
