@@ -548,3 +548,25 @@ first measurement of this application on the backend it is being moved to.
 The other correction is smaller: 8.1's finding that no migration removes the
 leftover `notifications` table was true when measured and stopped being true
 that same morning — migration 000065 landed at 05:47 and is in 5.8.3.
+
+## Correction, appended 2026-08-20 during the 5.8.3 night run
+
+Two statements above are wrong. Appended rather than edited, because in both
+cases the mistake is the more useful record.
+
+**Section 6 was not blocked.** This report closes on
+[#91](https://github.com/thorstenhornung1/Wallos/issues/91) blocking it. That
+issue was already fixed in 5.8.2 — the release this run was testing. The error
+was procedural: the issue's state was taken from an earlier note of my own
+instead of being looked up. The section ran on 5.8.3 and produced figures; see
+[the night run](test-results-2026-08-20-nightrun.md).
+
+**Part of this run was not on 5.8.2.** Adding the `OIDC_ADMIN_*` variables meant
+a `docker stack deploy` from a file that still pinned `5.8.0`, which silently
+undid the earlier `docker service update --image 5.8.2`. By timestamp everything
+here ran on 5.8.2 except the `OIDC_ADMIN_*` verification, which ran on 5.8.0.
+That feature dates from 5.7.0, so the result stands — but it was not measured on
+the version this report names.
+
+`docker service update --image` changes the running service and not the file;
+the next `stack deploy` from that file reverts it without warning.

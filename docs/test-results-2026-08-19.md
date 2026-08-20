@@ -199,9 +199,18 @@ orphan sweep looks for rows without a matching user at all — which is the shap
 of the defect 5.8.0 fixed, where twelve tables were skipped while the endpoint
 reported success.
 
-Worth noting: on PostgreSQL the old defect could not have passed silently in the
-first place. Deleting the user row before its children violates a foreign key,
-so the database would have refused it.
+Worth noting: on PostgreSQL the old defect could not have passed silently for
+*some* of the tables. Measured on 2026-08-20: the schema has 13 foreign keys, of
+which seven constrain `user_id` — `login_tokens`, `totp`, `user_roles`,
+`oidc_sessions`, `custom_css_style`, `ntfy_notifications` and
+`serverchan_notifications`. Deleting a user row before those children fails.
+`subscriptions`, `categories`, `household`, `settings`, `payment_methods` and
+`email_notifications` carry no such constraint, so orphans there are accepted
+without complaint.
+
+An earlier version of this paragraph claimed the constraint held generally. It
+does not, and the difference matters: it is why
+[#98](https://github.com/thorstenhornung1/Wallos/issues/98) could happen.
 
 ### 7.4 / 7.5 — what could be checked without a browser
 
