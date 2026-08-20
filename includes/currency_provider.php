@@ -181,14 +181,43 @@ function wallos_update_exchange_rates_for_user($db, $userId)
 
     $formattedDate = (new DateTime())->format('Y-m-d');
 
+    // Checked the same way the rate updates above are, and inside the same
+    // transaction. Discarding these two results meant the rates could be
+    // committed with no record that they had been updated — after which the
+    // job either refetches them every run, spending quota on a provider that
+    // charges per call, or the page reports rates as older than they are
+    // (issue #87).
+    $recorded = false;
     $deleteStmt = $db->prepare('DELETE FROM last_exchange_update WHERE user_id = :userId');
-    $deleteStmt->bindValue(':userId', $userId, SQLITE3_INTEGER);
-    $deleteStmt->execute();
 
-    $insertStmt = $db->prepare('INSERT INTO last_exchange_update (date, user_id) VALUES (:date, :userId)');
-    $insertStmt->bindValue(':date', $formattedDate, SQLITE3_TEXT);
-    $insertStmt->bindValue(':userId', $userId, SQLITE3_INTEGER);
-    $insertStmt->execute();
+    if ($deleteStmt !== false) {
+        $deleteStmt->bindValue(':userId', $userId, SQLITE3_INTEGER);
+        $recorded = $deleteStmt->execute() !== false;
+    }
+
+    if ($recorded) {
+        $recorded = false;
+        $insertStmt = $db->prepare('INSERT INTO last_exchange_update (date, user_id) VALUES (:date, :userId)');
+
+        if ($insertStmt !== false) {
+            $insertStmt->bindValue(':date', $formattedDate, SQLITE3_TEXT);
+            $insertStmt->bindValue(':userId', $userId, SQLITE3_INTEGER);
+            $recorded = $insertStmt->execute() !== false;
+        }
+    }
+
+    if (!$recorded) {
+        // Rolled back rather than committed with the timestamp missing: the
+        // previous rates and their date belong together, and the caller can
+        // retry. Same reasoning as the rate loop above.
+        $db->exec('ROLLBACK');
+
+        return [
+            'success' => false,
+            'message' => 'The rates were fetched, but the update could not be recorded; '
+                . 'the previous rates were kept.',
+        ];
+    }
 
     $db->exec('COMMIT');
 
@@ -226,9 +255,23 @@ function wallos_store_currency_usage($db, $config, $userId, $usage)
     }
 
     $stmt = $db->prepare('UPDATE fixer SET usage_used = :used, usage_limit = :limit, usage_updated_at = :updatedAt WHERE user_id = :userId');
+
+    if ($stmt === false) {
+        error_log('Wallos: could not record provider quota for user ' . $userId . ': '
+            . $db->lastErrorMsg());
+
+        return;
+    }
+
     $stmt->bindValue(':used', $usage['used'], SQLITE3_INTEGER);
     $stmt->bindValue(':limit', $usage['limit'], SQLITE3_INTEGER);
     $stmt->bindValue(':updatedAt', $updatedAt, SQLITE3_TEXT);
     $stmt->bindValue(':userId', $userId, SQLITE3_INTEGER);
-    $stmt->execute();
+
+    // Quota is what the settings page shows to explain why refreshes stopped
+    // working. A number that silently stayed where it was is worse than none.
+    if ($stmt->execute() === false) {
+        error_log('Wallos: could not record provider quota for user ' . $userId . ': '
+            . $db->lastErrorMsg());
+    }
 }

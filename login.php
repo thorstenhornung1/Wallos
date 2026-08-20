@@ -53,9 +53,18 @@ if ($adminRow['login_disabled'] == 1) {
 
     if ($row === false) {
         // Something is wrong with admin user. Reenable login
+        //
+        // This is the way out of an installation nobody can sign in to, so a
+        // failure here leaves the person in a redirect loop with no clue why.
+        // It cannot be repaired from the browser, but it can be found in the
+        // log rather than guessed at.
         $updateQuery = "UPDATE admin SET login_disabled = 0";
         $updateStmt = $db->prepare($updateQuery);
-        $updateStmt->execute();
+
+        if ($updateStmt === false || $updateStmt->execute() === false) {
+            error_log('Wallos login: login is disabled and the administrator account is missing, '
+                . 'and re-enabling login failed: ' . $db->lastErrorMsg());
+        }
 
         $db->close();
         header("Location: login.php");
@@ -230,16 +239,32 @@ if (isset($_POST['username']) && isset($_POST['password'])) {
                     $token = bin2hex(random_bytes(32));
                     $addLoginTokens = "INSERT INTO login_tokens (user_id, token) VALUES (:userId, :token)";
                     $addLoginTokensStmt = $db->prepare($addLoginTokens);
-                    $addLoginTokensStmt->bindParam(':userId', $userId, SQLITE3_INTEGER);
-                    $addLoginTokensStmt->bindParam(':token', $token, SQLITE3_TEXT);
-                    $addLoginTokensStmt->execute();
-                    $_SESSION['token'] = $token;
-                    $cookieValue = $username . "|" . $token . "|" . $main_currency;
-                    setcookie('wallos_login', $cookieValue, [
-                        'expires' => $cookieExpire,
-                        'samesite' => 'Lax',
-                        'httponly' => true,
-                    ]);
+                    $stored = false;
+
+                    if ($addLoginTokensStmt !== false) {
+                        $addLoginTokensStmt->bindParam(':userId', $userId, SQLITE3_INTEGER);
+                        $addLoginTokensStmt->bindParam(':token', $token, SQLITE3_TEXT);
+                        $stored = $addLoginTokensStmt->execute() !== false;
+                    }
+
+                    // The cookie is only worth having if the row behind it
+                    // exists: the next visit looks the token up, finds nothing
+                    // and sends the person to the login form — after they were
+                    // told they would stay signed in. The insert result used to
+                    // go nowhere, so a failure here was invisible until then
+                    // (issue #87).
+                    if ($stored) {
+                        $_SESSION['token'] = $token;
+                        $cookieValue = $username . "|" . $token . "|" . $main_currency;
+                        setcookie('wallos_login', $cookieValue, [
+                            'expires' => $cookieExpire,
+                            'samesite' => 'Lax',
+                            'httponly' => true,
+                        ]);
+                    } else {
+                        error_log('Wallos login: could not store the remember-me token for user '
+                            . $userId . ', so no cookie was set: ' . $db->lastErrorMsg());
+                    }
                 }
 
                 session_regenerate_id(true);

@@ -8,7 +8,7 @@
 #
 # Do not edit by hand — run dev/write-audit.php --update and commit the diff.
 #
-# 131 file(s), 57 discarded result(s), 362 unchecked prepare(s).
+# 130 file(s), 49 discarded result(s), 347 unchecked prepare(s).
 
 admin.php	0	4
 api/admin/get_admin_settings.php	0	1
@@ -113,7 +113,6 @@ endpoints/user/regenerateapikey.php	0	1
 endpoints/user/save_user.php	1	10
 includes/checkredirect.php	0	1
 includes/checksession.php	0	1
-includes/currency_provider.php	3	5
 includes/currency_rates.php	0	2
 includes/getdbkeys.php	0	4
 includes/getsettings.php	0	3
@@ -129,13 +128,13 @@ includes/ssrf_helper.php	0	1
 includes/stats_calculations.php	0	10
 includes/stats_extra_calculations.php	0	1
 index.php	0	5
-login.php	2	8
+login.php	0	6
 migrations/000013.php	1	2
 migrations/000044.php	2	2
 migrations/000057.php	1	1
 migrations/000062.php	1	1
 profile.php	0	3
-registration.php	3	10
+registration.php	0	2
 settings.php	0	23
 stats.php	0	1
 subscriptions.php	0	2

@@ -221,19 +221,47 @@ if (isset($_POST['username'])) {
 
                 if ($mainCurrencyId !== null) {
                     // Update user main currency
+                    //
+                    // Checked, because this is what moves the account off the
+                    // bootstrap currency it was created against. Failing here
+                    // silently leaves main_currency pointing at a row belonging
+                    // to another account — the cross-account reference issues
+                    // #82 and #93 exist to keep out of the database.
                     $query = "UPDATE \"user\" SET main_currency = :main_currency WHERE id = :user_id";
                     $stmt = $db->prepare($query);
-                    $stmt->bindValue(':main_currency', $mainCurrencyId, SQLITE3_INTEGER);
-                    $stmt->bindValue(':user_id', $userId, SQLITE3_INTEGER);
-                    $stmt->execute();
+                    $moved = false;
+
+                    if ($stmt !== false) {
+                        $stmt->bindValue(':main_currency', $mainCurrencyId, SQLITE3_INTEGER);
+                        $stmt->bindValue(':user_id', $userId, SQLITE3_INTEGER);
+                        $moved = $stmt->execute() !== false;
+                    }
+
+                    if (!$moved) {
+                        error_log('Wallos registration: user ' . $userId . ' still points at the currency '
+                            . 'it was created against, which belongs to another account: '
+                            . $db->lastErrorMsg());
+                    }
                 }
 
                 // Add settings for that user
                 $query = "INSERT INTO settings (dark_theme, monthly_price, convert_currency, remove_background, color_theme, hide_disabled, user_id, disabled_to_bottom, show_original_price, mobile_nav, week_starts_sunday) 
                           VALUES (2, 0, 0, 0, 'blue', 0, :user_id, 0, 0, 0, 0)";
                 $stmt = $db->prepare($query);
-                $stmt->bindValue(':user_id', $userId, SQLITE3_INTEGER);
-                $stmt->execute();
+                $settingsWritten = false;
+
+                if ($stmt !== false) {
+                    $stmt->bindValue(':user_id', $userId, SQLITE3_INTEGER);
+                    $settingsWritten = $stmt->execute() !== false;
+                }
+
+                if (!$settingsWritten) {
+                    // Every page reads this row. An account without one renders
+                    // with whatever the code does when the lookup finds nothing,
+                    // which is the state issue #17 is about.
+                    error_log('Wallos registration: could not create the settings row for user '
+                        . $userId . ': ' . $db->lastErrorMsg());
+                }
 
                 // If email verification is required add the user to the email_verification table
                 $query = "SELECT * FROM admin";
@@ -248,7 +276,16 @@ if (isset($_POST['username'])) {
                     $stmt->bindValue(':user_id', $userId, SQLITE3_INTEGER);
                     $stmt->bindValue(':token', $token, SQLITE3_TEXT);
                     $stmt->bindValue(':email', $email, SQLITE3_TEXT);
-                    $stmt->execute();
+
+                    if ($stmt->execute() === false) {
+                        // The account stays unverifiable either way: there is no
+                        // token to send and none to accept. Reported rather than
+                        // waved through, because the alternative — treating a
+                        // failed verification set-up as "no verification needed"
+                        // — turns a broken write into a way past the check.
+                        error_log('Wallos registration: could not create the email verification token for user '
+                            . $userId . ', so the account cannot be verified: ' . $db->lastErrorMsg());
+                    }
 
                     $requireValidation = true;
                 }
