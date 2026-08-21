@@ -212,6 +212,30 @@ class WallosPgsqlDatabase implements WallosDatabase
         );
     }
 
+    /**
+     * Every base table that holds rows, sorted.
+     *
+     * @return string[]
+     */
+    public function tables()
+    {
+        $result = $this->query("SELECT table_name FROM information_schema.tables
+                                WHERE table_schema = current_schema()
+                                  AND table_type = 'BASE TABLE'
+                                ORDER BY table_name");
+
+        if ($result === false) {
+            return [];
+        }
+
+        $names = [];
+        while ($row = $result->fetchArray(SQLITE3_ASSOC)) {
+            $names[] = $row['table_name'];
+        }
+
+        return $names;
+    }
+
     public function tablesWithColumn($column)
     {
         // Joined against information_schema.tables rather than reading

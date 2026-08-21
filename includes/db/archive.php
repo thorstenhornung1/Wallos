@@ -69,29 +69,18 @@ function wallos_archive_fetch($result)
  * in the next backup without anyone remembering this file exists — the same
  * reasoning as wallos_user_deletion_plan().
  *
+ * The two backends answer it differently and the boundary owns that
+ * difference: asking here meant reading SQLite's own schema table from
+ * application code, which is what issue #41 is confining to
+ * includes/database/. Kept as a function rather than inlined so the archive
+ * reads as one vocabulary.
+ *
  * @param WallosDatabase $db
  * @return string[]
  */
 function wallos_archive_tables($db)
 {
-    if ($db->driver() === 'pgsql') {
-        $sql = "SELECT table_name FROM information_schema.tables
-                WHERE table_schema = current_schema() AND table_type = 'BASE TABLE'
-                ORDER BY table_name";
-    } else {
-        $sql = "SELECT name AS table_name FROM sqlite_master
-                WHERE type = 'table' AND name NOT LIKE 'sqlite_%'
-                ORDER BY name";
-    }
-
-    $tables = [];
-    $result = $db->query($sql);
-
-    while ($row = wallos_archive_fetch($result)) {
-        $tables[] = $row['table_name'];
-    }
-
-    return $tables;
+    return $db->tables();
 }
 
 /**

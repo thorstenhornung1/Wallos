@@ -93,6 +93,29 @@ class WallosSqliteDatabase extends SQLite3 implements WallosDatabase
         return $result !== false && $result->fetchArray(SQLITE3_ASSOC) !== false;
     }
 
+    /**
+     * Every base table that holds rows, sorted.
+     *
+     * @return string[]
+     */
+    public function tables()
+    {
+        $result = $this->query("SELECT name FROM sqlite_master
+                                WHERE type = 'table' AND name NOT LIKE 'sqlite_%'
+                                ORDER BY name");
+
+        if ($result === false) {
+            return [];
+        }
+
+        $names = [];
+        while ($row = $result->fetchArray(SQLITE3_ASSOC)) {
+            $names[] = $row['name'];
+        }
+
+        return $names;
+    }
+
     public function tablesWithColumn($column)
     {
         // The names are collected before any of them is inspected. Calling

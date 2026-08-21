@@ -68,6 +68,20 @@ interface WallosDatabase
      */
     public function tablesWithColumn($column);
 
+    /**
+     * Every base table that holds rows, sorted.
+     *
+     * The reasoning tablesWithColumn() follows, one step wider: the backup
+     * archive has to write out whatever tables exist rather than a list that
+     * goes stale the first time a migration adds one (issue #23).
+     *
+     * Views are excluded for the same reason they are there: a view is not
+     * somewhere rows are stored.
+     *
+     * @return string[] table names, sorted
+     */
+    public function tables();
+
     /** @return bool */
     public function beginTransaction();
 
