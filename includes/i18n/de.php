@@ -404,6 +404,9 @@ $i18n = [
     "subscription_updated_successfuly" => "Abonnement erfolgreich aktualisiert",
     "subscription_added_successfuly" => "Abonnement erfolgreich hinzugefügt",
     "error_deleting_subscription" => "Abonnement konnte nicht gelöscht werden.",
+    "cannot_delete_last_admin" => "Dies ist die letzte Administration. Bitte zuerst einem anderen Konto die Administratorrolle geben.",
+    "invalid_parameter" => "Der Anfrage fehlte ein Wert, oder er hatte die falsche Form.",
+    "not_found_or_not_yours" => "Dieser Eintrag existiert nicht oder gehört nicht zu diesem Konto.",
     "invalid_request_method" => "Ungültige Request Methode.",
     // User
     "error_updating_user_data" => "Benutzerangaben konnten nicht aktualisiert werden.",

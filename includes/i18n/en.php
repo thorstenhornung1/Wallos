@@ -433,6 +433,9 @@ $i18n = [
     "subscription_updated_successfuly" => "Subscription updated successfully",
     "subscription_added_successfuly" => "Subscription added successfully",
     "error_deleting_subscription" => "Error deleting subscription.",
+    "cannot_delete_last_admin" => "This is the last administrator. Give another account the administrator role first.",
+    "invalid_parameter" => "The request was missing a value or sent one in the wrong form.",
+    "not_found_or_not_yours" => "That entry does not exist, or does not belong to your account.",
     "invalid_request_method" => "Invalid request method.",
     // User
     "error_updating_user_data" => "Error updating user data.",

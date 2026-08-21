@@ -10,8 +10,13 @@ $data = json_decode($input, true);
 $paymentMethodId = $data["id"] ?? null;
 
 if (!wallos_is_integer_input($paymentMethodId)) {
+    // Named rather than generic. A tester whose payload used the wrong key —
+    // paymentId instead of id — got the same word here as for a row that does
+    // not exist, and read it as the reference check failing to fire. Two of
+    // four such confusions in one test session would have become issues
+    // against working code (issue #100).
     http_response_code(400);
-    echo json_encode(array("success" => false, "message" => translate('error', $i18n)));
+    echo json_encode(array("success" => false, "message" => translate('invalid_parameter', $i18n)));
     exit();
 }
 
@@ -63,7 +68,8 @@ if ($deleteStmt->execute() === false) {
 // method is gone while it is still on the list after a reload.
 if ($db->changes() === 0) {
     http_response_code(404);
-    echo json_encode(array("success" => false, "message" => translate('error', $i18n)));
+    echo json_encode(array("success" => false,
+        "message" => translate('not_found_or_not_yours', $i18n)));
     $db->close();
     exit();
 }

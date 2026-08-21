@@ -156,3 +156,38 @@ wallos_test('the read guard runs before anything can produce output', function (
             $path . ' includes the guard immediately after the bootstrap');
     }
 });
+
+wallos_test('a refusal says which check it came from', function () {
+    // From the method notes of the 2026-08-20 night run: four times in one
+    // session a wrong payload produced a response that looked like an
+    // application defect, and two of them would have become issues. What
+    // separated the real findings from the false ones every time was whether
+    // the refusal named the check it failed (issue #100).
+    //
+    // endpoints/payments/delete.php is the example the report gives. A request
+    // sending paymentId where the endpoint reads id got the same word as a row
+    // that does not exist, and read as the reference check failing to fire.
+    $source = file_get_contents(WALLOS_ROOT . '/endpoints/payments/delete.php');
+
+    foreach (['invalid_parameter', 'not_found_or_not_yours', 'payment_method_in_use'] as $key) {
+        assert_contains($key, $source, 'the endpoint distinguishes: ' . $key);
+    }
+
+    // The generic message is still right where the caller can do nothing
+    // differently — a failed prepare or execute — and those are the only two
+    // left.
+    assert_same(2, substr_count($source, "translate('error'"),
+        'only the two database failures answer generically');
+
+    $admin = file_get_contents(WALLOS_ROOT . '/endpoints/admin/deleteuser.php');
+    assert_contains('cannot_delete_last_admin', $admin,
+        'refusing to remove the last administrator says so');
+    assert_contains('http_response_code(409)', $admin,
+        'and answers a status that is neither a server failure nor a bad request');
+
+    require WALLOS_ROOT . '/includes/i18n/en.php';
+
+    foreach (['invalid_parameter', 'not_found_or_not_yours', 'cannot_delete_last_admin'] as $key) {
+        assert_true(array_key_exists($key, $i18n), $key . ' exists in the default language');
+    }
+});
