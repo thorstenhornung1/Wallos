@@ -11,7 +11,7 @@
 #
 # Do not edit by hand — run dev/db-audit.sh --update and commit the diff.
 #
-# total: 1511 matches in 225 file(s)
+# total: 1513 matches in 226 file(s)
 admin.php	5
 api/admin/get_admin_settings.php	1
 api/admin/set_admin_settings.php	20
@@ -130,6 +130,7 @@ includes/checkuser.php	1
 includes/config_helper.php	2
 includes/currency_provider.php	16
 includes/currency_rates.php	4
+includes/db/archive.php	2
 includes/getdbkeys.php	10
 includes/getsettings.php	7
 includes/integration_config.php	33

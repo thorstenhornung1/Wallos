@@ -2,16 +2,54 @@
 require_once '../../includes/connect_endpoint.php';
 require_once '../../includes/validate_endpoint_admin.php';
 require_once __DIR__ . '/backend_guard.php';
+require_once __DIR__ . '/../../includes/db/archive.php';
 
-// Refuse before anything is built. On PostgreSQL db/ holds only setup_token.db,
-// so what follows would stream a valid archive with no data in it and call that
-// a success.
+// On anything other than SQLite the file copy below has nothing to copy: db/
+// holds only setup_token.db, and the archive it would build is a valid zip with
+// no data in it. It used to be streamed anyway and called a success, then
+// refused honestly since 5.8.2, and now it takes the route that works on every
+// backend — the rows themselves (issue #23).
+//
+// SQLite keeps the file copy. It restores faster, it is what existing archives
+// are, and an installation that has one should not find out at restore time
+// that the format changed under it.
 if (!wallos_db_file_backup_supported($db)) {
-    http_response_code(501);
-    die(json_encode([
-        "success" => false,
-        "message" => wallos_db_file_backup_refusal('backup', $db)
-    ]));
+    $archivePath = tempnam(sys_get_temp_dir(), 'wallos_archive_');
+
+    if ($archivePath === false) {
+        http_response_code(500);
+        die(json_encode([
+            "success" => false,
+            "message" => translate('cannot_open_zip', $i18n)
+        ]));
+    }
+
+    $written = wallos_archive_export($db, $archivePath, __DIR__ . '/../../images/uploads');
+
+    if (!$written['success']) {
+        @unlink($archivePath);
+        http_response_code(500);
+        error_log('Wallos backup: could not write the archive: ' . (string) $written['error']);
+        die(json_encode([
+            "success" => false,
+            "message" => translate('backup_failed', $i18n)
+        ]));
+    }
+
+    while (ob_get_level() > 0) {
+        ob_end_clean();
+    }
+
+    clearstatcache(true, $archivePath);
+
+    header('Content-Type: application/zip');
+    header('Content-Disposition: attachment; filename="Wallos-Backup-' . date('Ymd-His') . '.zip"');
+    header('Content-Length: ' . filesize($archivePath));
+    header('Cache-Control: no-store');
+
+    readfile($archivePath);
+    unlink($archivePath);
+    exit;
 }
 
 function addFolderToZip($dir, $zipArchive, $zipdir = '')

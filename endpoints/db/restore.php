@@ -2,15 +2,47 @@
 require_once '../../includes/connect_endpoint.php';
 require_once '../../includes/validate_endpoint_admin.php';
 require_once __DIR__ . '/backend_guard.php';
+require_once __DIR__ . '/../../includes/db/archive.php';
 
-// Refuse before the upload is touched. What follows replaces db/wallos.db and
-// answers success — on PostgreSQL, having replaced a file the running instance
-// never reads, so the backup reaches nothing.
+// What follows replaces db/wallos.db, which is the whole restore on SQLite and
+// reaches nothing on PostgreSQL — the file the running instance never reads.
+// So on any other backend the rows go back instead (issue #23).
+//
+// One transaction, and the archive is validated before a single row is
+// removed: a restore that stops halfway leaves an installation that is neither
+// the old one nor the new one, which is worse than one that refused.
 if (!wallos_db_file_backup_supported($db)) {
-    http_response_code(501);
+    if (!isset($_FILES['file']) || $_FILES['file']['error'] !== 0) {
+        http_response_code(400);
+        die(json_encode([
+            "success" => false,
+            "message" => translate('no_file_uploaded', $i18n)
+        ]));
+    }
+
+    $uploaded = $_FILES['file']['tmp_name'];
+
+    if (!is_uploaded_file($uploaded)) {
+        http_response_code(400);
+        die(json_encode(["success" => false, "message" => translate('error', $i18n)]));
+    }
+
+    $restored = wallos_archive_import($db, $uploaded, __DIR__ . '/../../images/uploads');
+
+    if (!$restored['success']) {
+        http_response_code(400);
+        error_log('Wallos restore: ' . (string) $restored['error']);
+        die(json_encode([
+            "success" => false,
+            "message" => translate('restore_failed', $i18n) . ' ' . (string) $restored['error']
+        ]));
+    }
+
     die(json_encode([
-        "success" => false,
-        "message" => wallos_db_file_backup_refusal('restore', $db)
+        "success" => true,
+        "message" => translate('restore_successful', $i18n),
+        "tables" => $restored['tables'],
+        "rows" => $restored['rows']
     ]));
 }
 

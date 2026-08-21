@@ -974,11 +974,58 @@ The migrator sets every sequence and says so; this confirms it on your data.
   A subscription referencing a deleted category, a payment method id of 0 — both
   were accepted by SQLite and are rejected here. That is the integrity
   improvement working, but it will surface as an error message.
-* **Backup and restore do not work on PostgreSQL.** Sections `endpoints/db/`
-  operate on the SQLite file. They will report success and do nothing. Use
-  `pg_dump`.
+* **Backup and restore work on PostgreSQL since 5.8.4**, by a different route
+  than on SQLite. There the archive is the database file; here it is the rows
+  themselves — `manifest.json`, one JSON file per table, and the uploads. See
+  8.4 below.
 * **Prices come back as strings** from the API rather than as JSON numbers.
   Harmless in PHP, visible to any client doing arithmetic on the response.
+
+### 8.4 Backup and restore on PostgreSQL
+
+Until 5.8.2 both reported success and did nothing: the archive was built from
+`db/`, which on PostgreSQL holds only `setup_token.db`. 5.8.2 refused instead of
+lying. 5.8.4 does the thing itself
+([#23](https://github.com/thorstenhornung1/Wallos/issues/23)).
+
+The archive is rows rather than a file, which is what lets one format serve both
+backends:
+
+```
+manifest.json      format, version, backend, and a row count per table
+data/<table>.json  one file per table
+uploads/…          everything under images/uploads/
+```
+
+Take one through the interface — **Admin → Backup** — and look inside it:
+
+```sh
+unzip -l Wallos-Backup-*.zip | head
+unzip -p Wallos-Backup-*.zip manifest.json | head -20
+```
+
+Expected: one `data/…json` per table, a `manifest.json` naming `"driver":
+"pgsql"`, and your uploaded logos under `uploads/`.
+
+Then restore it, and check three things rather than one:
+
+1. **Something you changed after the backup is gone again.** Add a category,
+   restore, and confirm it is not there. A restore that did nothing passes every
+   other check.
+2. **The row counts match the manifest.** The response says how many tables and
+   rows it wrote.
+3. **Writing still works afterwards.** Add another category. This is the one
+   that fails on PostgreSQL if the restore is naive: inserting explicit ids does
+   not advance a sequence, so the next insert collides with a row the restore
+   just wrote. It surfaces hours later on an unrelated page, which is why it is
+   worth ten seconds here.
+
+**The archive contains credentials in clear text** — SMTP passwords, API keys,
+the OIDC client secret — because restoring an installation requires them. The
+manifest says so. Treat the file the way you would treat the database.
+
+SQLite still takes the file-copy route: it restores faster, and existing
+archives keep working.
 
 ## 9. Writing up what you find
 
