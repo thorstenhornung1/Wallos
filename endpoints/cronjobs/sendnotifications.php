@@ -91,6 +91,41 @@ function buildNotificationMessage($name, $perUser, $periodSummaryLine, $includeP
     return $message;
 }
 
+// Six questions for everybody, instead of six per person.
+//
+// This loop used to ask each account for its currencies, household members,
+// categories, budget configuration and subscriptions one at a time. On SQLite
+// that is a function call and the shape is invisible; on PostgreSQL it is a
+// network round trip each, so the one job that runs unattended over every
+// account grew with the number of accounts multiplied by the latency to the
+// database — about 2.5 ms per account over loopback and 10 ms over an overlay
+// network (issue #99).
+//
+// Only the accounts that will be processed: an installation with ten thousand
+// accounts and forty using notifications reads forty accounts' worth of rows.
+$notifiedUserIds = array_keys($usersWithNotifications);
+
+$currenciesByUser = wallos_index_rows_by(
+    wallos_load_rows_by_user($db, 'currencies', $notifiedUserIds), 'id');
+$householdByUser = wallos_index_rows_by(
+    wallos_load_rows_by_user($db, 'household', $notifiedUserIds), 'id');
+$categoriesByUser = wallos_index_rows_by(
+    wallos_load_rows_by_user($db, 'categories', $notifiedUserIds), 'id');
+$activeSubscriptionsByUser = wallos_load_rows_by_user($db, 'subscriptions', $notifiedUserIds,
+    'user_id, price, currency_id, next_payment, cycle, frequency, inactive, auto_renew',
+    'user_id', 'inactive = 0');
+$notifySubscriptionsByUser = wallos_load_rows_by_user($db, 'subscriptions', $notifiedUserIds,
+    '*', 'user_id', 'notify = 1 AND inactive = 0');
+
+$budgetByUser = [];
+$budgetRows = wallos_load_rows_by_user($db, 'user', $notifiedUserIds,
+    'id AS user_id, main_currency, period_budget, budget_period_type, budget_period_anchor_date',
+    'id');
+
+foreach ($budgetRows as $userId => $rows) {
+    $budgetByUser[$userId] = $rows[0];
+}
+
 while ($userToNotify = $usersToNotify->fetchArray(SQLITE3_ASSOC)) {
     $userId = $userToNotify['id'];
     if (php_sapi_name() !== 'cli') {
@@ -201,46 +236,16 @@ while ($userToNotify = $usersToNotify->fetchArray(SQLITE3_ASSOC)) {
         }
         continue;
     } else {
-        // Get all currencies
-        $currencies = array();
-        $query = "SELECT * FROM currencies WHERE user_id = :userId";
-        $stmt = $db->prepare($query);
-        $stmt->bindValue(':userId', $userId, SQLITE3_INTEGER);
-        $result = $stmt->execute();
+        // Loaded for every account before the loop; see the block above it.
+        $currencies = $currenciesByUser[$userId] ?? [];
 
-        while ($row = $result->fetchArray(SQLITE3_ASSOC)) {
-            $currencies[$row['id']] = $row;
-        }
+        $household = $householdByUser[$userId] ?? [];
 
-        // Get all household members
-        $query = "SELECT * FROM household WHERE user_id = :userId";
-        $stmt = $db->prepare($query);
-        $stmt->bindValue(':userId', $userId, SQLITE3_INTEGER);
-        $resultHousehold = $stmt->execute();
-
-        $household = [];
-        while ($rowHousehold = $resultHousehold->fetchArray(SQLITE3_ASSOC)) {
-            $household[$rowHousehold['id']] = $rowHousehold;
-        }
-
-        // Get all categories
-        $query = "SELECT * FROM categories WHERE user_id = :userId";
-        $stmt = $db->prepare($query);
-        $stmt->bindValue(':userId', $userId, SQLITE3_INTEGER);
-        $resultCategories = $stmt->execute();
-
-        $categories = [];
-        while ($rowCategory = $resultCategories->fetchArray(SQLITE3_ASSOC)) {
-            $categories[$rowCategory['id']] = $rowCategory;
-        }
+        $categories = $categoriesByUser[$userId] ?? [];
 
         $currentDate = new DateTime('now');
 
-        $query = "SELECT main_currency, period_budget, budget_period_type, budget_period_anchor_date FROM \"user\" WHERE id = :userId";
-        $stmt = $db->prepare($query);
-        $stmt->bindValue(':userId', $userId, SQLITE3_INTEGER);
-        $result = $stmt->execute();
-        $userBudgetConfig = $result->fetchArray(SQLITE3_ASSOC);
+        $userBudgetConfig = $budgetByUser[$userId] ?? [];
 
         $mainCurrencyId = $userBudgetConfig['main_currency'];
         $budgetPeriodType = sanitizeBudgetPeriodType($userBudgetConfig['budget_period_type'] ?? 'monthly');
@@ -248,13 +253,14 @@ while ($userToNotify = $usersToNotify->fetchArray(SQLITE3_ASSOC)) {
         $activeBudgetPeriod = getActiveBudgetPeriod($currentDate, $budgetPeriodType, $budgetPeriodAnchorDate);
         $isPeriodStart = $activeBudgetPeriod['start']->format('Y-m-d') === $currentDate->format('Y-m-d');
 
-        $query = "SELECT price, currency_id, next_payment, cycle, frequency, inactive, auto_renew FROM subscriptions WHERE user_id = :userId AND inactive = 0";
-        $stmt = $db->prepare($query);
-        $stmt->bindValue(':userId', $userId, SQLITE3_INTEGER);
-        $result = $stmt->execute();
+        // Filtered here rather than in SQL: the rows are already in memory, and
+        // a second query per account is the thing this is removing.
         $periodSubscriptions = [];
-        while ($row = $result->fetchArray(SQLITE3_ASSOC)) {
-            $periodSubscriptions[] = $row;
+
+        foreach ($activeSubscriptionsByUser[$userId] ?? [] as $row) {
+            if ((int) $row['inactive'] === 0) {
+                $periodSubscriptions[] = $row;
+            }
         }
 
         $amountNeededThisPeriod = computeAmountNeededInPeriod($periodSubscriptions, $currentDate, $activeBudgetPeriod['end'], $db, $userId);
@@ -269,16 +275,22 @@ while ($userToNotify = $usersToNotify->fetchArray(SQLITE3_ASSOC)) {
 
         $sendPeriodStartSummaryOnly = $periodSummaryAtPeriodStart === 1 && $isPeriodStart;
 
-        $query = "SELECT * FROM subscriptions WHERE user_id = :user_id AND notify = :notify AND inactive = :inactive ORDER BY payer_user_id ASC";
-        $stmt = $db->prepare($query);
-        $stmt->bindValue(':user_id', $userId, SQLITE3_INTEGER);
-        $stmt->bindValue(':notify', 1, SQLITE3_INTEGER);
-        $stmt->bindValue(':inactive', 0, SQLITE3_INTEGER);
-        $resultSubscriptions = $stmt->execute();
+        // The notify list for this account, out of the rows loaded before the
+        // loop. Sorted here by the same key the query used — payer, ascending —
+        // because the grouping below builds one message per payer and the order
+        // decides how it reads.
+        $subscriptionsToConsider = $notifySubscriptionsByUser[$userId] ?? [];
+        usort($subscriptionsToConsider, function ($left, $right) {
+            return (int) ($left['payer_user_id'] ?? 0) <=> (int) ($right['payer_user_id'] ?? 0);
+        });
 
         $notify = [];
         $i = 0;
-        while ($rowSubscription = $resultSubscriptions->fetchArray(SQLITE3_ASSOC)) {
+        foreach ($subscriptionsToConsider as $rowSubscription) {
+            if ((int) $rowSubscription['notify'] !== 1 || (int) $rowSubscription['inactive'] !== 0) {
+                continue;
+            }
+
             if ($rowSubscription['notify_days_before'] !== -1) {
                 $daysToCompare = $rowSubscription['notify_days_before'];
             } else {

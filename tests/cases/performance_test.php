@@ -194,6 +194,85 @@ wallos_test('the notification cron no longer queries per user per provider', fun
         'the cancellation cron loads in bulk too');
 });
 
+wallos_test('the notification cron asks the same number of questions for one account as for many', function () {
+    // The assertion issue #18 asks for, on the job issue #99 measured. Counting
+    // queries rather than milliseconds because the two disagree by a factor of
+    // four between deployments and agree exactly on this number: the same code
+    // took 2.5 ms per account over loopback and 10 ms over an overlay network,
+    // and both were six round trips per account.
+    //
+    // Six questions per account inside the loop is invisible on SQLite — the
+    // engine is in the same process — and is the whole cost on PostgreSQL.
+    $db = wallos_test_open_counting_database();
+
+    foreach ([1, 2, 3, 4, 5] as $userId) {
+        wallos_test_create_user($db, $userId, 'counted' . $userId);
+
+        $enable = $db->prepare('INSERT INTO email_notifications (enabled, smtp_mode, user_id)
+                                VALUES (1, :mode, :user)');
+        $enable->bindValue(':mode', 'instance');
+        $enable->bindValue(':user', $userId);
+        $enable->execute();
+    }
+
+    require_once WALLOS_ROOT . '/includes/notification_settings.php';
+
+    $settings = wallos_load_notification_settings($db);
+    $users = array_keys(wallos_users_with_notifications($settings, $db));
+    assert_same(5, count($users), 'all five accounts are due to be processed');
+
+    $before = $db->queryCount;
+
+    // What the cron does before its loop: the six per-account questions, asked
+    // once for everybody.
+    wallos_load_rows_by_user($db, 'currencies', $users);
+    wallos_load_rows_by_user($db, 'household', $users);
+    wallos_load_rows_by_user($db, 'categories', $users);
+    wallos_load_rows_by_user($db, 'subscriptions', $users);
+    wallos_load_rows_by_user($db, 'user', $users, '*', 'id');
+
+    $forFive = $db->queryCount - $before;
+    $before = $db->queryCount;
+
+    wallos_load_rows_by_user($db, 'currencies', [1]);
+    wallos_load_rows_by_user($db, 'household', [1]);
+    wallos_load_rows_by_user($db, 'categories', [1]);
+    wallos_load_rows_by_user($db, 'subscriptions', [1]);
+    wallos_load_rows_by_user($db, 'user', [1], '*', 'id');
+
+    $forOne = $db->queryCount - $before;
+
+    assert_same($forOne, $forFive,
+        'five accounts cost the same number of queries as one (' . $forFive . ' against ' . $forOne . ')');
+    assert_same(5, $forFive, 'and that number is one per question, not one per account');
+
+    // The rows are still there — a loader that returned nothing would also
+    // keep the query count flat.
+    $currencies = wallos_load_rows_by_user($db, 'currencies', $users);
+    assert_same(5, count($currencies), 'every account got its own rows back');
+
+    $db->close();
+});
+
+wallos_test('the cron reads the per-account rows from memory, not from the database', function () {
+    // The gate on the loop itself. The loader above can be perfect and the loop
+    // can still ask its own questions; what matters is that the statements are
+    // gone from inside it.
+    $source = file_get_contents(WALLOS_ROOT . '/endpoints/cronjobs/sendnotifications.php');
+
+    foreach ([
+        'SELECT \* FROM currencies WHERE user_id',
+        'SELECT \* FROM household WHERE user_id',
+        'SELECT \* FROM categories WHERE user_id',
+        'FROM subscriptions WHERE user_id = :userId',
+    ] as $pattern) {
+        assert_same(0, preg_match_all('/' . $pattern . '/', $source),
+            'no per-account query for: ' . str_replace('\\', '', $pattern));
+    }
+
+    assert_contains('wallos_load_rows_by_user', $source, 'the rows are loaded in bulk instead');
+});
+
 wallos_test_pending(
     'one row per user is enforced where intended',
     'specification 45.7 — settings tables allow duplicate rows per user',

@@ -10,6 +10,22 @@
 */
 
 /**
+ * One row of a result, keyed by column name.
+ *
+ * The mode constant lives here and nowhere else in this file. The result object
+ * defaults to returning every column twice — once by name and once by position
+ * — and the boundary offers no way to ask for names only without naming the
+ * constant (issue #20), so it is named once.
+ *
+ * @param mixed $result
+ * @return array|false
+ */
+function wallos_notification_fetch($result)
+{
+    return $result === false ? false : $result->fetchArray(SQLITE3_ASSOC);
+}
+
+/**
  * Provider key => table name. The key is what the cron jobs use internally.
  */
 const WALLOS_NOTIFICATION_TABLES = [
@@ -43,7 +59,7 @@ function wallos_load_notification_settings($db)
         $stmt = @$db->prepare('SELECT * FROM ' . $table);
         $result = $stmt ? $stmt->execute() : false;
 
-        while ($result && $row = $result->fetchArray(SQLITE3_ASSOC)) {
+        while ($row = wallos_notification_fetch($result)) {
             if (isset($row['user_id'])) {
                 $settings[$provider][(int) $row['user_id']] = $row;
             }
@@ -71,7 +87,7 @@ function wallos_load_notification_timing($db)
     $timing = [];
     $result = $db->query('SELECT ' . $columns . ' FROM notification_settings');
 
-    while ($result && $row = $result->fetchArray(SQLITE3_ASSOC)) {
+    while ($row = wallos_notification_fetch($result)) {
         $timing[(int) $row['user_id']] = [
             'days' => (int) $row['days'],
             'period_summary_at_period_start' => (int) ($row['period_summary_at_period_start'] ?? 0),
@@ -105,9 +121,110 @@ function wallos_users_with_notifications($settings, $db)
     }
 
     $result = $db->query('SELECT user_id FROM email_notifications WHERE enabled = 1');
-    while ($result && $row = $result->fetchArray(SQLITE3_ASSOC)) {
+    while ($row = wallos_notification_fetch($result)) {
         $users[(int) $row['user_id']] = true;
     }
 
     return $users;
+}
+
+/**
+ * Rows of one table for a set of accounts, in one query, grouped by account.
+ *
+ * The notification cron asked six questions per account inside its loop. On
+ * SQLite that costs almost nothing — the engine runs in the same process — so
+ * the shape was invisible for as long as SQLite was the only backend. On
+ * PostgreSQL each is a network round trip, and the job that exists to run
+ * unattended over every account grew by about 2.5 ms per account over loopback
+ * and 10 ms over an overlay network (issue #99).
+ *
+ * Six questions for everybody instead of six per person. The same rows, the
+ * same order, one query each — which is what #16 already did for the
+ * notification settings themselves and what #18 asks to be able to assert.
+ *
+ * Asked only for the accounts that will actually be processed, so an
+ * installation with ten thousand accounts and forty using notifications reads
+ * forty accounts' worth of rows rather than everybody's.
+ *
+ * @param WallosDatabase $db
+ * @param string         $table    a table name from this file, never a request
+ * @param int[]          $userIds
+ * @param string         $columns  what to select
+ * @param string         $idColumn the column naming the account — "user" itself
+ *                                 is keyed by id rather than user_id
+ * @param string         $where    an extra condition, from this file only. The
+ *                                 per-account queries this replaces were
+ *                                 filtered, and loading everything and
+ *                                 filtering in PHP trades round trips for rows
+ *                                 — which is the wrong trade for an account
+ *                                 with thousands of subscriptions.
+ * @return array<int, array[]> user id => rows, accounts with none absent
+ */
+function wallos_load_rows_by_user($db, $table, array $userIds, $columns = '*', $idColumn = 'user_id', $where = '')
+{
+    if ($userIds === []) {
+        return [];
+    }
+
+    // The ids are cast as they are read and the table name comes from the
+    // caller in this file; no backend binds an identifier, and a placeholder
+    // list would be as long as the account list anyway.
+    $ids = [];
+    foreach ($userIds as $userId) {
+        $ids[] = (int) $userId;
+    }
+
+    $condition = $where === '' ? '' : ' AND ' . $where;
+    $statement = $db->prepare('SELECT ' . $columns . ' FROM "' . $table . '"
+                               WHERE "' . $idColumn . '" IN (' . implode(',', $ids) . ')' . $condition);
+
+    if ($statement === false) {
+        return [];
+    }
+
+    $result = $statement->execute();
+
+    if ($result === false) {
+        return [];
+    }
+
+    $grouped = [];
+
+    while ($row = wallos_notification_fetch($result)) {
+        // The account column is user_id everywhere except in "user" itself,
+        // where the caller either aliases id to user_id or does not — and a
+        // loader that assumed one of those would warn on the other.
+        $key = array_key_exists('user_id', $row) ? $row['user_id'] : ($row[$idColumn] ?? null);
+
+        if ($key === null) {
+            continue;
+        }
+
+        $grouped[(int) $key][] = $row;
+    }
+
+    return $grouped;
+}
+
+/**
+ * The same, keyed by a column of each row rather than appended in order.
+ *
+ * The cron indexes currencies, household members and categories by their own
+ * id, because the subscription rows reference them by id.
+ *
+ * @param array<int, array[]> $grouped
+ * @param string              $key
+ * @return array<int, array<int|string, array>>
+ */
+function wallos_index_rows_by($grouped, $key)
+{
+    $indexed = [];
+
+    foreach ($grouped as $userId => $rows) {
+        foreach ($rows as $row) {
+            $indexed[$userId][$row[$key]] = $row;
+        }
+    }
+
+    return $indexed;
 }
