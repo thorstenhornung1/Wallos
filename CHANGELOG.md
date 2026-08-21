@@ -1,5 +1,115 @@
 # Changelog
 
+## [5.8.4](https://github.com/thorstenhornung1/Wallos/releases/tag/v5.8.4) (2026-08-21)
+
+What the 5.8.3 night run found, plus a night of work on the shape behind
+several of these: a write whose result nobody reads, and a refusal nobody can
+tell from a success.
+
+### Security
+
+* **web server:** PHP executed in the three directories the web server user can
+  write to — `db/`, `images/uploads/` and everything under it. The 5.8.0
+  ownership split made the application code unwritable and left exactly those
+  writable, so they were the ones that could run what was placed in them
+  ([#94](https://github.com/thorstenhornung1/Wallos/issues/94)).
+
+  Not a live vulnerability: the application re-encodes uploads, forces the
+  extension and sanitises the name, and restore rejects `.php` in an archive.
+  But that invariant was the entire safety margin, in a layer with no reason to
+  depend on it. The rules named directories one at a time — `logos/` was
+  refused, `icons/` was not, and nothing writes to `icons/` at all, which is how
+  it went unnoticed. It is a prefix now, and `security.limit_extensions` in the
+  php-fpm pool is the second layer.
+
+* **auth:** every refusal from the endpoint guards answered HTTP 200. A request
+  with no session, an expired session or an invalid CSRF token was refused
+  correctly and reported as successful, so anything reading status codes rather
+  than parsing bodies — a proxy, a monitoring probe, `curl -f`, a rate limiter
+  counting 401s — was told the request had worked
+  ([#97](https://github.com/thorstenhornung1/Wallos/issues/97)).
+
+  Now 405, 403 and 401. Ten endpoints had no guard at all, because they read
+  over GET and the only guard available demanded POST and a CSRF token: with no
+  cookie, `endpoints/subscriptions/get.php` ran the page-building code with no
+  user and answered 200 with three PHP warnings naming absolute paths. Eight of
+  them now refuse before anything can write; the two that run during setup check
+  a token of their own.
+
+### Fixed
+
+* **db:** a migration was recorded as applied whether or not it worked, and
+  whether or not the record itself was written
+  ([#87](https://github.com/thorstenhornung1/Wallos/issues/87)). This is not
+  hypothetical: migration 000016 drops a table while its own read of it is still
+  open, SQLite refuses, the result was never checked — so it recorded itself as
+  done with the table still there, on every installation ever made, until 000065
+  removed it years later. A migration that is marked done is never retried.
+
+  A migration returning false is now not recorded, a failed record is not
+  treated as applied, and neither case runs the migrations that follow.
+* **auth:** `verifyemail.php` sent people to a success page when the
+  verification had failed. Removing the row *is* the verification, and the
+  redirect ran regardless — so the next step was a login that refused them with
+  nothing saying why.
+* **auth:** the remember-me cookie was set whether or not the token behind it
+  reached the database, and `includes/remember_me.php` restored a session
+  without checking that the recorded session id had followed it. The second one
+  put the defect 5.8.0 closed back within reach of one failed write: back-channel
+  revocation would have deleted a session that no longer existed and left the
+  restored one running for as long as the cookie lasts.
+* **db:** the rates job committed new exchange rates without recording that it
+  had updated them, so the next run either refetched — spending quota at a
+  provider that charges per call — or the page reported rates as older than they
+  are.
+* **ui:** custom CSS and colour schemes were reported as saved whether or not
+  they were written. Each is a delete followed by an insert, so the message now
+  distinguishes "could not save" from "could not save, and the previous one is
+  gone".
+* **accounts:** the currencies and payment methods a new account starts with
+  were written out in three files, sixteen inserts, every result discarded — so
+  an account holding eleven of its thirty-four currencies was reported as
+  created. One helper now, which stops at the first failed write.
+* **email:** password reset redirected to the front page in silence on an
+  instance with no usable transport or no `server_url`, which is what a broken
+  feature looks like as well ([#96](https://github.com/thorstenhornung1/Wallos/issues/96)).
+* **dev:** the benchmark left eleven orphaned notification rows behind on every
+  run and reported a clean removal
+  ([#98](https://github.com/thorstenhornung1/Wallos/issues/98)). Both scripts
+  take the tables from the schema now, and the cleanup reports what it could
+  *not* remove — "what I deleted" and "what is left" being different questions,
+  and only the second one would have shown this.
+
+### Added
+
+* **tests:** the migration chain now runs against a PostgreSQL database that
+  predates it. Every PostgreSQL test until now started from the baseline, which
+  records all migrations as applied — so none of them ever ran one, and a
+  migration PostgreSQL rejects would have passed everything and failed on the
+  first real upgrade. The case loads the 5.8.0 baseline, applies the rest, and
+  compares the result to a fresh install column by column. It runs on
+  PostgreSQL 14 and 18 in CI ([#80](https://github.com/thorstenhornung1/Wallos/issues/80)).
+* **dev:** `dev/write-audit.php` counts and holds the writes whose outcome
+  nobody reads. 66 discarded results and 368 unchecked prepares when it was
+  written; 23 and 315 now, each step held by the ratchet
+  ([#87](https://github.com/thorstenhornung1/Wallos/issues/87)).
+* **cron:** a failure survives the next success. `cron_runs` holds one row per
+  job, so a job dying every third night showed green every morning after it
+  worked. Three columns record the last failure and a count a success does not
+  reset, and the admin page warns while it is recent.
+
+### Documentation
+
+* **test plan:** section 6 carries the first PostgreSQL load figures — two runs,
+  on the test instance and on a laptop. The list is within two milliseconds of
+  the SQLite numbers; the notification cron is flat on SQLite and grows by about
+  10 ms per account on the instance and 2.5 ms on the laptop. Same code, same
+  query count, four times the price: the per-user cost tracks the distance to
+  the database, which is what an N+1 looks like when the constant is the round
+  trip ([#99](https://github.com/thorstenhornung1/Wallos/issues/99)).
+* **test plan:** section 8 states which PostgreSQL versions this is known to
+  work on, and — more usefully — the two things that range does not cover.
+
 ## [5.8.3](https://github.com/thorstenhornung1/Wallos/releases/tag/v5.8.3) (2026-08-20)
 
 Two things the 5.8.2 test run recorded without an issue capturing them, one
