@@ -66,6 +66,22 @@ wallos_test('the refusal comes before the handler that would run the file', func
     }
 });
 
+wallos_test('the database directory is denied whole, not by extension', function () {
+    // It used to deny \.db$, which protects the database and serves anything
+    // else somebody puts there — a .sql, a .bak, a .tar.gz. Nothing writes such
+    // a file today, and that is the dependency #94 was about: an invariant
+    // carrying the whole safety margin in a layer with no reason to depend on
+    // it. The 2026-08-21 test run quoted that reasoning back at the release
+    // that made it.
+    foreach (['nginx.conf', 'nginx.default.conf'] as $path) {
+        $source = webserver_rules_source($path);
+
+        assert_contains('location ^~ /db/', $source, $path . ' denies the directory by prefix');
+        assert_not_contains('location ~ \.db$', $source,
+            $path . ' no longer relies on the extension');
+    }
+});
+
 wallos_test('php-fpm is told which extensions it may run', function () {
     // The second layer. nginx decides what it hands to php-fpm; this decides
     // what php-fpm agrees to run when something else asks — and the whole
