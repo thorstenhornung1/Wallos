@@ -28,6 +28,15 @@ reason the release itself argues against relying on.
 | `write-audit` ratchet | **pass** | 23 discarded, 315 unchecked, in 119 files |
 | backups outside the webroot | **pass** | system temp; `.tmp/` denied entirely |
 | `db/` serves non-`.db` files | **observation** | safe today, rests on an invariant |
+| 4 accounts and sessions | **pass** | both log in, CSRF issued |
+| 5.1 / 5.3 instance SMTP, database untouched | **pass** | mail sent, `admin` row empty |
+| 5.2 secrets never reach the browser | **pass** | 208 KB / 108 KB, 0 hits each |
+| 5.4 / 5.5 inheritance and own transport | **pass** | same recipient, two senders |
+| 5.6 notifications go out | **pass**, after correcting the fixture | `Difference: 1` → delivered |
+| 5.8 cron jobs | **pass** | five jobs, no fatal |
+| 7.1 admin claim from the environment | **pass** | both fields managed, roles intact |
+| 7.4 back-channel refusal path | **pass** | `400 invalid_request` |
+| 7.5 OIDC secret not in the admin API | **pass** | 1269 bytes, 0 hits |
 
 ## Details
 
@@ -190,6 +199,74 @@ to depend on it."* `.tmp/` got a blanket denial; `db/` has an extension
 denylist. A blanket denial there would cost nothing, since every file the
 application puts in it is a `.db`.
 
+## Full regression, not only the changed paths
+
+The first version of this report ran the four areas 5.8.4 touches and recorded
+sections 4, 5 and 7 as "not covered, the release changes none of the paths they
+cover". That justification was an assumption rather than a measurement, and it
+was wrong on its face: the #97 fix rewrote **every endpoint guard**, which is
+what every test in sections 5 and 7 passes through. They were re-run.
+
+```
+4    login dummy / dummy2            302 / 302, CSRF token 64 chars each
+5.1  instance SMTP                   {"success":true}
+5.3  admin row while mail is sent    smtp_address=[] from_email=[]
+5.4  dummy2 inherits                 {"success":true}
+5.5  dummy2 own transport            {"success":true}
+5.2  settings.php  208589 bytes      smtp:0 oidc:0 db:0
+     admin.php     108549 bytes      smtp:0 oidc:0 db:0
+5.8  five cron jobs                  fatal=0 each
+
+7.1  admin_claim=[groups] admin_value=[admin]
+       both reported environment-managed
+       roles: dummy admin/local, admin admin/oidc
+7.4  empty body / garbage / a.b.c    400 {"error":"invalid_request"}
+7.5  api/admin/get_oidc_settings     1269 bytes, 0 hits, client_secret_set:true
+     discovery: end_session_endpoint and jwks_uri both resolved
+```
+
+Mailbox afterwards — the same recipient reached by two different senders, which
+is what separates inheritance from a shared transport:
+
+```
+wallos@test.hornung-bn.de  -> dummy@example.com
+wallos@test.hornung-bn.de  -> dummy2@example.com
+user2@test.hornung-bn.de   -> dummy2@example.com
+```
+
+### 5.6 was silent, and the silence was the fixture
+
+The first run of section 5 produced **no output at all** from
+`sendnotifications`. Not a failure message — nothing.
+
+```
+today:                     2026-08-21
+Melde-Test next_payment:   2026-08-21   notify_days_before = 1
+```
+
+The subscription was created on 2026-08-20 with a payment date one day out.
+That made it due for notice then. A day later the difference is 0, not 1, and
+the job correctly says nothing. With the date moved forward:
+
+```
+Subscription: Melde-Test
+Difference: 1
+Email Notifications sent
+-> wallos@test.hornung-bn.de -> dummy@example.com  "Wallos Notification"
+```
+
+**Two lessons, and the second is the one worth keeping.**
+
+The fixture aged: a subscription with a fixed payment date is a different test
+case the next day. Section 5.6 of the plan should set the date relative to the
+run rather than leaving whatever a previous run wrote.
+
+And running everything only helps if an empty result is noticed. A run that
+skips 5.6 because "nothing changed there" misses this; a run that executes it
+and reads no output as a pass is worse than not running it. The check that
+caught it was comparing the output against what the previous run produced, not
+against an expectation of success.
+
 ## Conclusions, kept separate from the observations above
 
 * **Both security findings from the night run are closed**, and each was checked
@@ -206,6 +283,7 @@ application puts in it is a `.db`.
 * The migration *upgrade* path on PostgreSQL. 5.8.4 adds a CI case for it on 14
   and 18; this instance was created from the baseline, so nothing here exercises
   it.
-* Sections 4, 5 and 7 of the plan were not re-run — 5.8.4 changes none of the
-  paths they cover, and the release is a patch on the code exercised in the
-  [night run](test-results-2026-08-20-nightrun.md).
+* Section 6 (load). Unchanged in this release and measured on 5.8.3 in the
+  [night run](test-results-2026-08-20-nightrun.md); the figures there stand.
+* 7.2 and 7.3 need a browser. 7.3 was verified on 5.8.2 and the logout path is
+  untouched by this release, but that is an argument, not a measurement.
