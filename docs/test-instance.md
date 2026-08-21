@@ -306,6 +306,26 @@ with notifications on, then:
 $EXEC php /var/www/html/endpoints/cronjobs/sendnotifications.php
 ```
 
+**Set the payment date relative to the run, not once.** A fixture with a fixed
+date is a different test case the next day: a subscription created yesterday as
+"due tomorrow" is due *today* by the time you run it again, the difference is 0
+rather than 1, and the job correctly says nothing. That happened on 2026-08-21
+and produced no output at all — not a failure, silence — which is the hardest
+result to read.
+
+```sh
+$EXEC php -r 'require "/var/www/html/includes/database/connection.php";
+$db = wallos_database_connect();
+$s = $db->prepare("UPDATE subscriptions SET next_payment = :d WHERE name = \'Melde-Test\'");
+$s->bindValue(":d", (new DateTime("now"))->modify("+1 day")->format("Y-m-d"));
+$s->execute();'
+```
+
+And read an empty result as a question rather than as a pass. The run that
+caught this compared the output against what the previous run had produced; a
+run that treats no output as success would have recorded a passing test for a
+job that did nothing.
+
 The job explains its decision, which is what makes it debuggable:
 
 ```

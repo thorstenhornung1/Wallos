@@ -1,5 +1,95 @@
 # Changelog
 
+## [5.8.5](https://github.com/thorstenhornung1/Wallos/releases/tag/v5.8.5) (2026-08-21)
+
+Four issues that had been waiting on somebody deciding what the answer should
+be, and one observation the 2026-08-21 test run made by quoting 5.8.4's own
+reasoning back at it.
+
+### Added
+
+* **db:** backup and restore work on PostgreSQL
+  ([#23](https://github.com/thorstenhornung1/Wallos/issues/23)). Until 5.8.2
+  both reported success and did nothing — the archive was built from `db/`,
+  which on PostgreSQL holds only `setup_token.db`. 5.8.2 refused instead of
+  lying; this does the thing itself.
+
+  The archive is the rows rather than the file: a manifest, one JSON file per
+  table, and the uploads. A dump belongs to the engine that produced it, and
+  neither backend can read the other's; rows are what both agree on. That also
+  makes it portable in the direction that matters — an installation that
+  outgrows SQLite can restore into PostgreSQL.
+
+  Three things it has to get right, each asserted rather than assumed. Rows go
+  in parents-first, in an order computed from the target's own foreign keys
+  rather than a list that would go stale. Every serial sequence is moved past
+  the restored ids, because inserting an explicit id does not advance one and
+  the first write afterwards would otherwise collide — hours later, somewhere
+  unrelated. And the whole restore is one transaction: a restore that stops
+  halfway leaves an installation that is neither the old one nor the new one.
+
+  SQLite keeps the file copy: it restores faster and existing archives keep
+  working. **The archive holds SMTP passwords, API keys and the OIDC client
+  secret in clear text**, because restoring an installation requires them. The
+  manifest says so.
+
+### Fixed
+
+* **security:** rows left behind by an account that no longer exists are
+  removed before the next account can inherit them
+  ([#92](https://github.com/thorstenhornung1/Wallos/issues/92)). `user.id` does
+  not ask SQLite to keep counting, so a deleted id is handed out again — delete
+  the newest account, create another, and it gets the same number along with
+  whatever the old one left. Another person's subscriptions, spending history
+  and household members, shown as the new account's own.
+
+  Deletion has been complete since #81, so nothing new is being created;
+  migration 000067 clears what is already there. `user_id 0` and NULL are not
+  orphans — older installations carry system rows belonging to nobody — and an
+  installation with no accounts is left alone entirely, because a fresh
+  database seeds its defaults against user 1 before user 1 exists. That last
+  one was found by running the repair against the schema generator's reference
+  database: 83 rows removed from a database whose only fault was being new.
+* **web server:** `db/` is denied whole rather than by extension. The rule
+  protected `.db` and served anything else — a `.sql`, a `.bak`, a `.tar.gz`.
+  Nothing writes such a file, which is exactly the dependency 5.8.4 refused to
+  keep for `images/uploads/`. Found by the 2026-08-21 test run, which quoted
+  that release's own sentence back at it.
+* **ui:** a refusal says which check it came from
+  ([#100](https://github.com/thorstenhornung1/Wallos/issues/100)). Sending
+  `paymentId` where an endpoint reads `id` produced the same word as a row that
+  does not exist, and a test run read it as the reference check failing to
+  fire — two of four such confusions in one session would have become issues
+  against working code. Removing the last administrator now says so as well,
+  rather than answering with the word used for database failures.
+
+### Changed
+
+* **cron:** the notification job asks its six per-account questions once for
+  everybody instead of once per account
+  ([#99](https://github.com/thorstenhornung1/Wallos/issues/99)). On SQLite that
+  loop was invisible — the engine runs in the same process — and on PostgreSQL
+  it was the whole cost: about 2.5 ms per account over loopback and 10 ms over
+  an overlay network, the same code at four times the price, because the
+  per-account cost tracks the distance to the database.
+
+  The guard is a query count rather than a timing, which is what
+  [#18](https://github.com/thorstenhornung1/Wallos/issues/18) asks for: five
+  accounts cost the same number of queries as one. Two measurements of the same
+  code disagreed by a factor of four on milliseconds and agreed exactly on this
+  number.
+* **db:** the boundary answers which tables exist, so the backup archive no
+  longer reads SQLite's schema table from application code (#41).
+
+### Documentation
+
+* **test plan:** section 8.4 covers backup and restore on PostgreSQL, including
+  the three things worth checking after a restore rather than the one that is
+  obvious.
+* **test plan:** section 5.6 sets the payment date relative to the run. A
+  fixture with a fixed date is a different test case the next day — on
+  2026-08-21 it produced no output at all, which is the hardest result to read.
+
 ## [5.8.4](https://github.com/thorstenhornung1/Wallos/releases/tag/v5.8.4) (2026-08-21)
 
 What the 5.8.3 night run found, plus a night of work on the shape behind
