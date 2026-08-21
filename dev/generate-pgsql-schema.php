@@ -750,7 +750,9 @@ function wallos_pgsql_schema_reference_database()
         wallos_pgsql_schema_remove($sandbox);
     }
 
-    foreach (['endpoints/cronjobs', 'includes/database/sqlite', 'migrations', 'db'] as $directory) {
+    // includes/ but not includes/database: that one is a symlink to the real
+    // directory below, and mkdir would take the name first.
+    foreach (['endpoints/cronjobs', 'includes', 'migrations', 'db'] as $directory) {
         mkdir($sandbox . '/' . $directory, 0700, true);
     }
 
@@ -760,18 +762,26 @@ function wallos_pgsql_schema_reference_database()
     copy($root . '/endpoints/cronjobs/createdatabase.php', $sandbox . '/endpoints/cronjobs/createdatabase.php');
     copy($root . '/includes/run_migrations.php', $sandbox . '/includes/run_migrations.php');
 
+    // The whole directory as one symlink, rather than a list of the files the
+    // sandbox happens to need today. That list has fallen behind twice: once
+    // when 543f25e added two requires to createdatabase.php, and again when the
+    // PostgreSQL installer joined them — each time the generator died while the
+    // test case that builds its own sandbox kept passing, so the tool the
+    // instructions point at was the broken one.
+    //
     // Symlinked rather than copied: a copy is a second file to PHP, so
     // require_once loads it again and every function is declared twice.
-    symlink($root . '/includes/database/connection.php', $sandbox . '/includes/database/connection.php');
-    symlink($root . '/includes/database/sqlite/database.php', $sandbox . '/includes/database/sqlite/database.php');
-
-    // createdatabase.php has required these two since 543f25e. Without them the
-    // command line generator died on its first line while the test case — which
-    // builds the same sandbox through tests/bootstrap.php, where they are
-    // symlinked — kept passing. So the file the test tells you to run to fix a
-    // stale baseline was itself broken, and only the instructions knew.
-    symlink($root . '/includes/database/configuration.php', $sandbox . '/includes/database/configuration.php');
+    symlink($root . '/includes/database', $sandbox . '/includes/database');
     symlink($root . '/includes/config_helper.php', $sandbox . '/includes/config_helper.php');
+
+    // The reference is always SQLite: this whole function exists to walk the
+    // migration chain forward, and the chain is SQLite statements. Without
+    // saying so, createdatabase.php reads the environment — and inside a
+    // container configured for PostgreSQL it takes the baseline path, returns,
+    // and leaves an empty file behind. The migrations then fail one after
+    // another against tables that were never created, which reads as sixty
+    // broken migrations rather than one unset variable.
+    putenv('WALLOS_DB_DRIVER=sqlite');
 
     $databaseFile = $sandbox . '/db/wallos.db';
 
