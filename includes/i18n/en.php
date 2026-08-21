@@ -35,6 +35,7 @@ $i18n = [
     "user_email_waiting_verification" => "Your email needs to be verified. Please check your email.",
     // Password Reset Page
     "forgot_password" => "Forgot Password",
+    "password_reset_unavailable" => "Password reset is not available on this server. Please contact your administrator.",
     "reset_password" => "Reset Password",
     "reset_sent_check_email" => "Reset email sent. Please check your email.",
     "password_reset_successful" => "Password reset successful",

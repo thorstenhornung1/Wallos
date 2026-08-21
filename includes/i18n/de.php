@@ -33,6 +33,7 @@ $i18n = [
     "user_email_waiting_verification" => "Ihre E-Mail muss noch verifiziert werden. Bitte überprüfen Sie Ihre E-Mail.",
     // Password Reset Page
     "forgot_password" => "Passwort vergessen?",
+    "password_reset_unavailable" => "Passwort-Zurücksetzen ist auf diesem Server nicht verfügbar. Bitte die Administration ansprechen.",
     "reset_password" => "Passwort zurücksetzen",
     "reset_sent_check_email" => "Passwort zurücksetzen E-Mail wurde gesendet. Bitte überprüfen Sie Ihr Postfach.",
     "password_reset_successful" => "Passwort erfolgreich zurückgesetzt",

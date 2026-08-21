@@ -40,8 +40,20 @@ if (isset($_COOKIE['colorTheme'])) {
 }
 
 $settings = $db->querySingle("SELECT * FROM admin", true);
+
+// Password reset needs a usable instance transport and a server_url to build
+// the link with. server_url is empty on a fresh installation — the default
+// state — so on an instance nobody configured for this, the whole feature is
+// inert.
+//
+// It used to redirect to the front page and say nothing, which is
+// indistinguishable from a broken feature: the form answers, the submission
+// redirects, no token appears and no message explains it. Two full attempts
+// were recorded as failures during a test run before the cause was found by
+// reading this file (issue #96). login.php already hides the link when the
+// feature is off; this is for everyone who arrives with the URL anyway.
 if (!wallos_get_instance_smtp_config($db)['valid'] || $settings['server_url'] == "") {
-    header("Location: .");
+    header("Location: login.php?reset=unavailable");
     exit();
 } else {
     $resetPasswordEnabled = true;

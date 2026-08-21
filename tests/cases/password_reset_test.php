@@ -84,3 +84,33 @@ wallos_test('an unknown address still looks exactly like a successful request', 
     assert_true(substr_count($block, '$hasSuccessMessage = true;') === 1,
         'set in one place only');
 });
+
+wallos_test('an unconfigured instance says so instead of redirecting in silence', function () {
+    // passwordreset.php needs a usable instance transport and a server_url to
+    // build the link with. server_url is empty on a fresh installation, so on
+    // an instance nobody configured for this the feature is inert — and it used
+    // to redirect to the front page saying nothing, which is what a broken
+    // feature looks like too. Two attempts in a test run were recorded as
+    // failures before the cause was found by reading the source (issue #96).
+    $source = file_get_contents(WALLOS_ROOT . '/passwordreset.php');
+
+    // Asked of the configuration check specifically. The other redirect in this
+    // file — somebody already signed in — goes to the front page and should:
+    // they do not need a password reset and nothing needs explaining.
+    $check = strpos($source, 'wallos_get_instance_smtp_config');
+    assert_true($check !== false, 'the configuration check is still there');
+
+    $afterCheck = substr($source, $check, 300);
+    assert_contains('reset=unavailable', $afterCheck,
+        'an unconfigured instance says why instead of redirecting in silence');
+
+    // And the login page has to be able to say it. A parameter nothing renders
+    // is the same silence with an extra step.
+    $login = file_get_contents(WALLOS_ROOT . '/login.php');
+    assert_contains("\$_GET['reset']", $login, 'login.php reads the reason');
+    assert_contains('password_reset_unavailable', $login, 'and renders a message for it');
+
+    require WALLOS_ROOT . '/includes/i18n/en.php';
+    assert_true(array_key_exists('password_reset_unavailable', $i18n),
+        'the message exists in the default language');
+});

@@ -45,7 +45,13 @@ RUN dos2unix /etc/cron.d/cronjobs && \
     chown -R www-data:www-data /var/www/html/db /var/www/html/images/uploads /var/www/html/.tmp && \
     chmod +x /var/www/html/startup.sh && \
     echo 'pm.max_children = 15' >> /usr/local/etc/php-fpm.d/zz-docker.conf && \
-    echo 'pm.max_requests = 500' >> /usr/local/etc/php-fpm.d/zz-docker.conf
+    echo 'pm.max_requests = 500' >> /usr/local/etc/php-fpm.d/zz-docker.conf && \
+    # The second half of the nginx rules that refuse PHP under db/ and
+    # images/uploads/ (issue #94). nginx decides what it passes to php-fpm;
+    # this decides what php-fpm agrees to run when something else asks. Two
+    # layers, because the whole finding was that one of them had been extended
+    # per directory and had fallen behind.
+    echo 'security.limit_extensions = .php' >> /usr/local/etc/php-fpm.d/zz-docker.conf
 
 # Expose port 80 for Nginx
 EXPOSE 80

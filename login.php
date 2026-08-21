@@ -465,11 +465,23 @@ if (isset($_GET['error'])) {
                 // that said their address was being confirmed.
                 $verificationFailed = isset($_GET['validated']) && $_GET['validated'] === 'false';
 
-                if ($loginFailed || $verificationFailed) {
+                // passwordreset.php sends people here when the instance has no
+                // usable mail transport or no server_url. It used to redirect to
+                // the front page in silence, which reads as a broken feature
+                // rather than an unconfigured one (issue #96).
+                $resetUnavailable = isset($_GET['reset']) && $_GET['reset'] === 'unavailable';
+
+                if ($loginFailed || $verificationFailed || $resetUnavailable) {
                     ?>
                     <ul class="error-box">
                         <?php
-                        if ($verificationFailed) {
+                        if ($resetUnavailable) {
+                            ?>
+                            <li><i
+                                    class="fa-solid fa-triangle-exclamation"></i><?= translate('password_reset_unavailable', $i18n) ?>
+                            </li>
+                            <?php
+                        } elseif ($verificationFailed) {
                             ?>
                             <li><i
                                     class="fa-solid fa-triangle-exclamation"></i><?= translate('email_verification_failed', $i18n) ?>
