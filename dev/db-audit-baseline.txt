@@ -11,7 +11,7 @@
 #
 # Do not edit by hand — run dev/db-audit.sh --update and commit the diff.
 #
-# total: 1513 matches in 226 file(s)
+# total: 1496 matches in 226 file(s)
 admin.php	5
 api/admin/get_admin_settings.php	1
 api/admin/set_admin_settings.php	20
@@ -60,7 +60,7 @@ endpoints/categories/category.php	14
 endpoints/cronjobs/createdatabase.php	6
 endpoints/cronjobs/generaterecommendations.php	19
 endpoints/cronjobs/sendcancellationnotifications.php	13
-endpoints/cronjobs/sendnotifications.php	17
+endpoints/cronjobs/sendnotifications.php	3
 endpoints/cronjobs/sendresetpasswordemails.php	3
 endpoints/cronjobs/sendverificationemails.php	3
 endpoints/cronjobs/storetotalyearlycost.php	7
@@ -130,13 +130,13 @@ includes/checkuser.php	1
 includes/config_helper.php	2
 includes/currency_provider.php	16
 includes/currency_rates.php	4
-includes/db/archive.php	2
+includes/db/archive.php	1
 includes/getdbkeys.php	10
 includes/getsettings.php	7
 includes/integration_config.php	33
 includes/list_subscriptions.php	2
 includes/mailer.php	2
-includes/notification_settings.php	6
+includes/notification_settings.php	4
 includes/oidc/admin_role_sync.php	1
 includes/oidc/backchannel.php	13
 includes/oidc/diagnostics.php	2
