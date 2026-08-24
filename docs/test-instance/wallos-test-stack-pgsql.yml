@@ -1,0 +1,248 @@
+# =============================================================================
+# Wallos test instance — Docker Swarm, PostgreSQL backend
+#   docker stack deploy -c wallos-test-stack-pgsql.yml wallos-test
+#
+# This is `wallos-test-stack.yml` with sections 7 (OIDC) and 8.1 (PostgreSQL)
+# of docs/test-instance.md already applied. It exists as a file because its
+# absence caused an incident: between 2026-08-19 and 2026-08-22 the instance
+# ran on PostgreSQL, but the only description of that configuration was the
+# running service itself. A redeploy on 2026-08-22 restored an older shape,
+# `WALLOS_DB_DRIVER` went back to sqlite, and Wallos reopened the stale SQLite
+# file that was still lying in the volume. Nothing on screen said so, and three
+# test runs were written up as PostgreSQL afterwards
+# (docs/test-results-2026-08-24.md, and issue #102 for the half of it that is
+# the application's).
+#
+# So: change the instance by changing this file, not by hand on the node.
+#
+# Secrets are external and created once beforehand (see docs/test-instance.md).
+# Swarm mounts them under /run/secrets/<target>, which is exactly what the
+# WALLOS_*_FILE variables expect — no secret is ever passed as an environment
+# value.
+#
+#   https://test.hornung-bn.de        the application
+#   https://mail.test.hornung-bn.de   every mail it sends
+# =============================================================================
+version: "3.8"
+
+services:
+  wallos:
+    # Pinned, not `latest`: the report has to be able to name what it tested.
+    image: ghcr.io/thorstenhornung1/wallos:5.8.5
+    environment:
+      TZ: Europe/Berlin
+
+      # ---- Database -------------------------------------------------------
+      # The line whose absence caused the 2026-08-22 incident. Wallos defaults
+      # to SQLite when this is unset, and every other WALLOS_DB_* value below
+      # is then read by nobody — the instance looks configured and is not.
+      WALLOS_DB_DRIVER: pgsql
+      WALLOS_DB_HOST: postgres
+      WALLOS_DB_PORT: "5432"
+      WALLOS_DB_NAME: wallos
+      WALLOS_DB_USER: wallos
+      WALLOS_DB_PASSWORD_FILE: /run/secrets/db_password
+      # The overlay network is private and PostgreSQL is not configured for
+      # TLS; `disable` states that on purpose rather than letting `prefer`
+      # decide silently.
+      WALLOS_DB_SSLMODE: disable
+
+      # Mailpit resolves to an overlay address, so it has to be allowlisted for
+      # SMTP. auth.hornung-bn.de is there for OIDC discovery.
+      SSRF_ALLOWLIST: "mailpit,mailpit:1025,tasks.mailpit,auth.hornung-bn.de"
+
+      # Shared instance SMTP, delivered to Mailpit.
+      WALLOS_SMTP_HOST: mailpit
+      WALLOS_SMTP_PORT: "1025"
+      WALLOS_SMTP_ENCRYPTION: none
+      WALLOS_SMTP_FROM: wallos@test.hornung-bn.de
+      WALLOS_SMTP_FROM_NAME: Wallos Test
+      WALLOS_SMTP_PASSWORD_FILE: /run/secrets/smtp_password
+
+      # Shared instance currency provider. The key is deliberately invalid so
+      # no test run spends a real quota.
+      WALLOS_CURRENCY_PROVIDER: fixer
+      WALLOS_CURRENCY_API_KEY_FILE: /run/secrets/currency_api_key
+
+      # Shared instance AI provider, same reasoning.
+      WALLOS_AI_PROVIDER: chatgpt
+      WALLOS_AI_MODEL: gpt-4o-mini
+      WALLOS_AI_API_KEY_FILE: /run/secrets/ai_api_key
+
+      # ---- OIDC, section 7 ------------------------------------------------
+      OIDC_ENABLED: "true"
+      OIDC_PROVIDER_NAME: Authentik
+      OIDC_CLIENT_ID: ZG8yV8m4UECN5PJM5RdbohFoyh4UqRTaktijjIZg
+      OIDC_CLIENT_SECRET_FILE: /run/secrets/oidc_client_secret
+      OIDC_ISSUER: https://auth.hornung-bn.de/application/o/wallos-test/
+      OIDC_REDIRECT_URL: https://test.hornung-bn.de/login.php
+      OIDC_AUTO_CREATE_USER: "true"
+      OIDC_ADMIN_CLAIM: groups
+      OIDC_ADMIN_VALUE: admin
+    secrets:
+      - source: wallos_test_smtp_password
+        target: smtp_password
+      - source: wallos_test_currency_api_key_v2
+        target: currency_api_key
+      - source: wallos_test_ai_api_key
+        target: ai_api_key
+      - source: wallos_test_db_password
+        target: db_password
+      - source: wallos_test_oidc_client_secret
+        target: oidc_client_secret
+    volumes:
+      # On PostgreSQL this volume holds only setup_token.db. Keep it empty of
+      # anything else: a leftover wallos.db is what the instance falls back
+      # onto the moment WALLOS_DB_DRIVER goes missing, and it does so without
+      # a word.
+      - wallos_db:/var/www/html/db
+      - wallos_logos:/var/www/html/images/uploads/logos
+    networks:
+      - traefik_public
+      - wallos_internal
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1/health.php"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      # Long enough for the baseline schema to install into an empty database
+      # on first start.
+      start_period: 120s
+    deploy:
+      mode: replicated
+      replicas: 1
+      placement:
+        constraints:
+          # A HOSTNAME, not a label. The logos volume is node-local, and so is
+          # the database volume that holds the setup token, so a task that
+          # starts elsewhere comes up looking like a fresh installation.
+          - node.labels.app == true
+          - node.hostname == docker-infra-3
+      update_config:
+        parallelism: 1
+        order: stop-first
+        failure_action: rollback
+        monitor: 180s
+      restart_policy:
+        condition: on-failure
+        delay: 10s
+        max_attempts: 12
+        window: 300s
+      resources:
+        limits:
+          memory: 512M
+        reservations:
+          memory: 128M
+      labels:
+        traefik.enable: "true"
+        traefik.swarm.network: traefik_public
+        traefik.http.routers.wallos-test.rule: Host(`test.hornung-bn.de`)
+        traefik.http.routers.wallos-test.entrypoints: websecure
+        traefik.http.routers.wallos-test.tls: "true"
+        traefik.http.routers.wallos-test.tls.certresolver: dns
+        traefik.http.routers.wallos-test-http.rule: Host(`test.hornung-bn.de`)
+        traefik.http.routers.wallos-test-http.entrypoints: web
+        traefik.http.routers.wallos-test-http.middlewares: wallos-test-redirect
+        traefik.http.middlewares.wallos-test-redirect.redirectscheme.scheme: https
+        traefik.http.middlewares.wallos-test-redirect.redirectscheme.permanent: "true"
+        traefik.http.services.wallos-test.loadbalancer.server.port: "80"
+
+  postgres:
+    image: postgres:18-alpine
+    environment:
+      TZ: Europe/Berlin
+      POSTGRES_DB: wallos
+      POSTGRES_USER: wallos
+      POSTGRES_PASSWORD_FILE: /run/secrets/db_password
+      PGDATA: /var/lib/postgresql/data/pgdata
+    secrets:
+      - source: wallos_test_db_password
+        target: db_password
+    volumes:
+      - wallos_pgdata:/var/lib/postgresql/data
+    networks:
+      - wallos_internal
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U wallos -d wallos"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    deploy:
+      mode: replicated
+      replicas: 1
+      placement:
+        constraints:
+          # Same node as the application: the data volume is node-local.
+          - node.labels.app == true
+          - node.hostname == docker-infra-3
+      update_config:
+        parallelism: 1
+        order: stop-first
+        failure_action: rollback
+        monitor: 60s
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+      resources:
+        limits:
+          memory: 512M
+        reservations:
+          memory: 256M
+
+  # Mail sink: everything Wallos sends lands here instead of a real inbox.
+  mailpit:
+    image: docker.io/axllent/mailpit:latest
+    environment:
+      MP_SMTP_AUTH_ACCEPT_ANY: "1"
+      MP_SMTP_AUTH_ALLOW_INSECURE: "1"
+      MP_MAX_MESSAGES: "500"
+    networks:
+      - traefik_public
+      - wallos_internal
+    deploy:
+      mode: replicated
+      replicas: 1
+      placement:
+        constraints:
+          - node.labels.app == true
+      resources:
+        limits:
+          memory: 256M
+      labels:
+        traefik.enable: "true"
+        traefik.swarm.network: traefik_public
+        traefik.http.routers.wallos-test-mail.rule: Host(`mail.test.hornung-bn.de`)
+        traefik.http.routers.wallos-test-mail.entrypoints: websecure
+        traefik.http.routers.wallos-test-mail.tls: "true"
+        traefik.http.routers.wallos-test-mail.tls.certresolver: dns
+        traefik.http.routers.wallos-test-mail-http.rule: Host(`mail.test.hornung-bn.de`)
+        traefik.http.routers.wallos-test-mail-http.entrypoints: web
+        traefik.http.routers.wallos-test-mail-http.middlewares: wallos-test-mail-redirect
+        traefik.http.middlewares.wallos-test-mail-redirect.redirectscheme.scheme: https
+        traefik.http.middlewares.wallos-test-mail-redirect.redirectscheme.permanent: "true"
+        traefik.http.services.wallos-test-mail.loadbalancer.server.port: "8025"
+
+networks:
+  traefik_public:
+    external: true
+  wallos_internal:
+    driver: overlay
+    attachable: false
+
+volumes:
+  wallos_db:
+  wallos_logos:
+  wallos_pgdata:
+
+secrets:
+  wallos_test_smtp_password:
+    external: true
+  wallos_test_currency_api_key_v2:
+    external: true
+  wallos_test_ai_api_key:
+    external: true
+  wallos_test_db_password:
+    external: true
+  wallos_test_oidc_client_secret:
+    external: true

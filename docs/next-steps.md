@@ -121,22 +121,37 @@ boundary itself. Those are the #32 conversation.
 
 ### 3. QA left unfinished
 
-A QA run on 2026-08-22 stopped during the preparation of section 5, after
-producing #101. Asked to be picked up when there is time; not blocking.
+The 2026-08-22 run stopped during the preparation of section 5, after producing
+#101. Three of its four open items were taken on 2026-08-24 and all three pass —
+`docs/test-results-2026-08-24.md`. Done: **8.4** (all three checks, including the
+sequence one), **000067 against planted orphans** (four cases, including the
+empty `user` table), and **section 6** (the cron is twice as fast as the night
+run and still linear in accounts).
 
-* **Section 8.4** — backup and restore on PostgreSQL. New in 5.8.5, never
-  exercised from outside. The third of the three checks in the plan is the one
-  that fails on a naive implementation: write something after the restore.
-* **Migration 000067 against deliberate orphans.** The test instance has none,
-  so the version bump does not exercise it. Fixtures are in
-  `tests/cases/orphan_repair_test.php`; the case with an empty `user` table is
-  the one that hurts.
-* **Section 6** on the instance, because the notification cron was rebuilt.
-  Compare against 587/873/1576 ms from the night run.
+That run also found that the instance had not been on PostgreSQL since
+2026-08-22 06:02 — it had reverted to SQLite and reopened a stale file, while
+three reports recorded PostgreSQL. The application half is #102; the operational
+half was that the deployed stack existed only as a running service, now written
+down as `docs/test-instance/wallos-test-stack-pgsql.yml`.
+
+Still open:
+
 * **SQLite, sections 4, 5 and 7.** Automated coverage is complete — CI runs the
   whole suite on SQLite first — but no human has driven those sections on SQLite
   since 5.7.0. This is the larger gap, and larger than another PostgreSQL
-  confirmation.
+  confirmation. It is now also the *only* one.
+* **Sections 4, 5 and 7 on the rebuilt instance.** The 08-24 rebuild emptied the
+  database, so the accounts, mail fixtures and OIDC state those sections need
+  are gone. Last verified against 5.8.4 on 2026-08-21.
+* **#103 through the restore path.** `restore.php` returns before `import.php`
+  on PostgreSQL, and an archive from the same release has nothing to migrate.
+  Reproducing it on the instance needs an archive built from an older schema.
+* **A restore that has to move a sequence *down*.** Every sequence in the 08-24
+  run moved up or stayed. An archive holding fewer rows than the database it
+  replaces is the untested direction.
+* **#104 — section 6 spends real provider quota** on the test instance, because
+  the fixer key there works. Needs a secret rotated, which only the operator can
+  do.
 
 ### 4. The parts of closed-enough issues that are still open
 

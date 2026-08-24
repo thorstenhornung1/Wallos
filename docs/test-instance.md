@@ -47,6 +47,11 @@ environment value.
 The currency and AI keys below are deliberately **invalid**, so no test run
 spends a real quota. Replace them only to exercise a real provider call.
 
+⚠️ **On `test.hornung-bn.de` this is no longer true.** That instance carries a
+working fixer key in `wallos_test_currency_api_key_v2`, so section 6 measures a
+live provider and spends its quota — roughly six hundred calls per full run.
+Check which key is in place before running section 6, or expect the bill.
+
 ```sh
 printf 'test-smtp-password'   | docker secret create wallos_test_smtp_password -
 printf 'invalid-currency-key' | docker secret create wallos_test_currency_api_key -
@@ -81,6 +86,17 @@ Deploy:
 docker stack deploy -c docs/test-instance/wallos-test-stack.yml wallos-test
 docker service logs -f wallos-test_wallos 2>&1 | grep -i migration
 ```
+
+**Deploy from a file that is in the repository, always.** The file above is the
+SQLite instance; `docs/test-instance/wallos-test-stack-pgsql.yml` is the same
+stack with sections 7 and 8.1 already applied, and is what
+`test.hornung-bn.de` runs. Between 2026-08-19 and 2026-08-22 that configuration
+existed only as a running service — no file described it anywhere — and a
+redeploy from an older hand-edited copy silently dropped `WALLOS_DB_DRIVER`.
+Wallos went back to SQLite, reopened the stale database file still lying in the
+volume, and served three days of test runs from it while three reports recorded
+PostgreSQL. Changing the instance by hand on the node is how that happens; there
+is nothing to diff against afterwards.
 
 `Migration migrations/000055.php completed successfully.` and `000056` confirm
 the instance configuration and the subscription indexes are in place.
@@ -428,6 +444,13 @@ dev/benchmark.sh --base https://test.hornung-bn.de \
 Two axes, because they stress different things: one account's list grows to 100,
 1000 and 5000 entries, then the notification cron runs against 1, 10 and 100
 users.
+
+⚠️ **The rates column costs provider quota when the key works.** The script says
+so in its own output — `rates measured against a live provider` against `rates
+not measured (refused)` — and the difference is worth reading before the run
+rather than after. Five runs against 1, 10 and 100 accounts is on the order of
+six hundred calls, which exceeds a free tier several times over. On
+`test.hornung-bn.de` the key currently works; see the warning in section 2A.
 
 **These figures are from SQLite, and there are none for PostgreSQL yet.** The
 benchmark could not produce a valid one until 5.8.2: three of its helpers opened
@@ -1062,9 +1085,36 @@ this repository. The previous one is
 1. **The evidence, pasted.** The command and its actual output, not a summary of
    it. `curl` status codes, log lines, `EXPLAIN` output, the row counts. A claim
    without its output cannot be re-checked by anyone including you.
-2. **The version.** Read it from the image tag, not from a file — the image no
-   longer ships `VERSION`:
-   `docker inspect --format '{{.Spec.TaskTemplate.ContainerSpec.Image}}' wallos-test_wallos`
+2. **The environment table, as command output rather than as a claim.** Paste
+   these four and their answers at the top of the report. Not one of them is
+   optional, and the third is the reason this list exists: on 2026-08-24 the
+   instance was found running on SQLite while the three preceding reports had
+   all recorded "PostgreSQL 18.6" in a table filled in by hand. Nothing in the
+   application shows which database it is on
+   ([#102](https://github.com/thorstenhornung1/Wallos/issues/102)), so a
+   hand-written row there cannot be checked by anyone, including its author.
+
+   ```sh
+   # the image, with its digest — the image no longer ships VERSION
+   docker service inspect wallos-test_wallos \
+       --format '{{.Spec.TaskTemplate.ContainerSpec.Image}}'
+
+   # the version the code reports
+   $EXEC php -r 'include "/var/www/html/includes/version.php"; echo "Wallos $version\n";'
+
+   # the driver, out of the running container's environment
+   docker exec $(docker ps -qf name=wallos-test_wallos) env | grep '^WALLOS_DB_'
+
+   # the database the application actually opened, and its migration state
+   $EXEC php -r 'require "/var/www/html/includes/database/connection.php";
+                 $d = wallos_database_connect();
+                 printf("%s | %s\n", $d->driver(), $d->scalar("SELECT version()"));
+                 printf("migrations: %d\n", (int) $d->scalar("SELECT COUNT(*) FROM migrations"));'
+   ```
+
+   The third and fourth are not redundant. The environment says what the
+   instance was *told*; the connection says what it *did*. They agreeing is
+   the evidence.
 3. **Pass, fail, or not covered.** "Not covered" is a real answer and belongs in
    the table. Section 5.2 was reported as passing for three pages when one of
    them had returned a redirect, which proves nothing — that correction came
