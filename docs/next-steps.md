@@ -28,14 +28,14 @@ a backup taken the day the instance moved to PostgreSQL — settles it: the runs
 of 19, 20 and 21 August were real PostgreSQL runs. The drift happened after
 them.
 
-Two defects came out of asking why nobody noticed for three days. Both are
-filed, neither is started:
+Two defects came out of asking why nobody noticed for three days. #103 is
+fixed (`37d1d2b`); #102 is open:
 
 * **#102** — nothing in the application says which database it is running on.
   `wallos_database_configuration()` has no caller outside `includes/`; SQLite
   and PostgreSQL are indistinguishable through the web interface. This is why a
   test report can only assert its backend, never show it.
-* **#103** — a failed migration stops the run and tells nobody. The runner sets
+* **#103** — *fixed.* A failed migration stopped the run and told nobody. The runner sets
   `$migrationFailure` for "the caller to read", and no caller reads it:
   `migrate.php` answers 200 regardless, `import.php` answers
   `success: true` after a restore that did not finish, and both discard the
@@ -67,36 +67,21 @@ QA. Local work happens in `dev/compose.yaml` instead — see below.
 
 ## Next, in the order I would take them
 
-### 1. Issue #101 — the currency provider cannot tell a refusal from an outage
+### 1. Upstream pull requests — the highest-value work left
 
-Verified, small, and portable upstream. `includes/currency_provider.php:54`
-calls `@file_get_contents()` without `ignore_errors`, so every 4xx and 5xx
-becomes `false` and the `@` discards the warning that named the status. An
-expired key, an exhausted quota, a provider fault and a genuine network failure
-all produce "The currency provider could not be reached", which is true in one
-of the four cases.
+`docs/upstream-candidates.md` holds the verified list, written 2026-08-24 by
+checking each candidate against the upstream tree. Read it before proposing
+anything: **four PRs from this fork are already merged**, and the comparison
+base is `upstream/v5_6_0`, not `upstream/main`.
 
-The status is already in hand: `$http_response_header` is parsed for
-`x-ratelimit-*` two lines below.
+The first three, in order, are `totp.php` (a replay guard that never runs —
+one word missing from a SELECT), `logout.php` (`$userId` never assigned, so
+every logout leaves a valid token), and `migrations/000016.php` (one
+`finalize()`, wrong in every installation ever made).
 
-Four call sites, not one — a fix that misses any of them leaves the answer
-depending on which provider is configured:
-
-| file | line | has `ignore_errors` |
-|---|---|---|
-| `includes/currency_provider.php` | 54 | no |
-| `includes/currency_provider.php` | 74 | no (fixer.io branch, no context at all) |
-| `api/fixer/set_fixer.php` | 107 | **yes** |
-| `api/fixer/set_fixer.php` | 113 | no (fixer.io branch) |
-
-The third row is the interesting one. The "test key" button already sees the
-answer; the unattended job does not. That is presumably why this survived — the
-diagnosis works exactly where somebody is watching.
-
-Shape the fix the way #97 and #100 were shaped: 401/403 says the credential is
-rejected, 429 says quota, 5xx says the provider is at fault, and `false` with no
-headers at all says unreachable. The testable core is a function that maps
-status plus body to a message; the HTTP call itself is not worth mocking.
+**One decision is open:** the merges landed on `v5_6_0` while `main` is still
+the default branch. Open against `main` and let the maintainer move them, or
+ask in the first PR.
 
 ### 2. Upstream pull requests
 
@@ -119,39 +104,23 @@ dependency, roughly by how much a reviewer has to take on trust:
 Not portable: the archive, the PostgreSQL baseline, the upgrade test, the
 boundary itself. Those are the #32 conversation.
 
-### 3. QA left unfinished
+### 3. QA — done, with one gap left over
 
-The 2026-08-22 run stopped during the preparation of section 5, after producing
-#101. Three of its four open items were taken on 2026-08-24 and all three pass —
-`docs/test-results-2026-08-24.md`. Done: **8.4** (all three checks, including the
-sequence one), **000067 against planted orphans** (four cases, including the
-empty `user` table), and **section 6** (the cron is twice as fast as the night
-run and still linear in accounts).
+The 2026-08-24 run closed all three open sections (8.4 backup/restore on
+PostgreSQL, migration 000067 against orphans, section 6): see
+`docs/test-results-2026-08-24.md`. It also found that the instance had been on
+SQLite since 2026-08-22 while three reports called it PostgreSQL, which is
+where #102 comes from.
 
-That run also found that the instance had not been on PostgreSQL since
-2026-08-22 06:02 — it had reverted to SQLite and reopened a stale file, while
-three reports recorded PostgreSQL. The application half is #102; the operational
-half was that the deployed stack existed only as a running service, now written
-down as `docs/test-instance/wallos-test-stack-pgsql.yml`.
+Still open: **SQLite sections 4, 5 and 7.** CI runs the whole suite on SQLite
+first, but no human has driven those sections there since 5.7.0. That is a
+larger gap than another PostgreSQL confirmation.
 
-Still open:
-
-* **SQLite, sections 4, 5 and 7.** Automated coverage is complete — CI runs the
-  whole suite on SQLite first — but no human has driven those sections on SQLite
-  since 5.7.0. This is the larger gap, and larger than another PostgreSQL
-  confirmation. It is now also the *only* one.
-* **Sections 4, 5 and 7 on the rebuilt instance.** The 08-24 rebuild emptied the
-  database, so the accounts, mail fixtures and OIDC state those sections need
-  are gone. Last verified against 5.8.4 on 2026-08-21.
-* **#103 through the restore path.** `restore.php` returns before `import.php`
-  on PostgreSQL, and an archive from the same release has nothing to migrate.
-  Reproducing it on the instance needs an archive built from an older schema.
-* **A restore that has to move a sequence *down*.** Every sequence in the 08-24
-  run moved up or stayed. An archive holding fewer rows than the database it
-  replaces is the untested direction.
-* **#104 — section 6 spends real provider quota** on the test instance, because
-  the fixer key there works. Needs a secret rotated, which only the operator can
-  do.
+And **#104**: the test instance's currency key works, while the plan called it
+invalid — one QA round spent about six hundred live calls on the assumption.
+The four normative places now prescribe a check instead of asserting the state
+(`bcabad9`), but the key itself still needs rotating, and only Thorsten can do
+that through Portainer.
 
 ### 4. The parts of closed-enough issues that are still open
 
