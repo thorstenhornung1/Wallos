@@ -12,6 +12,36 @@ Released: **5.8.5**, `ghcr.io/thorstenhornung1/wallos:5.8.5`,
 432 tests on SQLite and PostgreSQL 14 and 18, all four gates green:
 `dev/db-audit.sh`, `dev/sh-audit.sh`, `dev/write-audit.php`, and the Semgrep run.
 
+## What 2026-08-24 turned up, after this file was first written
+
+The test instance was found running the 5.8.5 image on **SQLite**, against a
+database at migration **000062** — the 5.7.x schema, two releases behind the
+code. PostgreSQL was configured and running beside it, unused.
+
+The three PostgreSQL test reports in this directory are **not** affected. That
+was checked before the instance was rebuilt, and `db/pre-pgsql-20260819.db` —
+a backup taken the day the instance moved to PostgreSQL — settles it: the runs
+of 19, 20 and 21 August were real PostgreSQL runs. The drift happened after
+them.
+
+Two defects came out of asking why nobody noticed for three days. Both are
+filed, neither is started:
+
+* **#102** — nothing in the application says which database it is running on.
+  `wallos_database_configuration()` has no caller outside `includes/`; SQLite
+  and PostgreSQL are indistinguishable through the web interface. This is why a
+  test report can only assert its backend, never show it.
+* **#103** — a failed migration stops the run and tells nobody. The runner sets
+  `$migrationFailure` for "the caller to read", and no caller reads it:
+  `migrate.php` answers 200 regardless, `import.php` answers
+  `success: true` after a restore that did not finish, and both discard the
+  runner's output with `ob_end_clean()`. This is the same defect as #97, #100
+  and #101, in the one endpoint whose entire purpose is the outcome.
+
+**#103 is the most valuable thing here.** It is the mechanism by which an
+instance can serve pages on a schema older than its code without anyone
+learning of it, and it has a confirmed real-world case.
+
 ## Two decisions that do not follow from the code
 
 **Production stays on upstream.** The production instance (abo.hornung-bn.de)
