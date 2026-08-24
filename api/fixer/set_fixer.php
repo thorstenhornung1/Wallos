@@ -20,6 +20,7 @@ Example response:
 */
 
 require_once '../../includes/connect_endpoint.php';
+require_once '../../includes/http_status.php';
 
 header('Content-Type: application/json; charset=UTF-8');
 
@@ -110,14 +111,24 @@ if ($provider === 1) {
     $response = @file_get_contents($testKeyUrl, false, $context);
 } else {
     $testKeyUrl = "http://data.fixer.io/api/latest?access_key=" . urlencode($fixerApiKey);
-    $response = @file_get_contents($testKeyUrl);
+    $context = stream_context_create([
+        'http' => [
+            'method' => 'GET',
+            'ignore_errors' => true
+        ]
+    ]);
+    $response = @file_get_contents($testKeyUrl, false, $context);
 }
+
+// Populated by PHP only when a response arrived. With ignore_errors set above,
+// a false response now means nothing answered at all, rather than answering no.
+$status = wallos_http_status_code(isset($http_response_header) ? $http_response_header : null);
 
 if ($response === false) {
     echo json_encode([
         'success' => false,
         'title' => 'Validation error',
-        'message' => 'Failed to connect to the currency rate provider for verification.'
+        'message' => wallos_provider_failure_message($status, null)
     ]);
     exit;
 }
@@ -206,10 +217,15 @@ if (isset($apiData['success']) && $apiData['success'] == true) {
         ]);
     }
 } else {
+    // A quota that ran out and a provider having a bad day are not the key
+    // being wrong, and telling an admin to replace a working key is worse than
+    // saying nothing: they will replace it, and the new one will fail too.
+    $providerFault = ($status === 429 || ($status !== null && $status >= 500));
+
     echo json_encode([
         'success' => false,
-        'title' => 'Invalid Fixer API key',
-        'message' => 'The provided Fixer API key is invalid.'
+        'title' => $providerFault ? 'Currency provider unavailable' : 'Invalid Fixer API key',
+        'message' => wallos_provider_failure_message($status, $apiData)
     ]);
 }
 

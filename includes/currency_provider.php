@@ -8,6 +8,7 @@
 */
 
 require_once __DIR__ . '/integration_config.php';
+require_once __DIR__ . '/http_status.php';
 
 /**
  * Fetches exchange rates with EUR as the base currency.
@@ -49,6 +50,10 @@ function wallos_fetch_exchange_rates($config, $codes)
             'http' => [
                 'method' => 'GET',
                 'header' => 'apikey: ' . $apiKey,
+                // Without this a 401 arrives as false, indistinguishable from
+                // the network being down. With it, the provider's own
+                // explanation arrives instead (issue #101).
+                'ignore_errors' => true,
             ]
         ]);
         $response = @file_get_contents($apiUrl, false, $context);
@@ -71,11 +76,22 @@ function wallos_fetch_exchange_rates($config, $codes)
         }
     } else {
         $apiUrl = "http://data.fixer.io/api/latest?access_key=" . $apiKey . "&base=EUR&symbols=" . $codes;
-        $response = @file_get_contents($apiUrl);
+        $context = stream_context_create([
+            'http' => [
+                'method' => 'GET',
+                'ignore_errors' => true,
+            ]
+        ]);
+        $response = @file_get_contents($apiUrl, false, $context);
     }
 
+    // Set by PHP only when a response arrived, which is what separates a
+    // refusal from an outage.
+    $status = wallos_http_status_code(isset($http_response_header) ? $http_response_header : null);
+
     if ($response === false) {
-        $failure['message'] = 'The currency provider could not be reached.';
+        $failure['usage'] = $usage;
+        $failure['message'] = wallos_provider_failure_message($status, null);
 
         return $failure;
     }
@@ -84,9 +100,7 @@ function wallos_fetch_exchange_rates($config, $codes)
 
     if (!is_array($apiData) || !isset($apiData['rates'])) {
         $failure['usage'] = $usage;
-        $failure['message'] = is_array($apiData) && isset($apiData['error']['info'])
-            ? (string) $apiData['error']['info']
-            : 'The currency provider returned an invalid response.';
+        $failure['message'] = wallos_provider_failure_message($status, $apiData);
 
         return $failure;
     }
