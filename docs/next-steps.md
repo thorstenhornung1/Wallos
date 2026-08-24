@@ -14,9 +14,13 @@ Released: **5.8.5**, `ghcr.io/thorstenhornung1/wallos:5.8.5`,
 
 ## What 2026-08-24 turned up, after this file was first written
 
-The test instance was found running the 5.8.5 image on **SQLite**, against a
-database at migration **000062** — the 5.7.x schema, two releases behind the
-code. PostgreSQL was configured and running beside it, unused.
+The test instance was found running the 5.8.5 image on **SQLite**, with a
+configured PostgreSQL running beside it, unused. A second claim — that the
+database sat at migration 000062, two releases behind — was withdrawn: it came
+from session memory, and the secured volume showed an empty, orphaned SQLite
+file at 000057 predating the PostgreSQL switch, on a node the service was not
+pinned to. Worth remembering as its own lesson: the figure survived three
+messages and reached two issue descriptions before anyone read the disk.
 
 The three PostgreSQL test reports in this directory are **not** affected. That
 was checked before the instance was rebuilt, and `db/pre-pgsql-20260819.db` —
@@ -36,11 +40,13 @@ filed, neither is started:
   `migrate.php` answers 200 regardless, `import.php` answers
   `success: true` after a restore that did not finish, and both discard the
   runner's output with `ob_end_clean()`. This is the same defect as #97, #100
-  and #101, in the one endpoint whose entire purpose is the outcome.
+  and #101, in the one endpoint whose entire purpose is the outcome. It rests
+  on the call sites and on a fixture in the repository, not on that instance.
 
 **#103 is the most valuable thing here.** It is the mechanism by which an
 instance can serve pages on a schema older than its code without anyone
-learning of it, and it has a confirmed real-world case.
+learning of it. Whether that has already happened in the wild is open — the
+one case that looked like proof did not hold up.
 
 ## Two decisions that do not follow from the code
 
