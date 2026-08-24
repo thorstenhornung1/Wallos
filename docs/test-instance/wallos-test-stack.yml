@@ -30,8 +30,10 @@ services:
       WALLOS_SMTP_FROM_NAME: Wallos Test
       WALLOS_SMTP_PASSWORD_FILE: /run/secrets/smtp_password
 
-      # Shared instance currency provider. The key is deliberately invalid so
-      # no test run spends a real quota.
+      # Shared instance currency provider. The key this file creates is invalid,
+      # but a secret can be rotated without this file changing — on the real test
+      # instance it was, and a QA run spent six hundred live calls on the
+      # assumption (#104). Verify against the instance before section 6.
       WALLOS_CURRENCY_PROVIDER: apilayer
       WALLOS_CURRENCY_API_KEY_FILE: /run/secrets/currency_api_key
 

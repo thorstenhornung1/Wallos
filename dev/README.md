@@ -143,9 +143,11 @@ one that refuses, or one that does not answer within `--rates-timeout` seconds
 If a tier that is measured passes `--cron-timeout` instead, the cell reads
 `timeout`, the figures already taken stay, and the later tiers are not attempted
 — they have more accounts and would buy the same answer at the same price.
-Both the development environment and `docs/test-instance.md` prescribe a
-deliberately invalid provider key so that no run spends real quota, which means
-the figure that column would otherwise print is a network timeout — one tier
+Both the development environment and `docs/test-instance.md` start from an
+invalid provider key so that no run spends real quota — verify that is still
+true of the instance you are measuring, because a rotated secret does not
+announce itself (#104). With an invalid key the figure that column would
+otherwise print is a network timeout — one tier
 alone ran for eleven minutes that way. Every cron run is bounded, so a hanging
 job costs one bound rather than the whole benchmark.
 

@@ -44,13 +44,25 @@ Secrets first. Swarm mounts them under `/run/secrets/<target>`, which is exactly
 what the `WALLOS_*_FILE` variables read — no credential is ever passed as an
 environment value.
 
-The currency and AI keys below are deliberately **invalid**, so no test run
-spends a real quota. Replace them only to exercise a real provider call.
+The currency and AI keys created below are invalid, so a freshly built instance
+spends no real quota.
 
-⚠️ **On `test.hornung-bn.de` this is no longer true.** That instance carries a
-working fixer key in `wallos_test_currency_api_key_v2`, so section 6 measures a
-live provider and spends its quota — roughly six hundred calls per full run.
-Check which key is in place before running section 6, or expect the bill.
+⚠️ **Do not carry that over to an instance somebody else built.** A secret can
+be rotated at any time without this document changing, and on
+`test.hornung-bn.de` exactly that happened: `wallos_test_currency_api_key_v2`
+held a working fixer key while this page still called it invalid, and a QA run
+spent roughly six hundred live calls on section 6 believing otherwise (#104).
+
+**So check rather than assume, before section 6:**
+
+```sh
+# Which secret is actually mounted, and does the provider accept it?
+docker service inspect wallos-test_wallos --format '{{json .Spec.TaskTemplate.ContainerSpec.Secrets}}'
+```
+
+A refusal in the application's own log ("rejected the API key") means the key is
+invalid and section 6 is free. Rates that update mean it is live, and every run
+costs quota. This page cannot tell you which — only the instance can.
 
 ```sh
 printf 'test-smtp-password'   | docker secret create wallos_test_smtp_password -
