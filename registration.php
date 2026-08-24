@@ -3,7 +3,16 @@ require_once 'includes/connect.php';
 require_once 'includes/checkuser.php';
 ob_start();
 require_once 'includes/run_migrations.php';
-ob_end_clean();
+$migrationOutput = trim(ob_get_clean());
+
+if ($migrationFailure !== null) {
+    // A registration page cannot usefully refuse over this, and telling a
+    // prospective user about migration state would be noise. Swallowing it
+    // silently is the other extreme, and it is how a half-migrated instance
+    // serves pages for days without anyone learning of it (issue #103).
+    error_log('Wallos: migration ' . basename((string) $migrationFailure)
+        . ' failed while opening the registration page. ' . $migrationOutput);
+}
 
 require_once 'includes/i18n/languages.php';
 require_once 'includes/user_provisioning.php';

@@ -162,12 +162,31 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $db->busyTimeout(5000);
                 ob_start();
                 require_once __DIR__ . '/../../includes/run_migrations.php';
-                ob_end_clean();
+                // The buffer is read back rather than discarded: the runner
+                // names the migration that failed, and throwing the buffer away
+                // took the only description of what went wrong with it.
+                $migrationOutput = trim(ob_get_clean());
 
-                echo json_encode([
-                    "success" => true,
-                    "message" => translate("success", $i18n)
-                ]);
+                if ($migrationFailure !== null) {
+                    // The archive is unpacked and the rows are in; what did not
+                    // happen is the schema being brought forward. Calling this a
+                    // failed restore would send an admin to restore the same
+                    // archive again and get the same result.
+                    error_log('Wallos restore: the data was restored but migration '
+                        . basename((string) $migrationFailure) . ' failed. ' . $migrationOutput);
+
+                    echo json_encode([
+                        "success" => false,
+                        "message" => "The backup was restored, but the database could not be migrated to this version ("
+                            . basename((string) $migrationFailure)
+                            . "). The data is in place and the schema is not; check the server log before using this instance."
+                    ]);
+                } else {
+                    echo json_encode([
+                        "success" => true,
+                        "message" => translate("success", $i18n)
+                    ]);
+                }
             } else {
                 emptyRestoreFolder();
 

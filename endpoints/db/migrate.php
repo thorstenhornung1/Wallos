@@ -25,3 +25,12 @@ if (PHP_SAPI !== 'cli') {
 }
 
 require_once __DIR__ . '/../../includes/run_migrations.php';
+
+// This endpoint exists to run migrations and nothing else, so its status code
+// is the whole answer. Ending here regardless left it saying 200 for a run that
+// stopped halfway (issue #103) — and the caller most likely to be listening is
+// a cron job or a deployment script, neither of which reads prose.
+if ($migrationFailure !== null) {
+    http_response_code(500);
+    echo 'Migration failed: ' . basename((string) $migrationFailure) . PHP_EOL;
+}
