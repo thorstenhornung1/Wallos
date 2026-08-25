@@ -462,7 +462,9 @@ exchange job once per tier at five runs each — about 555 provider calls. The
 account behind `test.hornung-bn.de` is on a free tier of **100 calls a month**,
 so one run spends roughly half a year of it. The counter belongs to the account
 and not to the key, so issuing a new key afterwards does not give the quota
-back; only the turn of the month does.
+back; only the next billing period does — and whether that is the first of the
+month or a rolling window from the sign-up date is not established, so do not
+plan around a date.
 
 `--rates` turns the column on. Do not pass it on this instance. It exists for an
 account that has quota to spend, and the run prints what it cost afterwards.
