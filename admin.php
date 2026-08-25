@@ -3,6 +3,7 @@ require_once 'includes/header.php';
 require_once 'includes/oidc_settings.php';
 require_once 'includes/oidc/diagnostics.php';
 require_once 'includes/cron/diagnostics.php';
+require_once 'includes/database/diagnostics.php';
 require_once 'includes/ssrf_helper.php';
 require_once 'includes/integration_config.php';
 
@@ -27,6 +28,9 @@ $oidcDiagnostics = wallos_oidc_diagnostics($db);
 // and php-fpm, so a container whose cron has not started a job in a fortnight is
 // still reported healthy; this is the only place that says otherwise.
 $cronDiagnostics = wallos_cron_diagnostics($db);
+// Which backend is in use was previously answerable only from outside the
+// application, by reading the container's environment (issue #102).
+$databaseDiagnostics = wallos_database_diagnostics($db);
 
 $ssrfConfiguration = wallos_get_effective_ssrf_allowlist($db);
 $ssrfManagedFields = $ssrfConfiguration['is_managed'] ? ['allowlist' => 'SSRF_ALLOWLIST'] : [];
@@ -249,6 +253,38 @@ $loginDisabledAllowed = $userCount == 1 && $settings['registrations_open'] == 0;
         <?php
     }
     ?>
+
+    <section class="account-section">
+        <header>
+            <h2><?= translate('database_diagnostics', $i18n) ?></h2>
+        </header>
+        <div class="admin-form">
+            <div class="settings-notes">
+                <p>
+                    <i class="fa-solid fa-database" aria-hidden="true"></i>
+                    <strong><?= translate('database_backend', $i18n) ?>:</strong>
+                    <?= htmlspecialchars($databaseDiagnostics['version']
+                        ?? $databaseDiagnostics['driver']) ?>
+                    <?php if (!$databaseDiagnostics['configured']): ?>
+                        <!-- An unset WALLOS_DB_DRIVER yields sqlite too, so saying
+                             which of the two produced this is the whole point. -->
+                        <em>(<?= translate('database_backend_default', $i18n) ?>)</em>
+                    <?php endif; ?>
+                </p>
+                <p>
+                    <i class="fa-solid fa-circle-info" aria-hidden="true"></i>
+                    <strong><?= translate('database_source', $i18n) ?>:</strong>
+                    <?= htmlspecialchars($databaseDiagnostics['source']) ?>
+                </p>
+            </div>
+            <div class="settings-notes">
+                <p>
+                    <i class="fa-solid fa-circle-info"></i>
+                    <?= translate('database_diagnostics_hint', $i18n) ?>
+                </p>
+            </div>
+        </div>
+    </section>
 
     <section class="account-section">
         <header>
