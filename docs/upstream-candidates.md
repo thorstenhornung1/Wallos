@@ -10,9 +10,22 @@ that could not be confirmed is marked as such.
 twelve commits further on and carries the actual development. Line numbers below
 refer to `v5_6_0`.
 
-## Already merged — do not propose again
+## Nothing goes to the maintainer without Thorsten asking for it
 
-Four pull requests from this fork are in `upstream/v5_6_0`:
+Stated 2026-08-25: pushes go to `origin` only. Opening a pull request against
+`ellite/Wallos`, or commenting there, needs his explicit request **and** his
+approval. Reading upstream is fine — this whole page is built from it. Treat the
+list below as prepared work, not as a queue that runs itself.
+
+## Already taken upstream — do not propose again
+
+Four changes from this fork are in `upstream/v5_6_0`. Note how they got there,
+because it decides the base for anything future:
+
+They were opened against `main` and show as **CLOSED, not merged**. The
+maintainer merged the branches into `v5_6_0` himself — the merge commits name
+the PRs (`69b1e3f`, `fd96cdc`, `a566380`, `6809cba`) — and the stale PRs against
+`main` were closed. Opening against `main` cost him a manual step.
 
 | upstream | PR | our commit |
 |---|---|---|
@@ -128,8 +141,14 @@ depend on the boundary: `endpoints/admin/deleteuser.php:18-20` deletes the
 discarded, and `endpoints/subscription/add.php:237-245` binds `$_POST` straight
 into the insert with no existence or ownership check.
 
-## Open question
+## The base, decided
 
-The four merges landed on `v5_6_0`, but `main` is still the default branch.
-Either open against `main` and let the maintainer move them, or ask in the first
-PR which base he wants.
+**`v5_6_0`**, if a pull request is ever authorised — not `main`, despite `main`
+being the default branch.
+
+The evidence is what happened to the last four: opened against `main`, closed
+unmerged, and merged into `v5_6_0` by hand. `main` receives release merges
+(#1176 "chore(main): release 5.4.5", #1175 "V5 6 0", #1160 "V5 4 3"), so the
+version branch is where development lands and `main` is where it surfaces.
+Opening against `main` again would repeat a step the maintainer already had to
+do manually four times.
