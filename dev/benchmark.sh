@@ -41,6 +41,15 @@ RUNS=5
 # nothing; one that gives up after a bound says which figure is missing.
 RATES_TIMEOUT=${WALLOS_RATES_TIMEOUT:-20}
 CRON_TIMEOUT=${WALLOS_CRON_TIMEOUT:-180}
+# The rates column is the only part of this script that costs anything: it runs
+# the exchange job once per tier, five runs each, which is roughly 555 calls
+# against the configured provider. A free tier is 100 a month, so a single
+# unguarded run spends half a year of it — and the account, not the key, is what
+# carries the counter, so rotating afterwards does not undo it.
+#
+# Off unless asked for. The old behaviour was to measure whenever the provider
+# happened to answer, which made an expensive run the reward for a working key.
+RATES_ENABLED=0
 
 while [ $# -gt 0 ]; do
     case "$1" in
@@ -64,6 +73,7 @@ while [ $# -gt 0 ]; do
             ;;
         --exec) EXEC=$2; shift 2 ;;
         --runs) RUNS=$2; shift 2 ;;
+        --rates) RATES_ENABLED=1; shift ;;
         --rates-timeout) RATES_TIMEOUT=$2; shift 2 ;;
         --cron-timeout) CRON_TIMEOUT=$2; shift 2 ;;
         *) printf 'unknown option: %s\n' "$1" >&2; exit 2 ;;
@@ -165,9 +175,16 @@ done
 # Whether the rates column can measure anything is decided once, before any
 # tier runs, and the answer is printed with the table rather than left to be
 # inferred from a suspiciously round number.
-RATES=$($EXEC $BENCH rates-preflight "$RATES_TIMEOUT")
-RATES_VERDICT=$(printf '%s' "$RATES" | cut -f1)
-RATES_NOTE=$(printf '%s' "$RATES" | cut -f2)
+if [ "$RATES_ENABLED" = "1" ]; then
+    RATES=$($EXEC $BENCH rates-preflight "$RATES_TIMEOUT")
+    RATES_VERDICT=$(printf '%s' "$RATES" | cut -f1)
+    RATES_NOTE=$(printf '%s' "$RATES" | cut -f2)
+else
+    # The preflight is itself a request, so asking whether we could measure
+    # already costs one of the hundred.
+    RATES_VERDICT=not-requested
+    RATES_NOTE="pass --rates to measure it; expect about 555 provider calls"
+fi
 
 printf '\nNotification cron, all users\n'
 printf '  %-12s %11s %11s\n' 'users' 'notify' 'rates'
@@ -201,7 +218,7 @@ done
 printf '\n  baseline is an empty script: interpreter start-up, included in every row above.\n'
 
 if [ "$RATES_VERDICT" = "ok" ]; then
-    printf '  rates measured against a live provider — each run spends provider quota.\n'
+    printf '  rates measured against a live provider — this run spent roughly 555 calls.\n'
 else
     printf '  rates not measured (%s): %s\n' "$RATES_VERDICT" "$RATES_NOTE"
     printf '  A figure taken from a provider that refuses or never answers is the failure\n'

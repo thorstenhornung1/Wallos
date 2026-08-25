@@ -457,12 +457,22 @@ Two axes, because they stress different things: one account's list grows to 100,
 1000 and 5000 entries, then the notification cron runs against 1, 10 and 100
 users.
 
-⚠️ **The rates column costs provider quota when the key works.** The script says
-so in its own output — `rates measured against a live provider` against `rates
-not measured (refused)` — and the difference is worth reading before the run
-rather than after. Five runs against 1, 10 and 100 accounts is on the order of
-six hundred calls, which exceeds a free tier several times over. On
-`test.hornung-bn.de` the key currently works; see the warning in section 2A.
+⚠️ **The rates column is off by default, and should stay off here.** It runs the
+exchange job once per tier at five runs each — about 555 provider calls. The
+account behind `test.hornung-bn.de` is on a free tier of **100 calls a month**,
+so one run spends roughly half a year of it. The counter belongs to the account
+and not to the key, so issuing a new key afterwards does not give the quota
+back; only the turn of the month does.
+
+`--rates` turns the column on. Do not pass it on this instance. It exists for an
+account that has quota to spend, and the run prints what it cost afterwards.
+
+This is deliberately a default rather than a warning. A tester who checked the
+key as section 2A asks, found it working, and proceeded would have done
+everything right and still spent six months of quota — which is what happened on
+2026-08-24 ([#104](https://github.com/thorstenhornung1/Wallos/issues/104)).
+Nothing else in this section costs anything: the list tiers, the notification
+cron and the baseline are all local.
 
 **These figures are from SQLite, and there are none for PostgreSQL yet.** The
 benchmark could not produce a valid one until 5.8.2: three of its helpers opened
