@@ -116,9 +116,22 @@ not a first PR.
   version goes through the boundary. Also needs a `payment_method_in_use` key.
 * **`verifyemail.php`** — the DELETE *is* the verification and its result is
   discarded; the redirect to `login.php?validated=true` happens regardless.
+  **Prepared: `origin/upstream-fix/verify-email`**, based on `v5_6_0`, +21/−3,
+  one file. Uses only the SQLite3 API, so it applies as-is.
 * **`passwordreset.php`** — DELETE then INSERT, neither checked,
   `$hasSuccessMessage = true` unconditional. If the insert fails the old token
   is already gone and the account has no way back.
+  **Prepared: `origin/upstream-fix/password-reset`**, based on `v5_6_0`,
+  +48/−9, one file.
+
+  Two things a reviewer will look for, and both are deliberate. The fork's fix
+  lives in `includes/password_reset.php` and uses the boundary's
+  `beginTransaction()`; the patch inlines it with `exec('BEGIN')` so it needs
+  no new file and no abstraction upstream does not have. And the success
+  message stays **unconditional for an unknown address** — answering
+  differently for a registered and an unregistered address would turn the form
+  into an account enumeration oracle, which is evidently why it was written
+  that way. Only a genuine failure to store the token changes the answer.
 * **`includes/http_status.php` + the `set_fixer.php` half of #101** — upstream
   carries the same asymmetry (`ignore_errors` on line 107, absent on 113).
 
