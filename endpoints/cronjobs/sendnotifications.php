@@ -11,6 +11,7 @@ require_once __DIR__ . '/../../includes/connect_endpoint_crontabs.php';
 require_once __DIR__ . '/../../includes/ssrf_helper.php';
 require_once __DIR__ . '/../../includes/mailer.php';
 require_once __DIR__ . '/../../includes/notification_settings.php';
+require_once __DIR__ . '/../../includes/notification_due.php';
 wallos_cron_database($db);
 
 require __DIR__ . '/../../includes/currency_formatter.php';
@@ -287,15 +288,17 @@ while ($userToNotify = $usersToNotify->fetchArray(SQLITE3_ASSOC)) {
         $notify = [];
         $i = 0;
         foreach ($subscriptionsToConsider as $rowSubscription) {
-            if ((int) $rowSubscription['notify'] !== 1 || (int) $rowSubscription['inactive'] !== 0) {
+            // The rules live in includes/notification_due.php now, copied
+            // rather than improved, so that "does this account have work" can
+            // be asked before its currencies, household and categories are
+            // loaded instead of after (issue #99). Same answer, asked earlier.
+            if (!wallos_notification_subscription_is_due($rowSubscription, $days, $currentDate)) {
                 continue;
             }
 
-            if ($rowSubscription['notify_days_before'] !== -1) {
-                $daysToCompare = $rowSubscription['notify_days_before'];
-            } else {
-                $daysToCompare = $days;
-            }
+            $daysToCompare = $rowSubscription['notify_days_before'] !== -1
+                ? $rowSubscription['notify_days_before']
+                : $days;
             $nextPaymentDate = new DateTime($rowSubscription['next_payment']);
 
             $difference = $currentDate->diff($nextPaymentDate)->days;
@@ -303,7 +306,7 @@ while ($userToNotify = $usersToNotify->fetchArray(SQLITE3_ASSOC)) {
                 $difference += 1;
             }
 
-            if ($difference === $daysToCompare && $nextPaymentDate->format('Y-m-d') >= $currentDate->format('Y-m-d')) {
+            {
                 echo "Subscription: " . $rowSubscription['name'] . "<br />";
                 echo "Next payment date: " . $nextPaymentDate->format('Y-m-d') . "<br />";
                 echo "Current date: " . $currentDate->format('Y-m-d') . "<br />";
