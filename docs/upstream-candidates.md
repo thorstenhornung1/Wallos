@@ -137,6 +137,13 @@ not a first PR.
   that way. Only a genuine failure to store the token changes the answer.
 * **`includes/http_status.php` + the `set_fixer.php` half of #101** — upstream
   carries the same asymmetry (`ignore_errors` on line 107, absent on 113).
+* **The progress bar before a subscription has begun (#114)** — the calculation
+  reconstructs the period start by walking whole cycles back from
+  `next_payment` and never consults `start_date`, so a subscription starting in
+  the future shows up to 96 % progress. `upstream/v5_6_0` carries the
+  byte-identical function in `includes/list_subscriptions.php`. Our fix
+  (`74fe954`) moves the arithmetic into `includes/subscription_progress.php`
+  with no boundary dependency, so it adapts with little work.
 
 ## Not portable
 
