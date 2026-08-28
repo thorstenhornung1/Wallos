@@ -26,6 +26,18 @@ while ($userToUpdateExchange = $usersToUpdateExchange->fetchArray(SQLITE3_ASSOC)
     $userId = $userToUpdateExchange['id'];
     echo "For user: " . $userToUpdateExchange['username'] . "<br />";
 
+    // Asked before anything else is resolved or fetched. This job runs on
+    // every container start as well as daily, and it used to fetch
+    // unconditionally — so deploy frequency alone could exhaust a free
+    // provider tier (#117). A refresh that already succeeded today is not
+    // repeated; the manual endpoint's force parameter remains the way to
+    // insist.
+    if (wallos_exchange_rates_fresh($db, $userId)) {
+        wallos_cron_count('skipped');
+        echo "Rates are already current today.<br />";
+        continue;
+    }
+
     // Not configured and refused are the same false today, and they are not
     // the same event. An installation with no currency provider is finished,
     // not broken; a key the provider rejects means every price in a second

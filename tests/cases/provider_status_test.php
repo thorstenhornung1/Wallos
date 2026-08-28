@@ -99,13 +99,18 @@ wallos_test('the four causes do not share a sentence', function () {
 wallos_test('every provider request lets the error body through', function () {
     // The ratchet. Adding a provider branch without 'ignore_errors' puts the
     // defect back: the branch answers false for a 401, and the caller is left
-    // saying "could not be reached" again. Both files reach the provider on two
-    // paths — apilayer and fixer.io — and the fixer.io one is the one that was
+    // blaming the network again. Both files reach the provider on two paths —
+    // apilayer and fixer.io — and the fixer.io one is the one that was
     // missing a stream context entirely, in both files.
+    //
+    // Counted as contexts built, not fetch calls: currency_provider.php's one
+    // network touch moved behind wallos_provider_http_get() (#117), so the
+    // fetch call no longer says how many request paths exist — the context
+    // each path builds does.
     foreach (['includes/currency_provider.php', 'api/fixer/set_fixer.php'] as $path) {
         $source = file_get_contents(WALLOS_ROOT . '/' . $path);
 
-        $requests = substr_count($source, 'file_get_contents(');
+        $requests = substr_count($source, 'stream_context_create(');
         $permits = substr_count($source, "'ignore_errors' => true");
 
         assert_true($requests > 0, $path . ' does reach the provider');

@@ -3,30 +3,11 @@ require_once '../../includes/connect_endpoint.php';
 require_once '../../includes/validate_endpoint.php';
 require_once '../../includes/currency_provider.php';
 
-$shouldUpdate = true;
-
 if (!isset($_POST['force']) || $_POST['force'] !== "true") {
-    // The date has to be read off the result before it can be compared.
-    // execute() returns a result object, and handing that object to DateTime
-    // threw a TypeError on every request since this file exists — so the
-    // skip below, and the force override above, had never run once (#120).
-    $query = "SELECT date FROM last_exchange_update WHERE user_id = :userId";
-    $stmt = $db->prepare($query);
-    $row = false;
-
-    if ($stmt !== false) {
-        $stmt->bindValue(':userId', $userId, SQLITE3_INTEGER);
-        $result = $stmt->execute();
-        $row = $result ? $result->fetchArray(SQLITE3_ASSOC) : false;
-    }
-
-    // A missing or unreadable row means update: refusing to refresh because
-    // the freshness could not be established would be the wrong default.
-    if ($row && !empty($row['date'])) {
-        $shouldUpdate = $row['date'] < (new DateTime())->format('Y-m-d');
-    }
-
-    if (!$shouldUpdate) {
+    // One implementation for both refresh paths; the cron asks the same
+    // question since #117. This check had never run before #120 — the date
+    // was compared without being read off the result first.
+    if (wallos_exchange_rates_fresh($db, $userId)) {
         echo "Rates are current, no need to update.";
         exit;
     }

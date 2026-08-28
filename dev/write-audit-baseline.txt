@@ -8,7 +8,7 @@
 #
 # Do not edit by hand — run dev/write-audit.php --update and commit the diff.
 #
-# 119 file(s), 23 discarded result(s), 315 unchecked prepare(s).
+# 118 file(s), 23 discarded result(s), 314 unchecked prepare(s).
 
 admin.php	0	4
 api/admin/get_admin_settings.php	0	1
@@ -52,7 +52,6 @@ endpoints/categories/category.php	0	5
 endpoints/cronjobs/generaterecommendations.php	0	5
 endpoints/currency/currency.php	0	4
 endpoints/currency/fixer_api_key.php	2	0
-endpoints/currency/update_exchange.php	0	1
 endpoints/household/household.php	0	3
 endpoints/logos/google_search.php	0	1
 endpoints/notifications/savediscordnotifications.php	0	2

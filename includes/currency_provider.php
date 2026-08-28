@@ -10,6 +10,32 @@
 require_once __DIR__ . '/integration_config.php';
 require_once __DIR__ . '/http_status.php';
 
+if (!function_exists('wallos_provider_http_get')) {
+    /**
+     * The one network touch of the provider client, separated so a test can
+     * stand in for the provider without a socket — the same reasoning that
+     * put the status logic into http_status.php: no test in this suite makes
+     * a request, and the one that proved it the expensive way spent half a
+     * year of a free tier (#104). A test defines its own version before this
+     * file is loaded; the guard lets that stand.
+     *
+     * @param string   $url
+     * @param resource $context
+     * @return array{body: string|false, headers: array|null}
+     */
+    function wallos_provider_http_get($url, $context)
+    {
+        $body = @file_get_contents($url, false, $context);
+
+        // Populated by PHP only when a response actually arrived, which is
+        // what separates a refusal from an outage.
+        return [
+            'body' => $body,
+            'headers' => isset($http_response_header) ? $http_response_header : null,
+        ];
+    }
+}
+
 /**
  * Fetches exchange rates with EUR as the base currency.
  *
@@ -56,14 +82,15 @@ function wallos_fetch_exchange_rates($config, $codes)
                 'ignore_errors' => true,
             ]
         ]);
-        $response = @file_get_contents($apiUrl, false, $context);
+        $http = wallos_provider_http_get($apiUrl, $context);
+        $response = $http['body'];
 
         // apilayer reports the monthly quota in its response headers; keep it so
         // the usage bar does not cost an extra API request.
-        if (isset($http_response_header)) {
+        if (is_array($http['headers'])) {
             $limit = null;
             $remaining = null;
-            foreach ($http_response_header as $header) {
+            foreach ($http['headers'] as $header) {
                 if (stripos($header, 'x-ratelimit-limit-month:') === 0) {
                     $limit = (int) trim(substr($header, strlen('x-ratelimit-limit-month:')));
                 } elseif (stripos($header, 'x-ratelimit-remaining-month:') === 0) {
@@ -82,16 +109,20 @@ function wallos_fetch_exchange_rates($config, $codes)
                 'ignore_errors' => true,
             ]
         ]);
-        $response = @file_get_contents($apiUrl, false, $context);
+        $http = wallos_provider_http_get($apiUrl, $context);
+        $response = $http['body'];
     }
 
-    // Set by PHP only when a response arrived, which is what separates a
-    // refusal from an outage.
-    $status = wallos_http_status_code(isset($http_response_header) ? $http_response_header : null);
+    $status = wallos_http_status_code($http['headers']);
 
     if ($response === false) {
         $failure['usage'] = $usage;
         $failure['message'] = wallos_provider_failure_message($status, null);
+
+        // Cached like a success: a provider that was unreachable a moment ago
+        // will not answer the next account in the same run either, and
+        // retrying per account multiplies timeouts, not information (#117).
+        $cache[$cacheKey] = $failure;
 
         return $failure;
     }
@@ -101,6 +132,15 @@ function wallos_fetch_exchange_rates($config, $codes)
     if (!is_array($apiData) || !isset($apiData['rates'])) {
         $failure['usage'] = $usage;
         $failure['message'] = wallos_provider_failure_message($status, $apiData);
+
+        // A key the provider just rejected is rejected for every account
+        // sharing it in this run. Before this, a run over N accounts with an
+        // exhausted quota spent N calls to learn the same 429 N times —
+        // observed on the test instance on 2026-08-28 (#117). The cache key
+        // includes the code list, so accounts with different currency lists
+        // still ask once each; a key-level negative cache is deliberately
+        // not attempted.
+        $cache[$cacheKey] = $failure;
 
         return $failure;
     }
@@ -113,6 +153,35 @@ function wallos_fetch_exchange_rates($config, $codes)
     ];
 
     return $cache[$cacheKey];
+}
+
+/**
+ * Whether one user's rates were already refreshed today.
+ *
+ * The one answer both refresh paths agree on: the manual endpoint skips a
+ * fresh user unless forced, and since #117 the cron and the startup run skip
+ * them too — a container start used to spend one provider call per account
+ * whatever the rates' age, so deploy frequency alone could exhaust a free
+ * tier. A missing or unreadable row answers false, because refusing to
+ * refresh over an unestablished freshness would be the wrong default.
+ *
+ * @param SQLite3 $db
+ * @param int     $userId
+ * @return bool
+ */
+function wallos_exchange_rates_fresh($db, $userId)
+{
+    $stmt = $db->prepare('SELECT date FROM last_exchange_update WHERE user_id = :userId');
+
+    if ($stmt === false) {
+        return false;
+    }
+
+    $stmt->bindValue(':userId', $userId, SQLITE3_INTEGER);
+    $result = $stmt->execute();
+    $row = $result ? $result->fetchArray(SQLITE3_ASSOC) : false;
+
+    return $row && !empty($row['date']) && $row['date'] >= (new DateTime())->format('Y-m-d');
 }
 
 /**
