@@ -7,10 +7,11 @@ file is the part that is in neither.
 
 ## The state right now
 
-Released: **5.8.6** (2026-08-28), `ghcr.io/thorstenhornung1/wallos:5.8.6`,
-`sha256:6541d6ddf25bcc066107185d9aaca7fead33c914a3560c036fa3c6d6a41b65dd`.
-466 tests on SQLite and PostgreSQL 14 and 18, all four gates green:
-`dev/db-audit.sh`, `dev/sh-audit.sh`, `dev/write-audit.php`, and the Semgrep run.
+Released: **5.8.7** (2026-08-28), `ghcr.io/thorstenhornung1/wallos:5.8.7`,
+`sha256:5a582aa9bc1b744668e2271bea22b86ea06e9c2adec33e9f7298f8e17b2ebf59`.
+474 tests on SQLite and PostgreSQL 14 and 18, all five gates green:
+`dev/db-audit.sh`, `dev/sh-audit.sh`, `dev/write-audit.php`, the Semgrep run,
+and `dev/js-audit.sh` — new with #119, every served JavaScript file must parse.
 
 ## What 2026-08-24 turned up, after this file was first written
 
