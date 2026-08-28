@@ -432,6 +432,7 @@ $i18n = [
     "error_fetching_image" => "Error fetching image",
     "subscription_updated_successfuly" => "Subscription updated successfully",
     "subscription_added_successfuly" => "Subscription added successfully",
+    "subscription_deleted" => "Subscription deleted successfully",
     "error_deleting_subscription" => "Error deleting subscription.",
     "cannot_delete_last_admin" => "This is the last administrator. Give another account the administrator role first.",
     "invalid_parameter" => "The request was missing a value or sent one in the wrong form.",
