@@ -7,9 +7,9 @@ file is the part that is in neither.
 
 ## The state right now
 
-Released: **5.8.5**, `ghcr.io/thorstenhornung1/wallos:5.8.5`,
-`sha256:24d79f9e9f4ed6ac4e52a6fbdb5427c5c9bafef93b1fa7e9aa0c4a443cf6b37d`.
-432 tests on SQLite and PostgreSQL 14 and 18, all four gates green:
+Released: **5.8.6** (2026-08-28), `ghcr.io/thorstenhornung1/wallos:5.8.6`,
+`sha256:6541d6ddf25bcc066107185d9aaca7fead33c914a3560c036fa3c6d6a41b65dd`.
+466 tests on SQLite and PostgreSQL 14 and 18, all four gates green:
 `dev/db-audit.sh`, `dev/sh-audit.sh`, `dev/write-audit.php`, and the Semgrep run.
 
 ## What 2026-08-24 turned up, after this file was first written
