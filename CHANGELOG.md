@@ -1,5 +1,67 @@
 # Changelog
 
+## [5.8.7](https://github.com/thorstenhornung1/Wallos/releases/tag/v5.8.7) (2026-08-28)
+
+Everything in here was found on 2026-08-28, by the two QA runs that
+verified 5.8.6 and by the questions they raised. The theme is channels
+nobody listened on: a parse error no test parsed, a status code that fired
+after its headers, a freshness check that died before running, and quota
+spent telling every account the same bad news.
+
+### Fixed
+
+* **admin:** every admin-page button works again
+  ([#119](https://github.com/thorstenhornung1/Wallos/issues/119)). One
+  missing comma in `scripts/admin.js` was a parse error, a parse error
+  discards the whole file, and every button whose handler lived there was
+  dead from 5.8.1 through 5.8.6. No server-side test could see it — the
+  endpoints behind the buttons are fine — so `dev/js-audit.sh` now parses
+  every served JavaScript file, locally and as its own CI job.
+
+* **subscriptions:** creating a subscription without a logo works on
+  PostgreSQL ([#115](https://github.com/thorstenhornung1/Wallos/issues/115)).
+  The INSERT named 22 placeholders and bound 19 unless a logo was uploaded;
+  SQLite quietly made the missing three NULL, PostgreSQL counted and
+  refused — the browser form's default request. The binds are explicit now,
+  and a gate reads the INSERT out of the file and requires every placeholder
+  to find a bind even when the logo branches are skipped.
+
+* **migrations:** a failed run reaches the caller as a status
+  ([#116](https://github.com/thorstenhornung1/Wallos/issues/116)). The #103
+  check fired after the runner's output had already sent the headers, so
+  HTTP said 200 and the CLI exited 0 on a run that stopped halfway. The
+  output is buffered until the answer is known, and a failed CLI run exits 1
+  — tested by running the shipped endpoint as a process against a sandboxed
+  migration chain.
+
+* **currency:** the manual refresh endpoint works at all
+  ([#120](https://github.com/thorstenhornung1/Wallos/issues/120)). It
+  compared a date it never read off the result — a TypeError on every
+  request since the file exists, killing the only refresh path that checked
+  freshness before spending quota. Upstream carries the identical defect.
+
+* **subscriptions:** one unparseable start date no longer takes down the
+  whole subscriptions page
+  ([#121](https://github.com/thorstenhornung1/Wallos/issues/121)).
+  Unreadable now means what missing already meant: unknown, old semantics,
+  no exception.
+
+* **i18n:** the deletion toast says "Subscription deleted successfully"
+  instead of naming the missing key
+  ([#118](https://github.com/thorstenhornung1/Wallos/issues/118)).
+
+### Changed
+
+* **currency:** a container start stops spending provider quota
+  ([#117](https://github.com/thorstenhornung1/Wallos/issues/117)). The
+  exchange job runs at every start and fetched unconditionally, one call
+  per account — the 5.8.6 deploy spent two calls against a quota that was
+  already exhausted, learning the same 429 twice. An account refreshed
+  today is skipped before anything is resolved; failures are cached per
+  run the way successes already were; and the client's one network touch
+  now sits behind a seam, so all of it is tested without a socket — no
+  test in this suite makes a request.
+
 ## [5.8.6](https://github.com/thorstenhornung1/Wallos/releases/tag/v5.8.6) (2026-08-28)
 
 Two answers that existed and reached nobody — the migration runner's and the
