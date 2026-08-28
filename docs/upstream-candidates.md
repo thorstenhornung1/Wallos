@@ -51,9 +51,12 @@ check at line 123 (`$valid && $matchedStep <= $lastUsedStep`) can never be true.
 The guard, its comment and the write that maintains it all exist; the column is
 simply missing from the SELECT. It has been there since `migrations/000027.php`.
 
-**One word in a SELECT.** Branch `origin/upstream-fix/totp-replay` (+12/−4),
-merges cleanly into both `main` and `v5_6_0`. Best first PR: a security defect
-whose fix a reviewer can verify in under a minute.
+**One word in a SELECT.** Opened 2026-08-28 as **upstream PR #1181**, base
+`v5_6_0`, from `origin/upstream-fix/totp-replay` (+12/−4) — verified after the
+fact to carry exactly that one file. Deliberately alone: the next PR waits for
+the maintainer's reaction to this one. The body frames the impact as limited —
+replaying needs the password plus a code observed inside the leeway window —
+at Thorsten's direction, not as a hard vulnerability.
 
 ### 2. `logout.php` — the login token survives logout
 
