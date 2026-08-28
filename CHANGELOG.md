@@ -1,5 +1,71 @@
 # Changelog
 
+## [5.8.6](https://github.com/thorstenhornung1/Wallos/releases/tag/v5.8.6) (2026-08-28)
+
+Two answers that existed and reached nobody — the migration runner's and the
+database configuration's — plus the notification cron finishing what #99
+started, and a progress bar that ran ahead of its subscription.
+
+### Added
+
+* **admin:** the admin page names the database backend, its version and where
+  the data lives
+  ([#102](https://github.com/thorstenhornung1/Wallos/issues/102)).
+  `wallos_database_configuration()` resolved the backend carefully and showed
+  the result to nobody: SQLite and PostgreSQL were indistinguishable through
+  the interface, which is how the test instance served SQLite for three days
+  while three reports called it PostgreSQL. The page also says which values
+  are built-in defaults — an unset driver reads "sqlite" too, and that is
+  precisely the case worth noticing.
+
+### Fixed
+
+* **migrations:** a failed migration no longer reports success
+  ([#103](https://github.com/thorstenhornung1/Wallos/issues/103)). The runner
+  sets its failure flag for the caller to read, and no caller read it:
+  `migrate.php` answered 200 regardless and `import.php` answered
+  `success: true` after a restore that did not finish, both discarding the
+  runner's output. This was the mechanism by which an instance could serve
+  pages on a schema older than its code without anyone learning of it.
+
+* **currency:** the provider client says which of the four failures happened
+  ([#101](https://github.com/thorstenhornung1/Wallos/issues/101)). A 401, a
+  429, a 503 and an unplugged network cable all arrived as `false` through
+  `@file_get_contents()` without `ignore_errors`, and all produced "could not
+  be reached" — correct in one case out of four. The absence of
+  `$http_response_header` is the real outage; everything else now carries the
+  provider's own words, which explain themselves better than a category
+  assigned from outside.
+
+* **ui:** the progress bar stays empty until a subscription has begun
+  ([#114](https://github.com/thorstenhornung1/Wallos/issues/114)). The period
+  start was reconstructed by walking whole cycles back from the next payment
+  and never consulted the start date, so a subscription that had not started
+  showed up to 96 % of a period elapsed. Upstream carries the identical
+  function; recorded in `docs/upstream-candidates.md`.
+
+### Changed
+
+* **cron:** the notification job asks who has work before loading anyone's
+  rows ([#99](https://github.com/thorstenhornung1/Wallos/issues/99)). The
+  question — the notify subscriptions and the budget row, two queries however
+  many accounts exist — comes first; currencies, household, categories and
+  the active list are loaded for the accounts with work alone, and a day with
+  nothing due costs two queries. The rules were extracted unimproved into
+  `includes/notification_due.php` and pinned by tests before the loop began
+  trusting them, including the account that is owed a period-start summary
+  precisely because it has no payment to report.
+
+### Documentation
+
+* The first upstream pull request is out: the TOTP replay guard that never
+  ran ([ellite/Wallos#1181](https://github.com/ellite/Wallos/pull/1181)),
+  base `v5_6_0`. Four more single-file branches wait on the reaction to it.
+* The price-history gap has a milestone: editing a price rewrites the past
+  ([#107](https://github.com/thorstenhornung1/Wallos/issues/107), six
+  sub-issues). Upstream was asked for this twice and built half of it; the
+  whole account is in the parent issue.
+
 ## [5.8.5](https://github.com/thorstenhornung1/Wallos/releases/tag/v5.8.5) (2026-08-21)
 
 Four issues that had been waiting on somebody deciding what the answer should
