@@ -2,6 +2,7 @@
 
 require_once 'i18n/getlang.php';
 require_once __DIR__ . '/currency_rates.php';
+require_once __DIR__ . '/subscription_progress.php';
 
 function getBillingCycle($cycle, $frequency, $i18n)
 {
@@ -17,49 +18,6 @@ function getBillingCycle($cycle, $frequency, $i18n)
         case 5:
             return translate('One-time', $i18n);
     }
-}
-
-function getSubscriptionProgress($cycle, $frequency, $next_payment)
-{
-    if ($cycle === 5) {
-        return 0;
-    }
-
-    $nextPaymentDate = new DateTime($next_payment);
-    $currentDate = new DateTime((new DateTime('now'))->format('Y-m-d'));
-
-    $paymentCycleDays = 30; // Default to monthly
-    if ($cycle === 1) {
-        $paymentCycleDays = 1 * $frequency;
-    } else if ($cycle === 2) {
-        $paymentCycleDays = 7 * $frequency;
-    } else if ($cycle === 3) {
-        $paymentCycleDays = 30 * $frequency;
-    } else if ($cycle === 4) {
-        $paymentCycleDays = 365 * $frequency;
-    }
-
-    if ($paymentCycleDays <= 0) {
-        return 0;
-    }
-
-    // next_payment can be many cycles away from today (a stale value, or
-    // several missed renewal runs), so we can't always assume it's within a
-    // single cycle of "now". Walk back however many whole cycles are needed
-    // so the window we measure progress against is the one that actually
-    // contains today.
-    $daysUntilNextPayment = $currentDate->diff($nextPaymentDate)->days;
-    $cyclesBack = $currentDate <= $nextPaymentDate
-        ? max(1, (int) ceil($daysUntilNextPayment / $paymentCycleDays))
-        : 1;
-
-    $lastPaymentDate = clone $nextPaymentDate;
-    $lastPaymentDate->modify('-' . ($cyclesBack * $paymentCycleDays) . ' days');
-
-    $daysSinceLastPayment = $lastPaymentDate->diff($currentDate)->days;
-    $subscriptionProgress = ($daysSinceLastPayment / $paymentCycleDays) * 100;
-
-    return floor($subscriptionProgress);
 }
 
 function getPricePerMonth($cycle, $frequency, $price)
