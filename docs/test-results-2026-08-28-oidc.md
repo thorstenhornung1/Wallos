@@ -377,3 +377,44 @@ because the payload named `billing_period`/`frequency` where the endpoint reads
 subscription was simply left out of the fixture set (the deletion check does not
 need it). Recorded in the same spirit as the 2026-08-20 note: a specific refusal
 is what tells a bad request apart from a broken endpoint.
+
+## Addendum — #123 fix field test on the main digest (same day, later)
+
+After this run finished, the merged #123 fix (architecture A, security verdict
+at the issue) was field-tested on this instance under a **temporary main-digest
+pin** approved by the operator. ⚠️ The image self-reports `v5.8.7` —
+`version.php` is only bumped at release — so, deliberately, the environment
+below is proven **by digest only**:
+
+```sh
+$ docker service inspect wallos-test_wallos --format '{{.Spec.TaskTemplate.ContainerSpec.Image}}'
+ghcr.io/thorstenhornung1/wallos@sha256:65aaf7ee1ec8bff1ce28d730e25b4460b6cb98c273b514bffd436c873a2a2163
+```
+
+Three layers, all verified:
+
+1. **Schema and jobs.** Migration `000068` ran at start (migrations 66 → 67);
+   `oidc_sessions` now carries the `id_token` column
+   (`id,user_id,sid,session_id,login_token,created_at,id_token`); the
+   `cleanupsessions` cron required by the security verdict is in the crontab.
+2. **Persistence.** A fresh Authentik sign-in (operator, user 113, 06:35:20 UTC)
+   stored its id_token server-side (`id_token IS NOT NULL`, length 1668). The
+   pre-deploy row holds an empty token, as documented — its first logout would
+   degrade once.
+3. **End to end — the exact #123 scenario, now green.** Container restarted via
+   `service update --force` (session gone, `wallos_login` cookie kept); the
+   operator was signed back in by remember-me and clicked logout. Result:
+   **clean logout with return** — Wallos 07:42 sends `logout.php → 302`,
+   Authentik receives `end-session/?id_token_hint=…` (the hint now comes from
+   `oidc_sessions`), answers `302` into the invalidation flow and records a
+   real `action: logout` event; the browser lands back on
+   `login.php?logged_out=1`, and the next login asks for the password. The
+   morning's reproduction of the same scenario ended in Authentik's 400.
+   The `oidc_sessions` row was deleted by the logout (0 rows left) — the
+   revocation coupling the security verdict demanded.
+
+The remember-me row of the results table above is therefore **fixed on main**
+(unreleased); 7.3's fresh-login logout end-to-end is now ALSO covered by this
+addendum's operator-driven run. The instance stays on the main digest until the
+next tagged release replaces the pin (operator decision, recorded in the stack
+file and docs/next-steps.md).
