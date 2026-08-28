@@ -153,3 +153,41 @@ wallos_test('a migration that gives up after logging says so with false', functi
         }
     }
 });
+
+wallos_test('a failed run reaches the caller as a status, not as prose', function () {
+    // The check lived in migrate.php and fired after the runner's own output
+    // had already sent the headers; the CLI exited 0 either way. A deployment
+    // script watching either channel saw success on a run that stopped
+    // halfway (#116). The sandbox carries migrate.php as well, so what runs
+    // here is the shipped caller, not a restatement of it.
+    $db = wallos_test_open_database();
+
+    $sandbox = migration_runner_sandbox([
+        '999990.php' => 'return false;',
+    ]);
+    mkdir($sandbox . '/endpoints/db', 0700, true);
+    copy(WALLOS_ROOT . '/endpoints/db/migrate.php', $sandbox . '/endpoints/db/migrate.php');
+
+    $command = 'cd ' . escapeshellarg(WALLOS_ROOT) . ' && php '
+        . escapeshellarg($sandbox . '/endpoints/db/migrate.php') . ' 2>&1';
+
+    $output = [];
+    $status = 0;
+    exec($command, $output, $status);
+    $text = implode("\n", $output);
+
+    assert_true($status !== 0, 'a failed migration exits non-zero (got 0; output: ' . $text . ')');
+    assert_contains('Migration failed', $text, 'and it still says which one');
+
+    // The same caller with the migration repaired: the answer returns to 0.
+    file_put_contents($sandbox . '/migrations/999990.php', "<?php\nreturn true;");
+    $output = [];
+    exec($command, $output, $status);
+    assert_same(0, $status, 'a clean run exits zero (output: ' . implode("\n", $output) . ')');
+
+    @unlink($sandbox . '/endpoints/db/migrate.php');
+    @rmdir($sandbox . '/endpoints/db');
+    @rmdir($sandbox . '/endpoints');
+    migration_runner_cleanup($sandbox);
+    $db->close();
+});

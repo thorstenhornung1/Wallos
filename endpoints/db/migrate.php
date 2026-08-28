@@ -24,13 +24,29 @@ if (PHP_SAPI !== 'cli') {
     }
 }
 
+// The runner narrates as it works, and with output_buffering=0 — the shipped
+// image's setting — its first echo sends the headers, after which the status
+// line below is a warning and a failed run answers 200 anyway (#116).
+// Buffered, the status still belongs to this endpoint when the answer is
+// known; import.php holds its restore output the same way.
+ob_start();
 require_once __DIR__ . '/../../includes/run_migrations.php';
+
+if ($migrationFailure !== null) {
+    http_response_code(500);
+}
+
+ob_end_flush();
 
 // This endpoint exists to run migrations and nothing else, so its status code
 // is the whole answer. Ending here regardless left it saying 200 for a run that
 // stopped halfway (issue #103) — and the caller most likely to be listening is
-// a cron job or a deployment script, neither of which reads prose.
+// a cron job or a deployment script, neither of which reads prose. On the
+// command line that caller watches the exit code.
 if ($migrationFailure !== null) {
-    http_response_code(500);
     echo 'Migration failed: ' . basename((string) $migrationFailure) . PHP_EOL;
+
+    if (PHP_SAPI === 'cli') {
+        exit(1);
+    }
 }
