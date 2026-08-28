@@ -9,7 +9,7 @@ It receives the following parameters:
 - disabled_to_bottom: whether to sort the inactive subscriptions to the bottom (string) default false. Must be the literal string "true" to take effect.
 - sort: the sorting method (string) default next_payment ['name', 'id', 'next_payment', 'price', 'payer_user_id', 'category_id', 'payment_method_id', 'inactive', 'alphanumeric'].
 - convert_currency: whether to convert to the main currency (string) default false. Must be the literal string "true" to take effect.
-- all-user-subscription: whether to return subscriptions for every user instead of just the caller (string) default null. Only honored when api_key belongs to user id 1; adds the "users" field to the response.
+- all-user-subscription: whether to return subscriptions for every user instead of just the caller (string) default null. Must be the literal value 1; any other user's request carrying it is denied outright ("Denied. Not admin user"). Adds the "users" field to the response.
 - api_key: the API key of the user.
 
 It returns a JSON object with the following properties:

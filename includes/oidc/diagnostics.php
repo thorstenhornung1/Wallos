@@ -102,7 +102,11 @@ function wallos_oidc_checks($configuration, $discovery = null, $discoveryError =
         $checks[] = wallos_oidc_check('Client secret', WALLOS_OIDC_ERROR,
             'The configured secret file cannot be read.');
     } elseif ($secret === '') {
-        $checks[] = wallos_oidc_check('Client secret', WALLOS_OIDC_ERROR, 'Not configured.');
+        // Since upstream e6d9276 an empty secret is a legitimate state: a
+        // public client authenticates without one. Reporting it as an error
+        // showed a permanently red check for a correctly configured provider.
+        $checks[] = wallos_oidc_check('Client secret', WALLOS_OIDC_WARNING,
+            'Empty — treated as a public client. Set a secret if the provider expects a confidential client.');
     } else {
         $checks[] = wallos_oidc_check('Client secret', WALLOS_OIDC_OK,
             'Configured' . $source('client_secret') . '.');

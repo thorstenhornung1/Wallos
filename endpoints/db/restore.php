@@ -136,7 +136,8 @@ if (isset($_FILES['file'])) {
                     "success" => false,
                     "message" => "Restored, but migrating the backup failed at "
                         . basename((string) $migrationFailure)
-                        . "; it will be retried on the next container start."
+                        . ". The migration is retried on the next container start;"
+                        . " the backup's logos were not copied — fix the cause and restore again."
                 ]));
             }
 

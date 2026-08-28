@@ -404,6 +404,7 @@ $i18n = [
     "subscription_updated_successfuly" => "Abonnement erfolgreich aktualisiert",
     "subscription_added_successfuly" => "Abonnement erfolgreich hinzugefügt",
     "subscription_deleted" => "Abonnement erfolgreich gelöscht",
+    "error_saving_logo" => "Fehler beim Speichern des Logos.",
     "error_deleting_subscription" => "Abonnement konnte nicht gelöscht werden.",
     "cannot_delete_last_admin" => "Dies ist die letzte Administration. Bitte zuerst einem anderen Konto die Administratorrolle geben.",
     "invalid_parameter" => "Der Anfrage fehlte ein Wert, oder er hatte die falsche Form.",

@@ -36,8 +36,15 @@ $postFields = [
     'code' => $_GET['code'],
     'redirect_uri' => $redirectUri,
     'client_id' => $oidcSettings['client_id'],
-    'client_secret' => $oidcSettings['client_secret'],
 ];
+
+// A public client has no secret, and sending client_secret= as an empty
+// parameter is not the same as not authenticating with one: strict providers
+// read the empty value as a failed client authentication. Omitted entirely,
+// the request is a plain public-client token exchange.
+if ((string) $oidcSettings['client_secret'] !== '') {
+    $postFields['client_secret'] = $oidcSettings['client_secret'];
+}
 
 $ch = curl_init($tokenUrl);
 curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);

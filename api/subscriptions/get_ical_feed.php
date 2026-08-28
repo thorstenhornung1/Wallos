@@ -108,8 +108,12 @@ if ($_SERVER["REQUEST_METHOD"] === "POST" || $_SERVER["REQUEST_METHOD"] === "GET
     $stmt->bindValue(':userId', $userId, SQLITE3_INTEGER);
     $result = $stmt->execute();
 
+    // Initialised outside the guard: a failed execute otherwise left the
+    // variable undefined and the loops below warning their way to an empty
+    // calendar. The empty calendar is the right answer; the warnings are not.
+    $subscriptions = array();
+
     if ($result) {
-        $subscriptions = array();
         while ($row = $result->fetchArray(SQLITE3_ASSOC)) {
             $subscriptions[] = $row;
         }
