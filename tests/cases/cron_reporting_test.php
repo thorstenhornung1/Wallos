@@ -450,7 +450,7 @@ wallos_test('every cron job reports itself', function () {
     // strpos would be satisfied by the word appearing in a comment. The
     // tokeniser is asked whether the call is really there.
     $jobs = [
-        'checkforupdates', 'cleanupresettokens', 'generaterecommendations',
+        'checkforupdates', 'cleanupresettokens', 'cleanupsessions', 'generaterecommendations',
         'sendcancellationnotifications', 'sendnotifications', 'sendresetpasswordemails',
         'sendverificationemails', 'storetotalyearlycost', 'updateexchange', 'updatenextpayment',
     ];

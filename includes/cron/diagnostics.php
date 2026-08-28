@@ -92,6 +92,11 @@ function wallos_cron_jobs()
             'schedule' => 'daily at 03:00',
             'stale_after' => 2 * $day,
         ],
+        'cleanupsessions' => [
+            'label' => 'Expired sessions',
+            'schedule' => 'daily at 03:15',
+            'stale_after' => 2 * $day,
+        ],
         'generaterecommendations:weekly' => [
             'label' => 'AI recommendations (weekly)',
             'schedule' => 'weekly, Monday 03:30',

@@ -223,7 +223,8 @@ function wallos_archive_manifest($db, $counts)
         'tables' => $counts,
         'contains_secrets' => true,
         'note' => 'Rows are stored as data, so this archive restores into either backend. '
-            . 'It contains SMTP passwords, API keys and OIDC client secrets in clear text.',
+            . 'It contains SMTP passwords, API keys and OIDC client secrets in clear text, '
+            . 'plus login tokens and OIDC ID tokens carrying identity claims (#123).',
     ];
 }
 
