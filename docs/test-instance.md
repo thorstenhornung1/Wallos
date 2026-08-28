@@ -730,9 +730,24 @@ Local logout always completes first — token deleted, session destroyed, cookie
 cleared — before the redirect is issued. A provider that is unreachable or
 misconfigured cannot leave you signed in to Wallos.
 
-Whether Authentik ends only the application session or the whole SSO session
-depends on its provider invalidation flow. That is a provider-side setting;
-Wallos sends the standard request either way.
+**The expected outcome is single logout.** Since 2026-08-28 both Wallos
+providers in this Authentik use the default invalidation flow, so a Wallos
+logout ends the whole SSO session: the next "Login with OIDC" must ask for
+credentials again, not silently sign in the previous user. A run that finds
+only the application session ended is a finding now, not the old normal —
+this paragraph used to say the outcome depended on the provider flow, and the
+2026-08-28 run documented the flow change as deliberate.
+
+**A restart does not break this any more (#123).** The id token the
+end-session request needs used to live only in the PHP session, which every
+deploy destroys; the first logout after a restart then sent a request the
+provider refused with 400. Since migration 000068 the token is stored with
+the session row and restored with the remember-me cookie — verified in the
+field on 2026-08-28: restart, restore, logout, provider session ended, return
+redirect honoured. Sessions signed in before that migration carry no stored
+token; their first logout degrades once to the bare end-session request (the
+provider session still ends, only the automatic return is skipped) and heals
+at the next login.
 
 **One authentik trap, found in the 2026-08-17 run.** If you log out of authentik
 first and *then* ask Wallos to log out, you land on a page containing nothing but
