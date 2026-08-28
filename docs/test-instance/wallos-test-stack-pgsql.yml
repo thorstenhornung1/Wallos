@@ -28,7 +28,15 @@ version: "3.8"
 services:
   wallos:
     # Pinned, not `latest`: the report has to be able to name what it tested.
-    image: ghcr.io/thorstenhornung1/wallos:5.8.7
+    #
+    # TEMPORARY main-digest pin (approved by Thorsten, 2026-08-28): field test
+    # of the merged #123 fix (id_token persisted in oidc_sessions, migration
+    # 000068) BEFORE any release exists. Stays until the next tagged release
+    # replaces it. ⚠️ The image reports itself as v5.8.7 — version.php is only
+    # bumped at release time — so the admin panel CANNOT distinguish this
+    # build from the 5.8.7 release. The digest below is the only truth
+    # (docs/next-steps.md, 05e5064).
+    image: ghcr.io/thorstenhornung1/wallos@sha256:65aaf7ee1ec8bff1ce28d730e25b4460b6cb98c273b514bffd436c873a2a2163
     environment:
       TZ: Europe/Berlin
 
