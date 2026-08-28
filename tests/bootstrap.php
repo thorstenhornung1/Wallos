@@ -496,6 +496,28 @@ function wallos_test_database()
     if ($template === null) {
         $sandbox = WALLOS_TEST_TMP . '/sandbox';
 
+        // The sandbox and its built database survive in the temp directory
+        // across suite runs, and nothing used to invalidate them — the first
+        // new migration after that produced a template that was quietly one
+        // migration behind, and every consumer of it failed somewhere far
+        // downstream ("the source is behind the target schema"). A chain
+        // newer than the built database means both are stale.
+        $built = $sandbox . '/db/wallos.db';
+        if (file_exists($built)) {
+            foreach (glob(WALLOS_ROOT . '/migrations/*.php') as $migration) {
+                if (filemtime($migration) > filemtime($built)) {
+                    foreach (glob($sandbox . '/migrations/*.php') as $copied) {
+                        unlink($copied);
+                    }
+                    unlink($built);
+                    foreach (glob(WALLOS_ROOT . '/migrations/*.php') as $fresh) {
+                        copy($fresh, $sandbox . '/migrations/' . basename($fresh));
+                    }
+                    break;
+                }
+            }
+        }
+
         if (!is_dir($sandbox)) {
             mkdir($sandbox, 0700, true);
             foreach (['endpoints/cronjobs', 'includes', 'migrations', 'db'] as $directory) {

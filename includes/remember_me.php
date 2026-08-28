@@ -82,7 +82,7 @@ function restoreSessionFromRememberMeCookie($db)
     //   the new session id in oidc_sessions, because session_regenerate_id()
     //   above just invalidated the recorded one — leaving revocation to delete
     //   a row that belongs to a session that no longer exists.
-    $sessionStatement = $db->prepare('SELECT id FROM oidc_sessions WHERE login_token = :token LIMIT 1');
+    $sessionStatement = $db->prepare('SELECT id, id_token FROM oidc_sessions WHERE login_token = :token LIMIT 1');
     if ($sessionStatement !== false) {
         $sessionStatement->bindValue(':token', $token, SQLITE3_TEXT);
         $sessionResult = $sessionStatement->execute();
@@ -90,6 +90,14 @@ function restoreSessionFromRememberMeCookie($db)
 
         if ($sessionRow !== false) {
             $_SESSION['from_oidc'] = true;
+
+            // The id token comes back too, or the first logout after a
+            // container restart has no id_token_hint to offer and the
+            // end-session request degrades to the bare form (#123). Rows
+            // from before the column exist carry '', which stays absent.
+            if (!empty($sessionRow['id_token'])) {
+                $_SESSION['oidc_id_token'] = $sessionRow['id_token'];
+            }
 
             $update = $db->prepare('UPDATE oidc_sessions SET session_id = :sessionId WHERE id = :id');
             $recorded = false;

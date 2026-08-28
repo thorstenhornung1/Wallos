@@ -112,11 +112,14 @@ function wallos_oidc_validate_logout_token($token, $jwks, $expectations, $now, $
  * @param string|null $sid       the provider's session id, when it sends one
  * @param string      $sessionId the PHP session id
  * @param string|null $loginToken
+ * @param string|null $idToken   kept for id_token_hint at logout — the PHP
+ *                               session that also holds it does not survive a
+ *                               container restart, this row does (#123)
  */
-function wallos_oidc_register_session($db, $userId, $sid, $sessionId, $loginToken)
+function wallos_oidc_register_session($db, $userId, $sid, $sessionId, $loginToken, $idToken = null)
 {
-    $stmt = $db->prepare('INSERT INTO oidc_sessions (user_id, sid, session_id, login_token)
-                          VALUES (:userId, :sid, :sessionId, :loginToken)');
+    $stmt = $db->prepare('INSERT INTO oidc_sessions (user_id, sid, session_id, login_token, id_token)
+                          VALUES (:userId, :sid, :sessionId, :loginToken, :idToken)');
     if ($stmt === false) {
         return;
     }
@@ -124,6 +127,7 @@ function wallos_oidc_register_session($db, $userId, $sid, $sessionId, $loginToke
     $stmt->bindValue(':sid', $sid === null ? '' : $sid, SQLITE3_TEXT);
     $stmt->bindValue(':sessionId', $sessionId, SQLITE3_TEXT);
     $stmt->bindValue(':loginToken', $loginToken === null ? '' : $loginToken, SQLITE3_TEXT);
+    $stmt->bindValue(':idToken', $idToken === null ? '' : $idToken, SQLITE3_TEXT);
 
     // Checked, because a session with no row here can never be revoked — the
     // guard reads the row's absence as "not an OIDC session" and lets it

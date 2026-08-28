@@ -117,13 +117,18 @@ wallos_test('an existing query string on the endpoint is kept', function () {
         'and the new ones are appended, not started with a second ?');
 });
 
-wallos_test('a missing ID token does not produce an empty hint', function () {
-    // Sending id_token_hint= with nothing after it is worse than omitting it:
-    // some providers reject the request outright.
-    $url = wallos_oidc_build_end_session_url('https://auth.example.com/end', null, null, 'st');
+wallos_test('a missing ID token takes the redirect and the state with it', function () {
+    // The certification rule cuts the other way: a provider that receives
+    // post_logout_redirect_uri without an id_token_hint it can tie to a
+    // session MUST refuse — Authentik answers 400, and the user sees "Bad
+    // Request" instead of being signed out (#123). A bare end-session
+    // request still ends the provider session; only the automatic return is
+    // lost, which is the smaller harm.
+    $url = wallos_oidc_build_end_session_url(
+        'https://auth.example.com/end', null, 'https://wallos.example.com/logged-out', 'st');
 
-    assert_true(strpos($url, 'id_token_hint') === false, 'omitted entirely');
-    assert_true(strpos($url, 'state=st') !== false, 'the rest is still sent');
+    assert_same('https://auth.example.com/end', $url,
+        'no hint means a bare end-session request, nothing else');
 });
 
 wallos_test('an endpoint with nothing to add is left alone', function () {

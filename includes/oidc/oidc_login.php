@@ -58,7 +58,8 @@ if (isset($_SESSION['oidc_id_token'])) {
         $oidcSessionId = (string) $parsedIdToken['payload']['sid'];
     }
 }
-wallos_oidc_register_session($db, $userId, $oidcSessionId, session_id(), $token);
+wallos_oidc_register_session($db, $userId, $oidcSessionId, session_id(), $token,
+    $_SESSION['oidc_id_token'] ?? null);
 $cookieValue = $username . "|" . $token . "|" . $main_currency;
 setcookie('wallos_login', $cookieValue, [
     'expires' => $cookieExpire,

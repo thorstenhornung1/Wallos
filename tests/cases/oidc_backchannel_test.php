@@ -545,3 +545,52 @@ wallos_test('the endpoint accepts only POST', function () {
 
     assert_true(strpos($source, "REQUEST_METHOD'] !== 'POST'") !== false, 'POST only');
 });
+
+wallos_test('a restored session can still end its provider session', function () {
+    // The remember-me restore recovered from_oidc but not the id token, so
+    // the first logout after a container restart sent post_logout_redirect_uri
+    // with no id_token_hint and the provider answered 400 — the state after
+    // every deploy (#123). The token travels with the oidc_sessions row now,
+    // and the restore carries it back into the rebuilt session.
+    $db = wallos_test_open_database();
+    wallos_test_create_user($db, 1, 'alice');
+
+    $stmt = $db->prepare('INSERT INTO login_tokens (user_id, token) VALUES (1, :token)');
+    $stmt->bindValue(':token', 'remember-token', SQLITE3_TEXT);
+    $stmt->execute();
+
+    wallos_oidc_register_session($db, 1, 'sid-1', 'old-php-session', 'remember-token',
+        'header.payload.signature');
+
+    $stored = $db->scalar('SELECT id_token FROM oidc_sessions WHERE login_token = :t',
+        [':t' => 'remember-token']);
+    assert_same('header.payload.signature', $stored,
+        'the id token is recorded with the session row');
+
+    // The restore itself, run as the process the cookie actually reaches.
+    $script = WALLOS_TEST_TMP . '/restore-' . uniqid('', true) . '.php';
+    file_put_contents($script, "<?php\n"
+        . '$_COOKIE["wallos_login"] = "alice|remember-token|1";' . "\n"
+        . 'require ' . var_export(WALLOS_ROOT . '/includes/database/connection.php', true) . ';' . "\n"
+        . '$db = wallos_database_connect();' . "\n"
+        . '$db->busyTimeout(5000);' . "\n"
+        . 'session_start();' . "\n"
+        . 'require ' . var_export(WALLOS_ROOT . '/includes/remember_me.php', true) . ';' . "\n"
+        . '$user = restoreSessionFromRememberMeCookie($db);' . "\n"
+        . 'echo "restored=" . ($user !== false ? "yes" : "no") . "\n";' . "\n"
+        . 'echo "from_oidc=" . (!empty($_SESSION["from_oidc"]) ? "yes" : "no") . "\n";' . "\n"
+        . 'echo "id_token=" . ($_SESSION["oidc_id_token"] ?? "(none)") . "\n";' . "\n");
+
+    $output = [];
+    $status = 0;
+    exec('php ' . escapeshellarg($script) . ' 2>&1', $output, $status);
+    unlink($script);
+    $text = implode("\n", $output);
+
+    assert_contains('restored=yes', $text, 'the cookie restores the session (got: ' . $text . ')');
+    assert_contains('from_oidc=yes', $text, 'the session remembers its origin');
+    assert_contains('id_token=header.payload.signature', $text,
+        'and the id token is back where logout.php reads it');
+
+    $db->close();
+});

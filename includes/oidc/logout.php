@@ -107,14 +107,21 @@ function wallos_oidc_build_end_session_url($endSessionUrl, $idToken, $postLogout
 {
     $parameters = [];
 
+    // The redirect and the state ride only with the hint. The certification
+    // rule is against sending them alone: a provider that cannot tie
+    // post_logout_redirect_uri to a session MUST refuse, and Authentik does,
+    // with a 400 the signing-out user sees (#123). A bare end-session
+    // request still ends the provider session; only the automatic return is
+    // lost, which is the smaller harm.
     if (is_string($idToken) && $idToken !== '') {
         $parameters['id_token_hint'] = $idToken;
-    }
-    if (is_string($postLogoutRedirectUrl) && $postLogoutRedirectUrl !== '') {
-        $parameters['post_logout_redirect_uri'] = $postLogoutRedirectUrl;
-    }
-    if (is_string($state) && $state !== '') {
-        $parameters['state'] = $state;
+
+        if (is_string($postLogoutRedirectUrl) && $postLogoutRedirectUrl !== '') {
+            $parameters['post_logout_redirect_uri'] = $postLogoutRedirectUrl;
+        }
+        if (is_string($state) && $state !== '') {
+            $parameters['state'] = $state;
+        }
     }
 
     if ($parameters === []) {

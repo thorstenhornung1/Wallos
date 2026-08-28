@@ -155,3 +155,41 @@ wallos_test('an upgraded database ends up where a fresh install starts', functio
     assert_same([], array_values(array_diff($upgraded, $freshColumns)),
         'and no column a fresh one does not');
 });
+
+wallos_test('migrations after the 5.8.0 baseline speak both dialects', function () {
+    // The baseline records the chain up to 000063 (see the case above), so
+    // everything after it runs on PostgreSQL upgrades too. A SQLite-only
+    // construct there passes every SQLite run and surfaces as forty
+    // downstream failures on the other backend — 000068's first draft used
+    // pragma_table_info() and did exactly that. This gate names the file
+    // and the word instead. Blunt on purpose: it matches comments too, and
+    // a comment spelling a forbidden construct in a migration is worth
+    // rewording.
+    $forbidden = [
+        'pragma_table_info' => 'use $db->columnExists()',
+        'sqlite_master' => 'use $db->tableExists()',
+        'AUTOINCREMENT' => 'PostgreSQL rejects it; the boundary maps ids',
+        'INSERT OR ' => 'use ON CONFLICT, which both backends accept',
+    ];
+
+    $offenders = [];
+    $scanned = 0;
+
+    foreach (glob(WALLOS_ROOT . '/migrations/*.php') as $path) {
+        if ((int) basename($path, '.php') <= 63) {
+            continue;
+        }
+
+        $scanned++;
+        $source = file_get_contents($path);
+
+        foreach ($forbidden as $construct => $fix) {
+            if (stripos($source, $construct) !== false) {
+                $offenders[] = basename($path) . ': ' . $construct . ' — ' . $fix;
+            }
+        }
+    }
+
+    assert_true($scanned >= 4, 'the scan found the post-baseline migrations (' . $scanned . ')');
+    assert_same([], $offenders, 'post-baseline migrations must run on both backends');
+});
