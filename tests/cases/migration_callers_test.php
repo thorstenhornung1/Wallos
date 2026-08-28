@@ -34,6 +34,7 @@ function migration_callers()
     return [
         'endpoints/db/migrate.php' => 'the endpoint whose only purpose is migrating',
         'endpoints/db/import.php' => 'the restore path',
+        'endpoints/db/restore.php' => 'the legacy SQLite-file restore, migrating since upstream eb0d24b',
         'registration.php' => 'first contact for a new installation',
     ];
 }

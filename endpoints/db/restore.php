@@ -118,11 +118,27 @@ if (isset($_FILES['file'])) {
             }
             rename('../../.tmp/restore/wallos.db', '../../db/wallos.db');
 
-            $db = new SQLite3('../../db/wallos.db');
+            // Upstream's eb0d24b, taken through the boundary: a restored file
+            // can be behind the code, so the chain runs before anything reads
+            // the schema. The runner's answer is read rather than discarded —
+            // a restore that reports success over an unfinished migration is
+            // exactly #103, and the buffer is kept so a failure has its
+            // diagnosis (see tests/cases/migration_callers_test.php).
+            $db = wallos_database_connect(__DIR__ . '/../../db/wallos.db');
             $db->busyTimeout(5000);
             ob_start();
             require_once __DIR__ . '/../../includes/run_migrations.php';
-            ob_end_clean();
+            $migrationOutput = ob_get_clean();
+
+            if ($migrationFailure !== null) {
+                error_log('Wallos restore: migrating the restored database failed: ' . $migrationOutput);
+                die(json_encode([
+                    "success" => false,
+                    "message" => "Restored, but migrating the backup failed at "
+                        . basename((string) $migrationFailure)
+                        . "; it will be retried on the next container start."
+                ]));
+            }
 
             if (file_exists('../../.tmp/restore/logos/')) {
                 $dir = '../../images/uploads/logos/';
