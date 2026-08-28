@@ -126,6 +126,19 @@ jobs:
       - name: Audit the SQLite boundary with Semgrep
         run: dev/semgrep/run.sh --local
 
+  # One missing comma kept every admin-page button dead through six releases
+  # (#119): a parse error discards the whole file, the endpoints behind the
+  # buttons keep passing every server-side test, and nothing in CI ever read
+  # the JavaScript. This parses every served .js file — node --check, no
+  # lint, no configuration. Like the boundary gates, `build` does not depend
+  # on it; a red gate is the enforcement, not a refused image.
+  js-syntax:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Parse every served JavaScript file
+        run: dev/js-audit.sh --local
+
   build:
     runs-on: ubuntu-latest
     needs: test

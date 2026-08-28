@@ -220,7 +220,7 @@ function saveAccountRegistrationsButton() {
     max_users: max_users,
     require_email_validation: require_email_validation,
     server_url: server_url,
-    disable_login: disable_login
+    disable_login: disable_login,
     default_language: readFieldValue("defaultLanguage"),
   };
 
