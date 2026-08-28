@@ -28,7 +28,7 @@ version: "3.8"
 services:
   wallos:
     # Pinned, not `latest`: the report has to be able to name what it tested.
-    image: ghcr.io/thorstenhornung1/wallos:5.8.6
+    image: ghcr.io/thorstenhornung1/wallos:5.8.7
     environment:
       TZ: Europe/Berlin
 
