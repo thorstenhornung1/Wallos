@@ -378,3 +378,31 @@ wallos_test('no function signature names a backend instead of the boundary', fun
     assert_true($scanned > 100, 'the scan reached the application');
     assert_same([], $offenders, 'type hints name WallosDatabase, not an implementation');
 });
+
+wallos_test('the subscription INSERT binds every placeholder it names, logo or not', function () {
+    // PostgreSQL counts: 22 placeholders with 19 bound is a refused
+    // statement, where SQLite quietly makes the missing three NULL. The
+    // browser form without a logo is exactly that request, so on PostgreSQL
+    // the UI could not create a subscription without one (#115).
+    $source = file_get_contents(WALLOS_ROOT . '/endpoints/subscription/add.php');
+
+    assert_true(preg_match('/INSERT INTO subscriptions\s*\([^)]*\)\s*VALUES\s*\(([^)]*)\)/s', $source, $insert) === 1,
+        'the INSERT statement is where this file says it is');
+    preg_match_all('/:(\w+)/', $insert[1], $named);
+    assert_true(count($named[1]) >= 20,
+        'the placeholder list was actually read (' . count($named[1]) . ' found)');
+
+    // The request the defect needed: no logo arrived, so nothing inside the
+    // `if ($logo != "")` branches runs. Strip those blocks from the text and
+    // every placeholder must still find a bind in what remains.
+    $withoutLogo = preg_replace('/if \(\$logo != ""\) \{[^}]*\}/s', 'if (false) {}', $source);
+
+    $unbound = [];
+    foreach (array_unique($named[1]) as $placeholder) {
+        if (!preg_match('/bind(?:Param|Value)\(\s*\':' . preg_quote($placeholder, '/') . '\'/', $withoutLogo)) {
+            $unbound[] = ':' . $placeholder;
+        }
+    }
+
+    assert_same([], $unbound, 'every INSERT placeholder is bound even without a logo');
+});

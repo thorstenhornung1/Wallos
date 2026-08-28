@@ -377,6 +377,17 @@ if ($logo != "") {
     $stmt->bindParam(':logo', $logo, SQLITE3_TEXT);
     $stmt->bindParam(':logoTextColor', $logoTextColor, SQLITE3_TEXT);
     $stmt->bindParam(':logoVariant', $logoVariant, SQLITE3_TEXT);
+} elseif (!$isEdit) {
+    // The INSERT names these three placeholders whether or not a logo
+    // arrived, and PostgreSQL counts: an unbound named parameter is a quiet
+    // NULL on SQLite and a refused statement there — the UI cannot create a
+    // subscription without a logo on that backend (#115). Bound explicitly,
+    // the row stores the same NULLs the unbound parameters used to produce.
+    // The UPDATE branch needs nothing: its column list already carries the
+    // same condition as these binds.
+    $stmt->bindValue(':logo', null, SQLITE3_NULL);
+    $stmt->bindValue(':logoTextColor', null, SQLITE3_NULL);
+    $stmt->bindValue(':logoVariant', null, SQLITE3_NULL);
 }
 $stmt->bindParam(':price', $price, SQLITE3_FLOAT);
 $stmt->bindParam(':currencyId', $currencyId, SQLITE3_INTEGER);
