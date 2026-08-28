@@ -1,5 +1,74 @@
 # Changelog
 
+## [5.8.8](https://github.com/thorstenhornung1/Wallos/releases/tag/v5.8.8) (2026-08-28)
+
+The first upstream merge since the fork diverged, an OIDC logout that
+survives the deploy that used to break it, and a cron log that finally says
+OK. Everything here was field-verified on the shared instance before this
+tag existed — it ran the exact code as a pinned `main` digest.
+
+### Changed
+
+* **Upstream v5_6_0 is merged** — the first merge since the fork left 5.4.4,
+  and the tree now records its ancestry, which makes every next merge
+  smaller. Eight upstream fixes come along: logo save failures are reported
+  instead of swallowed, the setup token is logged whenever it is generated,
+  a restored database is migrated (taken through the boundary, with the
+  runner's answer read — the raw form was the #103 anti-pattern and both
+  gates refused it), the iCal feed honours currency conversion, 2FA QR codes
+  survive non-ASCII usernames, the get_subscriptions all-user filter no
+  longer crashes, and OIDC without a client secret counts as configured.
+  The public-client change was finished rather than just merged: the
+  diagnostics treat an empty secret as a public client instead of a
+  permanent error, and the token exchange omits `client_secret` entirely
+  instead of sending it empty. What remains is
+  [#124](https://github.com/thorstenhornung1/Wallos/issues/124) — a stored
+  secret cannot be cleared through the UI yet.
+
+### Fixed
+
+* **auth:** the OIDC logout works after the container restart that used to
+  break it ([#123](https://github.com/thorstenhornung1/Wallos/issues/123)).
+  A remember-me-restored session recovered `from_oidc` but not the id token,
+  so its end-session request carried `post_logout_redirect_uri` with no
+  `id_token_hint` — a certified provider answers that with 400. The token
+  now travels with the `oidc_sessions` row (migration 000068) and is
+  restored with the session; rows from before the migration degrade once to
+  a bare end-session request and heal at the next login. The architecture
+  was chosen against its alternative and security-reviewed before merging —
+  the verdict, its conditions and the accepted residual risks are on the
+  issue. Field-verified end to end: restart, restore, logout, provider
+  session ended, return redirect honoured.
+
+### Added
+
+* **cron:** sessions at rest have a bounded lifetime — a required condition
+  of the #123 security review. The new daily `cleanupsessions` job deletes
+  `login_tokens` and `oidc_sessions` rows older than the 30-day remember-me
+  cookie that is the only way back into them; nothing garbage-collected
+  either table before, so a session that died by PHP GC left a working
+  credential at rest indefinitely. The backup manifest now also names the
+  login and ID tokens it has always carried.
+
+* **cron:** a clean run that did work logs one `[Wallos cron] OK` line
+  ([#122](https://github.com/thorstenhornung1/Wallos/issues/122)). Only
+  failures wrote to the container log before, so the operator watching a
+  deploy had to open the database to see the quota guard work. Idle runs
+  stay quiet on purpose.
+
+* **tests:** two gates that exist because of what this release survived —
+  migrations after the 5.8.0 baseline are checked for SQLite-only dialect
+  (the #123 migration's first draft would have broken every PostgreSQL
+  upgrade), and the suite's cached template database rebuilds when the
+  migration chain is newer than it (the stale one produced forty misleading
+  failures).
+
+### Documentation
+
+* Section 7 (OIDC) of the test plan was driven end to end for the first
+  time since 5.7.0 (`docs/test-results-2026-08-28-oidc.md`); 7.3 now
+  expects single logout, matching the provider's invalidation flow.
+
 ## [5.8.7](https://github.com/thorstenhornung1/Wallos/releases/tag/v5.8.7) (2026-08-28)
 
 Everything in here was found on 2026-08-28, by the two QA runs that
