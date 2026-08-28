@@ -130,10 +130,6 @@ that through Portainer.
   the most referenced table in the application) and enforced foreign keys
   (switching on the pragma turns every existing violation into a hard error).
   Both deserve their own decision.
-* **#99** — the cron now asks six questions instead of six per account, guarded
-  by a query count. Step 3 from the issue is not done: inverting the loop so the
-  job processes only accounts with something due. That needs a prefilter
-  respecting per-subscription lead times and the period-summary setting.
 * **#87** — 23 discarded write results and 315 unchecked prepares remain, from
   66 and 368. The ratchet holds the number. The open design question is whether
   the boundary should offer a write returning rows-affected-or-null; 304 of the

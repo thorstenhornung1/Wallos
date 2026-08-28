@@ -104,17 +104,13 @@ function buildNotificationMessage($name, $perUser, $periodSummaryLine, $includeP
 //
 // Only the accounts that will be processed: an installation with ten thousand
 // accounts and forty using notifications reads forty accounts' worth of rows.
+// And of those forty, only the accounts with something to do today get their
+// currencies, household, categories and active subscriptions read at all. The
+// question needs just two loads — the notify subscriptions and the budget
+// row — so those come first, for everybody; the answer restricts the rest,
+// and an empty answer costs no further queries (issue #99, step 3).
 $notifiedUserIds = array_keys($usersWithNotifications);
 
-$currenciesByUser = wallos_index_rows_by(
-    wallos_load_rows_by_user($db, 'currencies', $notifiedUserIds), 'id');
-$householdByUser = wallos_index_rows_by(
-    wallos_load_rows_by_user($db, 'household', $notifiedUserIds), 'id');
-$categoriesByUser = wallos_index_rows_by(
-    wallos_load_rows_by_user($db, 'categories', $notifiedUserIds), 'id');
-$activeSubscriptionsByUser = wallos_load_rows_by_user($db, 'subscriptions', $notifiedUserIds,
-    'user_id, price, currency_id, next_payment, cycle, frequency, inactive, auto_renew',
-    'user_id', 'inactive = 0');
 $notifySubscriptionsByUser = wallos_load_rows_by_user($db, 'subscriptions', $notifiedUserIds,
     '*', 'user_id', 'notify = 1 AND inactive = 0');
 
@@ -126,6 +122,43 @@ $budgetRows = wallos_load_rows_by_user($db, 'user', $notifiedUserIds,
 foreach ($budgetRows as $userId => $rows) {
     $budgetByUser[$userId] = $rows[0];
 }
+
+// An account with no payment due can still be owed a period-start summary;
+// the same expressions the loop evaluates per account, evaluated here so the
+// filter does not lose those accounts. The loop makes a fresh DateTime per
+// account, so two answers straddling midnight were already possible within
+// one run; this date adds no new boundary.
+$prefilterDate = new DateTime('now');
+$periodStartUserIds = [];
+
+foreach ($notifiedUserIds as $userId) {
+    if (($notificationTiming[$userId]['period_summary_at_period_start'] ?? 0) !== 1) {
+        continue;
+    }
+
+    $userBudgetConfig = $budgetByUser[$userId] ?? [];
+    $budgetPeriodType = sanitizeBudgetPeriodType($userBudgetConfig['budget_period_type'] ?? 'monthly');
+    $budgetPeriodAnchorDate = sanitizeBudgetAnchorDate($userBudgetConfig['budget_period_anchor_date'] ?? getDefaultBudgetAnchorDate());
+    $activeBudgetPeriod = getActiveBudgetPeriod($prefilterDate, $budgetPeriodType, $budgetPeriodAnchorDate);
+
+    if ($activeBudgetPeriod['start']->format('Y-m-d') === $prefilterDate->format('Y-m-d')) {
+        $periodStartUserIds[] = $userId;
+    }
+}
+
+$accountsWithWork = wallos_notification_accounts_with_work(
+    $notifySubscriptionsByUser, $notificationTiming, $prefilterDate, $periodStartUserIds);
+$workUserIds = array_keys($accountsWithWork);
+
+$currenciesByUser = wallos_index_rows_by(
+    wallos_load_rows_by_user($db, 'currencies', $workUserIds), 'id');
+$householdByUser = wallos_index_rows_by(
+    wallos_load_rows_by_user($db, 'household', $workUserIds), 'id');
+$categoriesByUser = wallos_index_rows_by(
+    wallos_load_rows_by_user($db, 'categories', $workUserIds), 'id');
+$activeSubscriptionsByUser = wallos_load_rows_by_user($db, 'subscriptions', $workUserIds,
+    'user_id, price, currency_id, next_payment, cycle, frequency, inactive, auto_renew',
+    'user_id', 'inactive = 0');
 
 while ($userToNotify = $usersToNotify->fetchArray(SQLITE3_ASSOC)) {
     $userId = $userToNotify['id'];
@@ -149,6 +182,16 @@ while ($userToNotify = $usersToNotify->fetchArray(SQLITE3_ASSOC)) {
     if (!isset($usersWithNotifications[$userId])) {
         if (php_sapi_name() !== 'cli') {
             echo "No notifications enabled for this user<br /><br />";
+        }
+        continue;
+    }
+
+    // Decided before the loop, on the same rows and rules the loop would use.
+    // Skipping here also skips the effective SMTP config, which builds with a
+    // query the first time an account asks for it.
+    if (!isset($accountsWithWork[$userId])) {
+        if (php_sapi_name() !== 'cli') {
+            echo "Nothing due for this user today<br /><br />";
         }
         continue;
     }

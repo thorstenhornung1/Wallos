@@ -201,9 +201,20 @@ wallos_test('the notification cron asks the same number of questions for one acc
     // took 2.5 ms per account over loopback and 10 ms over an overlay network,
     // and both were six round trips per account.
     //
-    // Six questions per account inside the loop is invisible on SQLite — the
-    // engine is in the same process — and is the whole cost on PostgreSQL.
+    // Step 3 of #99 split the block in two: the question — who has work today —
+    // costs two queries for everybody, and the four expensive loads run for
+    // the accounts with work alone. This replicates that shape and pins both
+    // numbers; the due rules themselves are pinned in notification_due_test.php.
     $db = wallos_test_open_counting_database();
+
+    $now = new DateTime('now');
+    $nextPayment = (clone $now)->modify('+1 day')->format('Y-m-d');
+    // The lead time that makes the row due today under the loop's own
+    // arithmetic, whatever the time of day this test runs.
+    $lead = $now->diff(new DateTime($nextPayment))->days;
+    if (new DateTime($nextPayment) > $now) {
+        $lead += 1;
+    }
 
     foreach ([1, 2, 3, 4, 5] as $userId) {
         wallos_test_create_user($db, $userId, 'counted' . $userId);
@@ -213,43 +224,70 @@ wallos_test('the notification cron asks the same number of questions for one acc
         $enable->bindValue(':mode', 'instance');
         $enable->bindValue(':user', $userId);
         $enable->execute();
+
+        // Every account has a notify subscription; only account 1 has one due.
+        $references = wallos_test_user_references($db, $userId);
+        $insert = $db->prepare('INSERT INTO subscriptions
+            (name, price, currency_id, next_payment, cycle, frequency, payer_user_id, category_id, payment_method_id, notify, notify_days_before, inactive, user_id, auto_renew)
+            VALUES (:name, 9.99, :currency, :next, 3, 1, :payer, :category, :payment, 1, :leadDays, 0, :userId, 1)');
+        $insert->bindValue(':name', 'Counted ' . $userId, SQLITE3_TEXT);
+        $insert->bindValue(':currency', wallos_test_currency_id($userId, 0), SQLITE3_INTEGER);
+        $insert->bindValue(':next', $userId === 1 ? $nextPayment : (clone $now)->modify('+200 days')->format('Y-m-d'), SQLITE3_TEXT);
+        $insert->bindValue(':payer', $references['household'], SQLITE3_INTEGER);
+        $insert->bindValue(':category', $references['category'], SQLITE3_INTEGER);
+        $insert->bindValue(':payment', $references['payment_method'], SQLITE3_INTEGER);
+        $insert->bindValue(':leadDays', $userId === 1 ? $lead : 1, SQLITE3_INTEGER);
+        $insert->bindValue(':userId', $userId, SQLITE3_INTEGER);
+        $insert->execute();
     }
 
     require_once WALLOS_ROOT . '/includes/notification_settings.php';
+    require_once WALLOS_ROOT . '/includes/notification_due.php';
 
     $settings = wallos_load_notification_settings($db);
+    $timing = wallos_load_notification_timing($db);
     $users = array_keys(wallos_users_with_notifications($settings, $db));
-    assert_same(5, count($users), 'all five accounts are due to be processed');
+    assert_same(5, count($users), 'all five accounts are candidates');
 
     $before = $db->queryCount;
 
-    // What the cron does before its loop: the six per-account questions, asked
-    // once for everybody.
-    wallos_load_rows_by_user($db, 'currencies', $users);
-    wallos_load_rows_by_user($db, 'household', $users);
-    wallos_load_rows_by_user($db, 'categories', $users);
-    wallos_load_rows_by_user($db, 'subscriptions', $users);
-    wallos_load_rows_by_user($db, 'user', $users, '*', 'id');
+    // What the cron does before its loop, first half: the two loads the
+    // question needs, asked once for everybody.
+    $notifySubscriptions = wallos_load_rows_by_user($db, 'subscriptions', $users,
+        '*', 'user_id', 'notify = 1 AND inactive = 0');
+    wallos_load_rows_by_user($db, 'user', $users,
+        'id AS user_id, main_currency, period_budget, budget_period_type, budget_period_anchor_date', 'id');
 
-    $forFive = $db->queryCount - $before;
+    assert_same(2, $db->queryCount - $before,
+        'the question costs two queries however many accounts there are (got ' . ($db->queryCount - $before) . ')');
+
+    $withWork = wallos_notification_accounts_with_work($notifySubscriptions, $timing, new DateTime('now'), []);
+    assert_same([1], array_keys($withWork), 'only the account with something due has work');
+
+    // Second half: the four expensive loads, for the accounts with work alone.
+    $workIds = array_keys($withWork);
     $before = $db->queryCount;
 
-    wallos_load_rows_by_user($db, 'currencies', [1]);
-    wallos_load_rows_by_user($db, 'household', [1]);
-    wallos_load_rows_by_user($db, 'categories', [1]);
-    wallos_load_rows_by_user($db, 'subscriptions', [1]);
-    wallos_load_rows_by_user($db, 'user', [1], '*', 'id');
+    $currencies = wallos_load_rows_by_user($db, 'currencies', $workIds);
+    wallos_load_rows_by_user($db, 'household', $workIds);
+    wallos_load_rows_by_user($db, 'categories', $workIds);
+    wallos_load_rows_by_user($db, 'subscriptions', $workIds,
+        'user_id, price, currency_id, next_payment, cycle, frequency, inactive, auto_renew',
+        'user_id', 'inactive = 0');
 
-    $forOne = $db->queryCount - $before;
+    assert_same(4, $db->queryCount - $before, 'four loads, not four per account');
+    assert_same([1], array_keys($currencies), 'and they return rows for the account with work alone');
 
-    assert_same($forOne, $forFive,
-        'five accounts cost the same number of queries as one (' . $forFive . ' against ' . $forOne . ')');
-    assert_same(5, $forFive, 'and that number is one per question, not one per account');
-
-    // The rows are still there — a loader that returned nothing would also
-    // keep the query count flat.
-    $currencies = wallos_load_rows_by_user($db, 'currencies', $users);
-    assert_same(5, count($currencies), 'every account got its own rows back');
+    // A day with nothing due loads nothing further: the loader answers an
+    // empty account list without a query.
+    $before = $db->queryCount;
+    wallos_load_rows_by_user($db, 'currencies', []);
+    wallos_load_rows_by_user($db, 'household', []);
+    wallos_load_rows_by_user($db, 'categories', []);
+    wallos_load_rows_by_user($db, 'subscriptions', [],
+        'user_id, price, currency_id, next_payment, cycle, frequency, inactive, auto_renew',
+        'user_id', 'inactive = 0');
+    assert_same(0, $db->queryCount - $before, 'no accounts with work costs no further queries');
 
     $db->close();
 });
@@ -271,6 +309,17 @@ wallos_test('the cron reads the per-account rows from memory, not from the datab
     }
 
     assert_contains('wallos_load_rows_by_user', $source, 'the rows are loaded in bulk instead');
+
+    // Step 3 of #99: the expensive loads are fed by the answer, not by the
+    // candidate list, and the filter is asked with the period-start accounts a
+    // payment-only filter would lose. Textual on purpose — the counting test
+    // above replicates the shape, this pins the file to it.
+    foreach (['currencies', 'household', 'categories', 'subscriptions'] as $table) {
+        assert_contains("'" . $table . "', \$workUserIds", $source,
+            'the ' . $table . ' load is restricted to the accounts with work');
+    }
+    assert_contains('$notifySubscriptionsByUser, $notificationTiming, $prefilterDate, $periodStartUserIds', $source,
+        'the filter receives the period-start accounts');
 });
 
 wallos_test_pending(
