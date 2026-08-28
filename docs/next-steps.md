@@ -120,14 +120,15 @@ Sections 4 and 5 were driven on SQLite on 2026-08-28
 5.8.1, invisible to a suite that never parses the JavaScript. Still open:
 **section 7 (OIDC)**, which needs an Authentik to talk to.
 
-And **#104**: the test instance's currency key works, while the plan called it
-invalid — one QA round spent about six hundred live calls on the assumption.
-The four normative places now prescribe a check instead of asserting the state
-(`bcabad9`), but the key itself still needs rotating, and only Thorsten can do
-that through Portainer. **Decided 2026-08-28: the rotation waits until the end
-of the month, together with #106** — the quota turned out to reset faster than
-assumed, and the billing-period turn gives a known reset time to calibrate the
-quota warning against. Until then, deliberately untouched.
+And **#104** is closed — **without rotating the key**, by decision of
+2026-08-28. The documentation half was done since `bcabad9` (check what is
+mounted, never assert it); the rotation half was dropped deliberately: the
+guardrails are layered now (`--rates` opt-in, the #117 startup skip, per-run
+failure caching, hard QA fences), the quota proved to recover in a window
+rather than at the month's turn, and the shared live key is accepted as the
+instance's working state. **#106** (the quota warning) stands alone and waits
+for the end of the month, where the billing-period turn gives a known reset
+time to calibrate the threshold against.
 
 ### 4. The parts of closed-enough issues that are still open
 
