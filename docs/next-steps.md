@@ -7,6 +7,14 @@ file is the part that is in neither.
 
 ## The state right now
 
+The test instance sits on a **temporary pin**, decided 2026-08-28: after its
+section-7 run it moves to `main@sha256:65aaf7ee…` (the #123 fix, merged after
+the security verdict on the issue) and stays there until the next tagged
+release supersedes the pin. Mind the #102 lesson in reverse: that build
+**reports itself as v5.8.7** — the version only changes at release — so the
+admin panel's version line cannot distinguish it from the 5.8.7 image; the
+stack file's digest is the truth.
+
 Released: **5.8.7** (2026-08-28), `ghcr.io/thorstenhornung1/wallos:5.8.7`,
 `sha256:5a582aa9bc1b744668e2271bea22b86ea06e9c2adec33e9f7298f8e17b2ebf59`.
 474 tests on SQLite and PostgreSQL 14 and 18, all five gates green:
