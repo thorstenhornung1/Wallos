@@ -8,7 +8,7 @@
 #
 # Do not edit by hand — run dev/write-audit.php --update and commit the diff.
 #
-# 118 file(s), 23 discarded result(s), 314 unchecked prepare(s).
+# 117 file(s), 23 discarded result(s), 306 unchecked prepare(s).
 
 admin.php	0	4
 api/admin/get_admin_settings.php	0	1
@@ -33,7 +33,6 @@ api/subscriptions/get_ical_feed.php	0	8
 api/subscriptions/get_monthly_cost.php	0	4
 api/subscriptions/get_period_budget.php	0	3
 api/subscriptions/get_subscription.php	0	6
-api/subscriptions/get_subscriptions.php	0	8
 api/subscriptions/set_subscriptions.php	1	9
 api/users/get_user.php	0	1
 api/users/set_budget.php	0	2
