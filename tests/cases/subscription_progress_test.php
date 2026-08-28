@@ -108,3 +108,17 @@ wallos_test('a running subscription keeps its progress semantics', function () {
         'one-time purchase: no progress bar semantics'
     );
 });
+
+wallos_test('an unparseable start date means unknown, not a broken page', function () {
+    // start_date is TEXT and the form endpoint stores whatever arrived; the
+    // parse lives inside printSubscriptions(), so one bad row threw and took
+    // the whole subscriptions page with it (#121). Unreadable behaves exactly
+    // like missing: the old walk-back semantics, no clamp, no exception.
+    $nextPayment = wallos_test_day_offset(15);
+    $known = getSubscriptionProgress(3, 1, $nextPayment, null);
+
+    foreach (['0', '1756339200', 'not a date'] as $garbage) {
+        assert_equals($known, getSubscriptionProgress(3, 1, $nextPayment, $garbage),
+            "'" . $garbage . "' behaves like a missing start date");
+    }
+});

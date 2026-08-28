@@ -20,8 +20,17 @@ function getSubscriptionProgress($cycle, $frequency, $next_payment, $start_date 
     // migration that added the column) or an empty string from a blank form
     // field; both mean "unknown", and unknown keeps the old behaviour.
     if ($start_date !== null && $start_date !== '') {
-        $startDate = new DateTime((new DateTime($start_date))->format('Y-m-d'));
-        if ($startDate > $currentDate) {
+        // The column is TEXT and the form endpoint stores whatever arrived,
+        // so a row can carry anything. This parse runs inside the list
+        // renderer: one unreadable value must not take the whole page down
+        // with it. Unreadable means "unknown", exactly like missing (#121).
+        try {
+            $startDate = new DateTime((new DateTime($start_date))->format('Y-m-d'));
+        } catch (Exception $unreadableStartDate) {
+            $startDate = null;
+        }
+
+        if ($startDate !== null && $startDate > $currentDate) {
             return 0;
         }
     }
