@@ -158,11 +158,18 @@ instead: the abstraction itself, the PostgreSQL backend, the instance
 configuration work, cron reporting (2000+ lines), the explicit admin role, OIDC
 back-channel logout, BCP-47.
 
-Two upstream defects were confirmed but have no portable fix yet, because ours
-depend on the boundary: `endpoints/admin/deleteuser.php:18-20` deletes the
-`user` row before its 15+ dependent tables with no transaction and every result
-discarded, and `endpoints/subscription/add.php:237-245` binds `$_POST` straight
-into the insert with no existence or ownership check.
+Three upstream defects were confirmed but have no portable fix yet, because
+ours depend on fork-only work: `endpoints/admin/deleteuser.php:18-20` deletes
+the `user` row before its 15+ dependent tables with no transaction and every
+result discarded; `endpoints/subscription/add.php:237-245` binds `$_POST`
+straight into the insert with no existence or ownership check; and the OIDC
+logout (`upstream/v5_6_0:logout.php:38-41`) sends `post_logout_redirect_uri`
+with no `id_token_hint` on **every** logout — a certification-compliant
+provider answers 400 — while a remember-me-restored session does not attempt
+provider logout at all, silently leaving the provider session alive. A
+portable fix would have to carry the id-token persistence from our
+RP-initiated logout work (`960b514`, and #123 for the remaining remember-me
+gap) with it.
 
 ## The base, decided
 
