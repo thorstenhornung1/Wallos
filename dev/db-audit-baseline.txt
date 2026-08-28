@@ -11,7 +11,7 @@
 #
 # Do not edit by hand — run dev/db-audit.sh --update and commit the diff.
 #
-# total: 1509 matches in 226 file(s)
+# total: 1512 matches in 226 file(s)
 admin.php	5
 api/admin/get_admin_settings.php	1
 api/admin/set_admin_settings.php	20
@@ -106,7 +106,7 @@ endpoints/settings/show_original_price.php	2
 endpoints/settings/subscription_progress.php	2
 endpoints/settings/theme.php	2
 endpoints/settings/week_starts_sunday.php	2
-endpoints/subscription/add.php	25
+endpoints/subscription/add.php	28
 endpoints/subscription/clone.php	24
 endpoints/subscription/delete.php	4
 endpoints/subscription/exportcalendar.php	3
