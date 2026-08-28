@@ -323,6 +323,13 @@ function wallos_cron_shutdown()
     // database. Recording the row can itself fail; this cannot.
     if ($status === WALLOS_CRON_FAILED) {
         error_log(sprintf('[Wallos cron] ERROR job=%s duration=%dms %s', $run['job'], $duration, $detail));
+    } elseif (array_filter($run['counts']) !== []) {
+        // A clean run that did something says so where a deploy is watched:
+        // the #123 field test found the startup skip working and the
+        // container log empty, because only failures wrote there (#122).
+        // Only runs with a non-zero count report — the two-minute jobs would
+        // otherwise write hundreds of lines a day of nothing.
+        error_log(sprintf('[Wallos cron] OK job=%s duration=%dms %s', $run['job'], $duration, $detail));
     }
 
     wallos_cron_record($run, $status, $duration, $detail);

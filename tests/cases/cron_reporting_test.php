@@ -174,7 +174,13 @@ wallos_test('a job that finishes exits zero and records success', function () {
     $result = cron_run_process("wallos_cron_count('sent', 3);\nwallos_cron_done('nothing unusual');");
 
     assert_same(0, $result['status'], 'a successful run exits 0');
-    assert_same('', trim($result['stderr']), 'and says nothing on standard error');
+    // Revised with #122: a successful run that did work (sent=3 above) says
+    // exactly one OK line where a deploy is watched. Silence is reserved for
+    // runs with nothing to report — pinned by the case at the end of this
+    // file. ERROR on a clean run would still be wrong:
+    assert_contains('[Wallos cron] OK job=testjob', $result['stderr'],
+        'a clean run with work reports one OK line');
+    assert_true(strpos($result['stderr'], 'ERROR') === false, 'and no ERROR');
 
     $row = cron_run_row($db, 'testjob');
     assert_true($row !== null, 'the run recorded itself');
@@ -568,4 +574,32 @@ wallos_test('the window follows the schedule, not the calendar', function () {
     assert_same(WALLOS_CRON_CHECK_WARNING,
         cron_run_check(wallos_cron_checks($daily, time()), 'Payment notifications')['status'],
         'for a daily job it is last night');
+});
+
+// --- the OK line a deploy can read --------------------------------------
+
+wallos_test('a run that did something says so in the container log', function () {
+    // The #123 field test found the skip working and the log empty: only
+    // failing runs wrote to stderr, so the operator watching a deploy had to
+    // open the database to see that the quota guard did its job (#122). A
+    // clean run with at least one non-zero count logs one OK line in the
+    // ERROR line's shape; a clean run that did nothing stays quiet, because
+    // the two-minute jobs would otherwise write 720 lines a day of nothing.
+    $db = wallos_test_open_database();
+
+    $busy = cron_run_process("wallos_cron_count('updated', 2); wallos_cron_done('updated=2');");
+    assert_contains('[Wallos cron] OK job=testjob', $busy['stderr'],
+        'a run with work reports itself (stderr: ' . $busy['stderr'] . ')');
+    assert_contains('updated=2', $busy['stderr'], 'and carries its detail');
+
+    $idle = cron_run_process("wallos_cron_count('sent', 0); wallos_cron_done('nothing queued');");
+    assert_true(strpos($idle['stderr'], '[Wallos cron] OK') === false,
+        'a run with nothing to do stays out of the log (stderr: ' . $idle['stderr'] . ')');
+
+    $failed = cron_run_process("wallos_cron_problem('broken'); wallos_cron_done();", 'testjob', false);
+    assert_contains('[Wallos cron] ERROR', $failed['stderr'], 'failures keep their line');
+    assert_true(strpos($failed['stderr'], '[Wallos cron] OK') === false,
+        'and never also claim an OK');
+
+    $db->close();
 });
