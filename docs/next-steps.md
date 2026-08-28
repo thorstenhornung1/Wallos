@@ -124,7 +124,10 @@ And **#104**: the test instance's currency key works, while the plan called it
 invalid — one QA round spent about six hundred live calls on the assumption.
 The four normative places now prescribe a check instead of asserting the state
 (`bcabad9`), but the key itself still needs rotating, and only Thorsten can do
-that through Portainer.
+that through Portainer. **Decided 2026-08-28: the rotation waits until the end
+of the month, together with #106** — the quota turned out to reset faster than
+assumed, and the billing-period turn gives a known reset time to calibrate the
+quota warning against. Until then, deliberately untouched.
 
 ### 4. The parts of closed-enough issues that are still open
 
