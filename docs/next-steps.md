@@ -113,9 +113,11 @@ PostgreSQL, migration 000067 against orphans, section 6): see
 SQLite since 2026-08-22 while three reports called it PostgreSQL, which is
 where #102 comes from.
 
-Still open: **SQLite sections 4, 5 and 7.** CI runs the whole suite on SQLite
-first, but no human has driven those sections there since 5.7.0. That is a
-larger gap than another PostgreSQL confirmation.
+Sections 4 and 5 were driven on SQLite on 2026-08-28
+(`docs/test-results-2026-08-28-sqlite.md`): all pass, and section 4 found
+#119 — one missing comma that had kept every admin-page button dead since
+5.8.1, invisible to a suite that never parses the JavaScript. Still open:
+**section 7 (OIDC)**, which needs an Authentik to talk to.
 
 And **#104**: the test instance's currency key works, while the plan called it
 invalid — one QA round spent about six hundred live calls on the assumption.
