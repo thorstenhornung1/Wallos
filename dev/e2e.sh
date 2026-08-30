@@ -99,6 +99,18 @@ ROLES=$("$ENGINE" exec "$CONTAINER" php -r '
 ' 2>/dev/null)
 check "the first account holds a local admin role" "$(contains "$ROLES" '1:admin:local')"
 
+# Registrations are closed by default (migration 000020), and a POST against
+# a closed registration answers 302 — which the old `|| true` swallowed, so
+# the second account never existed and the refusal check below passed against
+# a ghost. Caught by the 2026-08-30 QA round (finding 1 in
+# docs/test-results-2026-08-30-local.md): open registrations for the moment,
+# prove the account is real, close them again.
+"$ENGINE" exec "$CONTAINER" php -r '
+    require "/var/www/html/includes/database/connection.php";
+    $db = wallos_database_connect();
+    $db->exec("UPDATE admin SET registrations_open = 1");
+' 2>/dev/null
+
 curl -fsS -c "$JAR2" "$BASE/registration.php" -o /dev/null
 curl -fsS -b "$JAR2" -c "$JAR2" -X POST "$BASE/registration.php" \
     --data-urlencode "username=e2e2" --data-urlencode "email=e2e2@example.com" \
@@ -108,6 +120,18 @@ rm -f "$JAR2"; JAR2=$(mktemp)
 curl -fsS -c "$JAR2" "$BASE/login.php" -o /dev/null
 curl -fsS -b "$JAR2" -c "$JAR2" -X POST "$BASE/login.php" \
     --data-urlencode "username=e2e2" --data-urlencode "password=E2ePass123!" -o /dev/null
+
+"$ENGINE" exec "$CONTAINER" php -r '
+    require "/var/www/html/includes/database/connection.php";
+    $db = wallos_database_connect();
+    $db->exec("UPDATE admin SET registrations_open = 0");
+' 2>/dev/null
+
+# Proven signed in first, so the refusal below can never pass against a
+# ghost again: a page only a session gets, then the page a role guards.
+SECOND_SETTINGS=$(curl -fsS -b "$JAR2" "$BASE/settings.php" || true)
+check "the second account exists and can sign in" \
+    "$(contains "$SECOND_SETTINGS" 'Use instance SMTP')"
 SECOND_ADMIN=$(curl -fsS -b "$JAR2" "$BASE/admin.php" || true)
 check "a second account cannot reach the admin page" \
     "$(absent "$SECOND_ADMIN" 'Instance Integrations')"

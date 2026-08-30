@@ -78,6 +78,7 @@ if (isset($_FILES['file'])) {
     if ($fileError === 0) {
         $stagingDir = sys_get_temp_dir() . '/wallos-restore';
         if (!is_dir($stagingDir) && !mkdir($stagingDir, 0700, true)) {
+            http_response_code(500);
             die(json_encode([
                 "success" => false,
                 "message" => "Could not create the staging directory"
@@ -113,6 +114,7 @@ if (isset($_FILES['file'])) {
                 if ($entry === '' || $entry[0] === '/' || in_array('..', explode('/', $entry), true)) {
                     $zip->close();
                     emptyRestoreFolder();
+                    http_response_code(400);
                     die(json_encode([
                         "success" => false,
                         "message" => "Invalid backup file: unsafe file path detected."
@@ -121,6 +123,7 @@ if (isset($_FILES['file'])) {
                 if (in_array(strtolower(pathinfo($entry, PATHINFO_EXTENSION)), $blockedExtensions, true)) {
                     $zip->close();
                     emptyRestoreFolder();
+                    http_response_code(400);
                     die(json_encode([
                         "success" => false,
                         "message" => "Invalid backup file: disallowed file type detected."
@@ -130,6 +133,7 @@ if (isset($_FILES['file'])) {
             $zip->extractTo($stagingDir . '/restore/');
             $zip->close();
         } else {
+            http_response_code(400);
             die(json_encode([
                 "success" => false,
                 "message" => "Failed to extract the uploaded file"
@@ -160,6 +164,7 @@ if (isset($_FILES['file'])) {
 
             if ($migrationFailure !== null) {
                 error_log('Wallos restore: migrating the restored database failed: ' . $migrationOutput);
+                http_response_code(500);
                 die(json_encode([
                     "success" => false,
                     "message" => "Restored, but migrating the backup failed at "
@@ -202,6 +207,7 @@ if (isset($_FILES['file'])) {
 
             emptyRestoreFolder();
 
+            http_response_code(400);
             echo json_encode([
                 "success" => true,
                 "message" => translate("success", $i18n)
@@ -209,6 +215,7 @@ if (isset($_FILES['file'])) {
         } else {
             emptyRestoreFolder();
 
+            http_response_code(400);
             die(json_encode([
                 "success" => false,
                 "message" => "wallos.db does not exist in the backup file"
@@ -217,12 +224,14 @@ if (isset($_FILES['file'])) {
 
 
     } else {
+        http_response_code(400);
         echo json_encode([
             "success" => false,
             "message" => "Failed to upload file"
         ]);
     }
 } else {
+    http_response_code(400);
     echo json_encode([
         "success" => false,
         "message" => "No file uploaded"

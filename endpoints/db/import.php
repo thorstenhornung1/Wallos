@@ -4,6 +4,7 @@ require_once '../../includes/connect_endpoint.php';
 $result = $db->query("SELECT COUNT(*) as count FROM \"user\"");
 $row = $result->fetchArray(SQLITE3_NUM);
 if ($row[0] > 0) {
+    http_response_code(403);
     die(json_encode([
         "success" => false,
         "message" => "Denied"
@@ -14,6 +15,7 @@ $setupTokenFile = '../../db/setup_token.db';
 $storedToken = file_exists($setupTokenFile) ? trim(file_get_contents($setupTokenFile)) : '';
 $submittedToken = $_POST['setup_token'] ?? '';
 if ($storedToken === '' || !hash_equals($storedToken, $submittedToken)) {
+    http_response_code(403);
     die(json_encode([
         "success" => false,
         "message" => "Invalid setup token"
@@ -65,6 +67,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if ($fileError === 0) {
             $stagingDir = sys_get_temp_dir() . '/wallos-restore';
             if (!is_dir($stagingDir) && !mkdir($stagingDir, 0700, true)) {
+                http_response_code(500);
                 die(json_encode([
                     "success" => false,
                     "message" => "Could not create the staging directory"
@@ -100,6 +103,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     if ($entry === '' || $entry[0] === '/' || in_array('..', explode('/', $entry), true)) {
                         $zip->close();
                         emptyRestoreFolder();
+                        http_response_code(400);
                         die(json_encode([
                             "success" => false,
                             "message" => "Invalid backup file: unsafe file path detected."
@@ -109,6 +113,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     if (in_array(strtolower(pathinfo($entry, PATHINFO_EXTENSION)), $blockedExtensions, true)) {
                         $zip->close();
                         emptyRestoreFolder();
+                        http_response_code(400);
                         die(json_encode([
                             "success" => false,
                             "message" => "Invalid backup file: disallowed file type detected."
@@ -118,6 +123,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $zip->extractTo($stagingDir . '/restore/');
                 $zip->close();
             } else {
+                http_response_code(400);
                 die(json_encode([
                     "success" => false,
                     "message" => "Failed to extract the uploaded file"
@@ -129,6 +135,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
                 if (file_exists('../../db/wallos.db') && !unlink('../../db/wallos.db')) {
                     emptyRestoreFolder();
+                    http_response_code(500);
                     die(json_encode([
                         "success" => false,
                         "message" => "Failed to remove existing database"
@@ -139,6 +146,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 // copy-and-delete for files, which is exactly what is wanted.
                 if (!rename($stagingDir . '/restore/wallos.db', '../../db/wallos.db')) {
                     emptyRestoreFolder();
+                    http_response_code(500);
                     die(json_encode([
                         "success" => false,
                         "message" => "Failed to replace database"
@@ -200,6 +208,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     error_log('Wallos restore: the data was restored but migration '
                         . basename((string) $migrationFailure) . ' failed. ' . $migrationOutput);
 
+                    http_response_code(500);
                     echo json_encode([
                         "success" => false,
                         "message" => "The backup was restored, but the database could not be migrated to this version ("
@@ -207,6 +216,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             . "). The data is in place and the schema is not; check the server log before using this instance."
                     ]);
                 } else {
+                    http_response_code(400);
                     echo json_encode([
                         "success" => true,
                         "message" => translate("success", $i18n)
@@ -215,6 +225,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             } else {
                 emptyRestoreFolder();
 
+                http_response_code(400);
                 die(json_encode([
                     "success" => false,
                     "message" => "wallos.db does not exist in the backup file"
@@ -223,18 +234,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 
         } else {
+            http_response_code(400);
             echo json_encode([
                 "success" => false,
                 "message" => "Failed to upload file"
             ]);
         }
     } else {
+        http_response_code(400);
         echo json_encode([
             "success" => false,
             "message" => "No file uploaded"
         ]);
     }
 } else {
+    http_response_code(405);
     echo json_encode([
         "success" => false,
         "message" => "Invalid request method"

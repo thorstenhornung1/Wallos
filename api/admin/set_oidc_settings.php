@@ -115,9 +115,20 @@ if (isset($_POST['clear_client_secret'])) {
 $result = wallos_save_oidc_settings($db, $submitted, $oidcConfiguration['managed_fields']);
 
 if (!$result['success']) {
+    // Named for what it is: 'Database error' used to label every refusal,
+    // including requests the writer rejected on purpose — the 2026-08-30 QA
+    // round read "Database error" over a deliberate contradiction refusal
+    // (finding 3, docs/test-results-2026-08-30-local.md).
+    $title = 'Database error';
+    if (strpos((string) $result['error'], 'Security Error') === 0) {
+        $title = 'Security Error';
+    } elseif (strpos((string) $result['error'], 'submitted together') !== false) {
+        $title = 'Invalid request';
+    }
+
     echo json_encode([
         'success' => false,
-        'title' => strpos((string) $result['error'], 'Security Error') === 0 ? 'Security Error' : 'Database error',
+        'title' => $title,
         'message' => $result['error']
     ]);
     exit;

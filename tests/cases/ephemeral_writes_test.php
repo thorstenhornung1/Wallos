@@ -82,6 +82,23 @@ wallos_test('restore staging cannot leak past the request', function () {
     }
 });
 
+wallos_test('a restore refusal carries an error status', function () {
+    // The SQLite branch used to answer its refusals with HTTP 200 — the #97
+    // class, measured live by the 2026-08-30 QA round (finding 2 in
+    // docs/test-results-2026-08-30-local.md): "Failed to extract" arrived as
+    // a 200 while the row-based branch already answered 400. Counted rather
+    // than located: every refusal body must have a status call to go with it.
+    foreach (['endpoints/db/restore.php', 'endpoints/db/import.php'] as $path) {
+        $source = file_get_contents(WALLOS_ROOT . '/' . $path);
+
+        $refusals = substr_count($source, '"success" => false');
+        $statuses = substr_count($source, 'http_response_code(');
+
+        assert_true($refusals <= $statuses,
+            $path . ' has ' . $refusals . ' refusal(s) and only ' . $statuses . ' status call(s)');
+    }
+});
+
 wallos_test('an expired logo search cache is swept, not kept', function () {
     // One cache file per distinct search term, and nothing ever deleted them.
     // Writing a fresh entry now sweeps expired siblings, which bounds the
