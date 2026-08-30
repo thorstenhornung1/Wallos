@@ -75,6 +75,28 @@ class WallosPgsqlDatabase implements WallosDatabase
         $this->pdo->exec("SET TIME ZONE 'UTC'");
     }
 
+    public function setForeignKeyEnforcement($enabled)
+    {
+        // Enforcement here is not optional and never was; the pause the
+        // SQLite migration runner needs has no equivalent to pause. Answering
+        // true keeps the caller's flow identical on both backends.
+        return true;
+    }
+
+    public function foreignKeyViolations()
+    {
+        // Empty by construction: a row violating a declared key was never
+        // accepted in the first place.
+        return [];
+    }
+
+    public function rebuildWithMonotonicIds($table)
+    {
+        // Identity columns draw from a sequence that never revisits a freed
+        // value — monotonic already, nothing to rebuild.
+        return true;
+    }
+
     public function driver()
     {
         return 'pgsql';

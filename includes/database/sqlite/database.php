@@ -33,6 +33,195 @@ class WallosSqliteDatabase extends SQLite3 implements WallosDatabase
         // fails immediately instead of waiting — the moment two requests
         // overlap, one of them errors.
         $this->busyTimeout(5000);
+
+        // Declared foreign keys are enforced from here on (#92). Three tables
+        // have promised ON DELETE CASCADE for years and the promise was never
+        // once kept, because this was off and switched on nowhere. The other
+        // backend has always enforced the same declarations and its suite is
+        // green — the standing proof that the application's write paths
+        // survive enforcement. The migration runner pauses it for the length
+        // of a chain; rebuilding a referenced table needs the room.
+        $this->exec('PRAGMA foreign_keys = ON');
+    }
+
+    public function setForeignKeyEnforcement($enabled)
+    {
+        // A no-op inside a transaction by SQLite's own rules, so callers
+        // switch it outside one — the rebuild below does exactly that.
+        return $this->exec('PRAGMA foreign_keys = ' . ($enabled ? 'ON' : 'OFF'));
+    }
+
+    public function foreignKeyViolations()
+    {
+        // Runs regardless of whether enforcement is on; that is what makes it
+        // usable for repair, which has to see the violation it is removing.
+        $result = $this->query('PRAGMA foreign_key_check');
+        if ($result === false) {
+            return [];
+        }
+
+        $violations = [];
+        while ($row = $result->fetchArray(SQLITE3_ASSOC)) {
+            $violations[] = [
+                'table' => (string) $row['table'],
+                'rowid' => $row['rowid'],
+                'parent' => (string) $row['parent'],
+            ];
+        }
+
+        return $violations;
+    }
+
+    public function rebuildWithMonotonicIds($table)
+    {
+        // On a connection of its own, because the swap drops a table and any
+        // statement the session has ever left un-finalised answers that with
+        // "table is locked" — the migration runner's own history of queries
+        // was enough to trigger it. A fresh connection to the same file has
+        // no statements by definition; the schema cookie tells every other
+        // connection to re-read afterwards. A database without a file (the
+        // in-memory kind) has no second way in and rebuilds in place.
+        $file = $this->scalar("SELECT file FROM pragma_database_list WHERE name = 'main'");
+
+        if (is_string($file) && $file !== '') {
+            $worker = new self($file);
+            $rebuilt = $worker->performMonotonicRebuild($table);
+            $worker->close();
+
+            return $rebuilt;
+        }
+
+        return $this->performMonotonicRebuild($table);
+    }
+
+    /**
+     * The rebuild itself, on whatever connection this is.
+     *
+     * @param string $table
+     * @return bool
+     */
+    private function performMonotonicRebuild($table)
+    {
+        // The storage assigns max+1, so deleting the newest account and
+        // creating another reassigns the same id — the #92 inheritance
+        // mechanism. The keyword that makes SQLite track the highest id ever
+        // used instead cannot be added to an existing column, so the table is
+        // rebuilt from its own catalogued definition: create the reshaped
+        // twin, copy every row, swap the names, put the indexes and triggers
+        // back. The definition comes from the catalogue rather than a
+        // hard-coded snapshot so the rebuild is right for whatever column
+        // set the migration chain has produced by the time it runs.
+        $create = $this->scalar(
+            "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = :name",
+            [':name' => $table]
+        );
+
+        if (!is_string($create) || $create === '') {
+            error_log('Wallos: cannot rebuild ' . $table . ': its definition was not found.');
+
+            return false;
+        }
+
+        if (stripos($create, 'AUTOINCREMENT') !== false) {
+            // Already monotonic — an interrupted upgrade retrying, most
+            // likely. Nothing to do is success.
+            return true;
+        }
+
+        $needle = 'INTEGER PRIMARY KEY';
+        $position = stripos($create, $needle);
+
+        if ($position === false) {
+            error_log('Wallos: cannot rebuild ' . $table . ': no integer primary key to make monotonic.');
+
+            return false;
+        }
+
+        $reshaped = substr($create, 0, $position + strlen($needle))
+            . ' AUTOINCREMENT'
+            . substr($create, $position + strlen($needle));
+
+        $temporary = $table . '_monotonic_rebuild';
+        $namePattern = '/^\s*CREATE\s+TABLE\s+(?:"' . preg_quote($table, '/') . '"|'
+            . preg_quote($table, '/') . ')\s*\(/i';
+        $reshaped = preg_replace($namePattern, 'CREATE TABLE "' . $temporary . '" (', $reshaped, 1, $renamed);
+
+        if ($renamed !== 1) {
+            error_log('Wallos: cannot rebuild ' . $table . ': its definition was not recognised.');
+
+            return false;
+        }
+
+        $quotedName = "'" . str_replace("'", "''", $table) . "'";
+
+        $columns = [];
+        $result = $this->query('SELECT name FROM pragma_table_info(' . $quotedName . ')');
+        while ($result !== false && $row = $result->fetchArray(SQLITE3_ASSOC)) {
+            $columns[] = '"' . str_replace('"', '""', $row['name']) . '"';
+        }
+
+        if ($columns === []) {
+            error_log('Wallos: cannot rebuild ' . $table . ': no columns were found.');
+
+            return false;
+        }
+
+        $columnList = implode(', ', $columns);
+
+        // The indexes and triggers that name this table, to be put back after
+        // the swap — dropping the table takes them with it.
+        $attached = [];
+        $result = $this->query("SELECT sql FROM sqlite_master WHERE tbl_name = " . $quotedName
+            . " AND type IN ('index', 'trigger') AND sql IS NOT NULL");
+        while ($result !== false && $row = $result->fetchArray(SQLITE3_ASSOC)) {
+            $attached[] = $row['sql'];
+        }
+
+        // Enforcement pauses around the swap: dropping a table other tables
+        // reference is exactly what it exists to refuse. Outside the
+        // transaction, because inside one the switch is a no-op.
+        $enforcing = (int) $this->scalar('PRAGMA foreign_keys') === 1;
+        if ($enforcing && $this->setForeignKeyEnforcement(false) === false) {
+            return false;
+        }
+
+        $swapped = false;
+
+        if ($this->beginTransaction() !== false) {
+            $steps = array_merge(
+                [
+                    $reshaped,
+                    'INSERT INTO "' . $temporary . '" (' . $columnList . ')'
+                        . ' SELECT ' . $columnList . ' FROM "' . $table . '"',
+                    'DROP TABLE "' . $table . '"',
+                    'ALTER TABLE "' . $temporary . '" RENAME TO "' . $table . '"',
+                ],
+                $attached
+            );
+
+            $swapped = true;
+            foreach ($steps as $step) {
+                if ($this->exec($step) === false) {
+                    error_log('Wallos: rebuilding ' . $table . ' failed at: ' . $step
+                        . ' — ' . $this->lastErrorMsg());
+                    $this->rollBack();
+                    $swapped = false;
+
+                    break;
+                }
+            }
+
+            if ($swapped && $this->commit() === false) {
+                $this->rollBack();
+                $swapped = false;
+            }
+        }
+
+        if ($enforcing && $this->setForeignKeyEnforcement(true) === false) {
+            return false;
+        }
+
+        return $swapped;
     }
 
     public function driver()

@@ -165,7 +165,10 @@ wallos_test('orphaned rows are found by following the foreign keys to a fixpoint
     wallos_test_create_user($db, 1, 'alice');
     wallos_test_create_user($db, 2, 'bob');
 
+    // Rows like these predate enforcement (#92); pausing it is how the case
+    // builds the database this migration path exists to clean up.
     $currency = (int) $db->scalar('SELECT main_currency FROM "user" WHERE id = 1');
+    $db->setForeignKeyEnforcement(false);
     $db->exec('DELETE FROM currencies WHERE id = ' . $currency);
     $db->exec("INSERT INTO login_tokens (user_id, token) VALUES (1, 'alice-token')");
     $db->exec("INSERT INTO login_tokens (user_id, token) VALUES (2, 'bob-token')");
@@ -407,6 +410,9 @@ wallos_test('orphans are refused by default and counted when skipped', function 
 
     $source = migrate_test_source();
     $db = wallos_database_connect($source);
+    // A row that predates enforcement (#92); pausing it is how the case
+    // builds the source database this flag exists for.
+    $db->setForeignKeyEnforcement(false);
     $db->exec("INSERT INTO login_tokens (user_id, token) VALUES (4242, 'no such user')");
     $db->close();
 

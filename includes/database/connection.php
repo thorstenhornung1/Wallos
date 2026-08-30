@@ -52,6 +52,46 @@ interface WallosDatabase
     public function columnExists($table, $column);
 
     /**
+     * Whether declared foreign keys are enforced on this connection.
+     *
+     * One backend has always enforced them and cannot stop; the other never
+     * did until #92 and needs room to pause — the migration runner rebuilds
+     * tables other tables reference, and repair work has to be able to look
+     * at a violation without tripping over it.
+     *
+     * @param bool $enabled
+     * @return bool
+     */
+    public function setForeignKeyEnforcement($enabled);
+
+    /**
+     * Every row that violates a declared foreign key, as
+     * ['table' => ..., 'rowid' => ..., 'parent' => ...].
+     *
+     * Empty on the backend that enforces unconditionally — nothing violating
+     * was ever accepted there. The repair migration reads this instead of
+     * guessing (#92).
+     *
+     * @return array[]
+     */
+    public function foreignKeyViolations();
+
+    /**
+     * Makes the table's integer primary key monotonic: a freed id is never
+     * handed out again.
+     *
+     * This is where the two backends genuinely differ, which is why it lives
+     * here rather than in a migration. One assigns max+1 and therefore
+     * recycles the newest deleted id — the #92 inheritance mechanism — and
+     * fixing that needs a table rebuild; the other draws ids from a sequence
+     * that never revisits a freed value and has nothing to do.
+     *
+     * @param string $table
+     * @return bool
+     */
+    public function rebuildWithMonotonicIds($table);
+
+    /**
      * Every base table carrying a column of this name.
      *
      * It exists so that user deletion can ask the schema which tables hold rows

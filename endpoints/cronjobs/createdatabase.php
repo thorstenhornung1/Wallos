@@ -266,8 +266,14 @@ if (!file_exists($databaseFile)) {
     # Added new notifications table
     # Added notify column to subscriptions table
 
+    // Both results below are finalised once read. Left open — one read only
+    // partially, one abandoned by the break — they hold a shared read lock
+    // for as long as this global variable lives, and 000071's table rebuild
+    // on its own connection then waits out the busy timeout and fails (#92).
     $result = $db->query("SELECT name FROM sqlite_master WHERE type='table' AND name='notifications'");
-    if (!$result->fetchArray(SQLITE3_ASSOC)) {
+    $notificationsTableExists = $result->fetchArray(SQLITE3_ASSOC) !== false;
+    $result->finalize();
+    if (!$notificationsTableExists) {
         $db->exec('CREATE TABLE notifications (
             id INTEGER PRIMARY KEY,
             enabled BOOLEAN DEFAULT false,
@@ -290,6 +296,7 @@ if (!file_exists($databaseFile)) {
             break;
         }
     }
+    $result->finalize();
     if (!$notifyColumnExists) {
         $db->exec('ALTER TABLE subscriptions ADD COLUMN notify BOOLEAN DEFAULT false');
         echo "Column 'notify' added to table 'subscriptions'.\n";

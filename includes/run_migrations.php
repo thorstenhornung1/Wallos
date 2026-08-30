@@ -44,6 +44,13 @@ if ($migrationTableExists) {
     while ($row = $migrationQuery->fetchArray(SQLITE3_ASSOC)) {
         $completedMigrations[] = str_replace('../../', '', $row['migration']);
     }
+    // Finalised, not merely exhausted: a result set held open across the loop
+    // below blocks any migration that drops or rebuilds a table with "table
+    // is locked" — the same mechanism that kept 000016 half-applied for nine
+    // years, one layer up. Found the day 000071 rebuilt the account table.
+    if (method_exists($migrationQuery, 'finalize')) {
+        $migrationQuery->finalize();
+    }
 }
 
 $allMigrations = array_map(
@@ -57,11 +64,30 @@ if (count($requiredMigrations) === 0) {
     echo "No migrations to run.\n";
 }
 
+// Enforcement pauses for the chain (#92): a migration may rebuild a table
+// other tables reference, and a half-applied chain is exactly when the data
+// is allowed to be temporarily inconsistent. Resumed after the loop whatever
+// happened — the two break paths land there too, and a failed chain must not
+// leave the connection unguarded.
+$db->setForeignKeyEnforcement(false);
+
+// Each migration runs in a scope of its own, not the runner's. Included
+// directly, every variable a migration leaves behind survives until the end
+// of this script — and several historical ones leave partially-read query
+// results, whose statements hold a shared read lock for exactly that long.
+// 000071's table rebuild was the first thing to collide with them: its own
+// connection waited out the busy timeout on locks held by column checks
+// from migrations that had finished minutes of work earlier. The scope ends
+// when the migration does, so its statements do too.
+$wallosRunOneMigration = static function ($db, $path) {
+    return require $path;
+};
+
 foreach ($requiredMigrations as $migration) {
     // A migration that finishes without returning anything yields 1, and one
     // that returns early because there is nothing to do yields null. Only an
     // explicit false means it could not do its work.
-    $outcome = require $migrationsDir . basename($migration);
+    $outcome = $wallosRunOneMigration($db, $migrationsDir . basename($migration));
 
     if ($outcome === false) {
         $migrationFailure = $migration;
@@ -94,3 +120,5 @@ foreach ($requiredMigrations as $migration) {
 
     echo sprintf("Migration %s completed successfully.\n", $migration);
 }
+
+$db->setForeignKeyEnforcement(true);

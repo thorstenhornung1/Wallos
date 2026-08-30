@@ -56,9 +56,13 @@ wallos_test('a row pointing at a parent that is gone is counted', function () {
     $insert->bindValue(':payer', $references['household']);
     $insert->bindValue(':category', $references['category']);
     // A payment method that was deleted while a subscription still used it.
-    // endpoints/payments/delete.php does exactly this and reports success.
+    // endpoints/payments/delete.php did exactly this and reported success.
+    // Enforcement refuses the row today (#92); pausing it is how the case
+    // builds the past it exists to detect.
     $insert->bindValue(':payment', 987654);
+    $db->setForeignKeyEnforcement(false);
     $insert->execute();
+    $db->setForeignKeyEnforcement(true);
 
     $key = [
         'name' => 'subscriptions_payment_method_id_fkey',

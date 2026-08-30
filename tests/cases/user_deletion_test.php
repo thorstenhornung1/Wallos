@@ -401,7 +401,12 @@ wallos_test('a missing table is a failure rather than a silent half deletion', f
 
     // CASCADE only on PostgreSQL, and only to drop the foreign keys pointing at
     // the table; it does not remove any of the rows this case then checks for.
+    // On SQLite, enforcement would refuse to drop a table other rows point at
+    // (#92) — paused, because a missing table is exactly the broken state the
+    // case needs standing.
+    $db->setForeignKeyEnforcement(false);
     $db->exec(wallos_test_driver() === 'pgsql' ? 'DROP TABLE "user" CASCADE' : 'DROP TABLE "user"');
+    $db->setForeignKeyEnforcement(true);
 
     // Deliberately not silenced here: both callers answer JSON, so a PHP
     // warning escaping the routine would be printed ahead of the response body
