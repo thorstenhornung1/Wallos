@@ -27,11 +27,16 @@ version: "3.8"
 
 services:
   wallos:
-    # Pinned, not `latest`: the report has to be able to name what it tested.
-    # (The 2026-08-28 temporary main-digest pin for the #123 field test was
-    # regularly replaced by this tagged release — functionally identical,
-    # now with a truthful version string.)
-    image: ghcr.io/thorstenhornung1/wallos:5.8.8
+    # Unpinned to `latest` (2026-08-30, QA-Betreiber-Entscheid): die Test-
+    # Instanz folgt immer dem aktuellsten Fork-Release. Der fruehere Grund
+    # fuer den Pin — "the report has to be able to name what it tested" —
+    # wird seither von der App selbst erfuellt (Versions-String in der UI);
+    # der Report zitiert diese Angabe statt dieses Tags.
+    # ACHTUNG: Swarm re-pullt floating Tags NICHT von selbst. Ein neues
+    # Release erreicht die Instanz erst beim naechsten
+    #   docker stack deploy -c wallos-test-stack-pgsql.yml wallos-test
+    # (re-resolvt latest -> Digest) oder `docker service update --force`.
+    image: ghcr.io/thorstenhornung1/wallos:latest
     environment:
       TZ: Europe/Berlin
 
