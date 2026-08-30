@@ -7,14 +7,18 @@ file is the part that is in neither.
 
 ## The state right now
 
-Released: **5.8.8** (2026-08-28, 15:30 as authorised),
-`ghcr.io/thorstenhornung1/wallos:5.8.8`,
-`sha256:53e59f9136283619ee34dbb2908a09513ef6d79e622718112cc322598602cd57`.
-The temporary main-digest pin on the test instance (the #123 field test) is
-superseded by this tag — the pin rule is back to "pin = tagged release".
-478 tests on SQLite and PostgreSQL 14 and 18, all five gates green:
-`dev/db-audit.sh`, `dev/sh-audit.sh`, `dev/write-audit.php`, the Semgrep run,
-and `dev/js-audit.sh` — new with #119, every served JavaScript file must parse.
+Released: **5.8.9** (2026-08-30, as authorised),
+`ghcr.io/thorstenhornung1/wallos:5.8.9`,
+`sha256:1234d1e28f0f41a94995ab68eae67d9554b458d53c1e9fad58e97ab75c5b6e5e`.
+It carries the #106 request counter (migration 000069) and the #124 secret
+clear. 489 tests on SQLite and PostgreSQL 14 locally, the CI run on the tag
+green, all five gates green: `dev/db-audit.sh`, `dev/sh-audit.sh`,
+`dev/write-audit.php`, the Semgrep run, and `dev/js-audit.sh`.
+
+The test instance is still pinned to **5.8.8**; moving the pin is the QA
+operator's call. Worth making before the billing turn of **2026-09-01 (a
+Tuesday)** — the counter can only observe the reset if it is running when
+the reset happens; missed, the next window is 2026-10-01.
 
 ## What 2026-08-24 turned up, after this file was first written
 
