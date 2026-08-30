@@ -20,7 +20,7 @@
 --   * Every identifier is quoted, because "user" and "order" are reserved words
 --     and a keyword list kept in the generator would be wrong eventually.
 
--- 42 tables, 68 migrations recorded as applied.
+-- 42 tables, 69 migrations recorded as applied.
 
 CREATE TABLE "admin" (
     "id" SERIAL PRIMARY KEY,
@@ -457,11 +457,18 @@ ALTER TABLE "user_roles" ADD CONSTRAINT "user_roles_user_id_fkey"
 
 -- Indexes.
 
+CREATE UNIQUE INDEX "idx_ai_settings_user" ON "ai_settings" ("user_id");
+CREATE UNIQUE INDEX "idx_email_notifications_user" ON "email_notifications" ("user_id");
+CREATE UNIQUE INDEX "idx_gotify_notifications_user" ON "gotify_notifications" ("user_id");
+CREATE UNIQUE INDEX "idx_notification_settings_user" ON "notification_settings" ("user_id");
+CREATE UNIQUE INDEX "idx_ntfy_notifications_user" ON "ntfy_notifications" ("user_id");
 CREATE INDEX "idx_oidc_sessions_session" ON "oidc_sessions" ("session_id");
 CREATE INDEX "idx_oidc_sessions_sid" ON "oidc_sessions" ("sid");
 CREATE INDEX "idx_oidc_sessions_user" ON "oidc_sessions" ("user_id");
+CREATE UNIQUE INDEX "idx_pushover_notifications_user" ON "pushover_notifications" ("user_id");
 CREATE INDEX "idx_subscriptions_user_inactive_next_payment" ON "subscriptions" ("user_id", "inactive", "next_payment");
 CREATE INDEX "idx_subscriptions_user_notify_inactive" ON "subscriptions" ("user_id", "notify", "inactive");
+CREATE UNIQUE INDEX "idx_telegram_notifications_user" ON "telegram_notifications" ("user_id");
 CREATE INDEX "idx_user_roles_user_role" ON "user_roles" ("user_id", "role");
 
 -- The rows a fresh installation starts with: the reference data
@@ -635,7 +642,8 @@ INSERT INTO "migrations" ("id", "migration") VALUES
     (65, 'migrations/000066.php'),
     (66, 'migrations/000067.php'),
     (67, 'migrations/000068.php'),
-    (68, 'migrations/000069.php');
+    (68, 'migrations/000069.php'),
+    (69, 'migrations/000070.php');
 
 INSERT INTO "payment_methods" ("id", "name", "icon", "enabled", "order", "user_id") VALUES
     (1, 'PayPal', 'images/uploads/icons/paypal.png', 1, 1, 1),

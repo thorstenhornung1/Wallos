@@ -4,8 +4,6 @@
 
   These assert shapes rather than timings: query counts must not grow with the
   number of rows, and shared credentials must not multiply outbound calls.
-  Cases marked pending describe behaviour that is specified but not implemented
-  yet — they report without failing the suite.
 
   Conversion query counts live in currency_rates_test.php and index coverage in
   subscription_index_test.php, now that both are implemented.
@@ -322,21 +320,38 @@ wallos_test('the cron reads the per-account rows from memory, not from the datab
         'the filter receives the period-start accounts');
 });
 
-wallos_test_pending(
-    'one row per user is enforced where intended',
-    'specification 45.7 — settings tables allow duplicate rows per user',
-    function () {
-        $db = wallos_test_open_database();
-        wallos_test_create_user($db, 1, 'alice');
+wallos_test('one row per user is enforced where intended', function () {
+    // Specification 45.7. Every reader of these tables does LIMIT 1 and hopes;
+    // a duplicated row makes pages and cron jobs disagree silently. Migration
+    // 000070 puts a unique index on user_id, so the database itself refuses
+    // the second row.
+    $db = wallos_test_open_database();
+    wallos_test_create_user($db, 1, 'alice');
 
-        $stmt = $db->prepare("INSERT INTO email_notifications (enabled, user_id) VALUES (1, 1)");
-        $stmt->execute();
-        $stmt = $db->prepare("INSERT INTO email_notifications (enabled, user_id) VALUES (1, 1)");
-        $duplicate = @$stmt->execute();
+    $firstRows = [
+        'notification_settings' => "INSERT INTO notification_settings (days, user_id) VALUES (1, 1)",
+        'email_notifications' => "INSERT INTO email_notifications (enabled, user_id) VALUES (1, 1)",
+        'telegram_notifications' => "INSERT INTO telegram_notifications (enabled, user_id) VALUES (1, 1)",
+        'pushover_notifications' => "INSERT INTO pushover_notifications (enabled, user_id) VALUES (1, 1)",
+        'ntfy_notifications' => "INSERT INTO ntfy_notifications (enabled, user_id) VALUES (1, 1)",
+        'gotify_notifications' => "INSERT INTO gotify_notifications (enabled, user_id) VALUES (1, 1)",
+        'ai_settings' => "INSERT INTO ai_settings (user_id, type, model) VALUES (1, '', '')",
+    ];
+
+    foreach ($firstRows as $table => $insert) {
+        assert_true($db->exec($insert), 'the first ' . $table . ' row for a user is accepted');
+
+        // exec rather than a prepared statement, so a PostgreSQL run rejects it
+        // at the same point a SQLite run does. Suppressed because the SQLite
+        // driver warns on a constraint violation, and the violation is the
+        // expectation here.
+        $duplicate = @$db->exec($insert);
 
         assert_true($duplicate === false,
-            'a second email_notifications row for the same user should be rejected');
-
-        $db->close();
+            'a second ' . $table . ' row for the same user is rejected');
+        assert_same(1, (int) $db->scalar('SELECT COUNT(*) FROM ' . $table . ' WHERE user_id = 1'),
+            'and the table still holds one ' . $table . ' row for the user');
     }
-);
+
+    $db->close();
+});
