@@ -91,6 +91,27 @@ wallos_test('an arbitrary uid with gid 0 can run the image', function () {
     assert_true(strpos($dockerfile, 'g=u') !== false, 'and may do what the owner may');
 });
 
+wallos_test('the four modes are pinned by an executable check', function () {
+    // The comment at the top of this file used to be the only record that the
+    // four modes were verified against the built image — by hand, once. A
+    // manual verification decays the day someone edits startup.sh; this case
+    // pins the executable one: dev/container-modes.sh boots the image in all
+    // four modes, and CI runs it on every push and pull request.
+    $script = WALLOS_ROOT . '/dev/container-modes.sh';
+    assert_true(is_file($script), 'dev/container-modes.sh exists');
+
+    $source = (string) @file_get_contents($script);
+    foreach (['1000:0', '1000:1000', 'cap-drop', 'WALLOS_HTTP_PORT'] as $marker) {
+        assert_true(strpos($source, $marker) !== false,
+            'the script exercises the mode marked by ' . $marker);
+    }
+
+    $workflowPath = WALLOS_ROOT . '/.github/workflows/container-modes.yaml';
+    assert_true(is_file($workflowPath), 'the container-modes workflow exists');
+    assert_true(strpos((string) @file_get_contents($workflowPath), 'container-modes.sh') !== false,
+        'the workflow actually calls the script');
+});
+
 wallos_test('the port and the healthcheck agree, and both are configurable', function () {
     // setcap keeps port 80 for existing deployments, but the audience that
     // drops ALL capabilities loses it — so the listen port follows

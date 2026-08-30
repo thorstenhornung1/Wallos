@@ -1,0 +1,31 @@
+# The four container modes of #86, booted for real on every change.
+#
+# A workflow of its own rather than a job in build-release.yaml for the same
+# reason the boundary gates are separate jobs there: it answers a different
+# question — not "does the code work" but "does the built image still start
+# in every mode the README promises" — and it fails independently, so a red
+# mode check never blocks or hides the image build.
+name: Container Modes
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  container-modes:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Boot the image in all four modes
+        # docker rather than podman: it is what ubuntu-latest ships, and the
+        # script uses nothing engine-specific — named volumes, --read-only,
+        # --tmpfs, --user, --cap-drop and the inspect formats behave the same.
+        run: CONTAINER_ENGINE=docker dev/container-modes.sh
