@@ -73,6 +73,36 @@ for now. `docs/fork-and-upstream.md` and issue #32 hold the longer form.
 stack, PostgreSQL 18, pinned to docker-infra-3) belongs to whoever is running
 QA. Local work happens in `dev/compose.yaml` instead — see below.
 
+## The road from here (2026-08-30, Thorsten's direction)
+
+Three closing moves, then a release; the big feature work waits behind a
+named condition.
+
+1. **Tuesday 2026-09-01: calibrate #106 against the observed quota reset,
+   close it, and milestone A with it. Then release 5.9.0** — milestone K,
+   #17, #9, the CI hardening below; the CHANGELOG must carry the #92 caveat
+   (already-inherited rows cannot be told apart; check accounts created
+   shortly after a deletion). The real-data upgrade probe passed 2026-08-30:
+   the 000070–72 chain ran clean on a copy of the dev instance's database,
+   every count preserved, idempotent on retry.
+2. **PostgreSQL, closed hard**: #20 and #21 are closed as done in substance;
+   #80 (the version matrix in CI) is the remaining piece and is in work on
+   `ci/postgres-matrix`. After it, milestone E is history and what is left
+   of PostgreSQL is the upstream conversation (#32).
+3. **Rootless, closed hard**: milestone K is closed; the four container
+   modes are being pinned as an executable gate on `ci/container-modes` so
+   they cannot regress silently.
+4. **Fixer, closed**: #9 landed (union fetch — one shared-credential request
+   per scheduled refresh, whatever the users' lists). After Tuesday's
+   calibration, decide whether the deferred per-user failure line on the
+   settings page is still worth building.
+5. **Upstream**: #1181 and #1184 are watched; three single-file branches
+   stay prepared for the maintainer's first reaction. The goal behind #32 is
+   getting the PostgreSQL work portable upstream.
+6. **Parked until PostgreSQL can be ported upstream — Thorsten's explicit
+   call**: the big new feature blocks, milestone J (families, households,
+   shared workspaces) first among them.
+
 ## Next, in the order I would take them
 
 ### 1. Upstream pull requests — the highest-value work left
