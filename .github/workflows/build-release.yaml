@@ -31,12 +31,75 @@ jobs:
       - name: Run the test suite
         run: php tests/run.php
 
-  # The same cases against PostgreSQL. Issue #80 asks which versions Wallos
-  # works with, and the honest answer is whichever ones CI runs — so the matrix
-  # carries the oldest upstream still supports and the newest released. The ends
-  # are where the failures are: the oldest catches a feature newer than our
-  # floor, the newest catches a deprecation. A middle version costs minutes and
-  # finds what the ends already found.
+  # Which PostgreSQL versions the matrix below runs. Issue #80 asks which
+  # versions Wallos works with, and the honest answer is whichever ones CI
+  # runs — so instead of a hard-coded list that goes stale the moment upstream
+  # retires a major, this job reads what the PostgreSQL project still supports
+  # from endoflife.date and hands the ends of that range to the test jobs. The
+  # ends are where the failures are: the oldest catches a feature newer than
+  # our floor, the newest catches a deprecation. A middle version costs minutes
+  # and finds what the ends already found.
+  #
+  # CI must not die on somebody else's API: if the call fails, times out or
+  # answers nonsense, the job falls back to the last span it was known to
+  # produce — 14 through 18, as of 2026-08 — and says so in the summary. The
+  # fallback can only ever be behind reality, never wrong about what was
+  # tested, because the tested versions are whatever the matrix actually ran.
+  postgres-versions:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.versions.outputs.matrix }}
+      oldest: ${{ steps.versions.outputs.oldest }}
+      newest: ${{ steps.versions.outputs.newest }}
+    steps:
+      - name: Determine the supported PostgreSQL range
+        id: versions
+        run: |
+          today="$(date -u +%F)"
+          range="$(
+            curl -sf --max-time 15 https://endoflife.date/api/postgresql.json |
+            jq -r --arg today "$today" '
+              [ .[] | select((.eol | type) == "string" and .eol > $today)
+                    | .cycle | tonumber ]
+              | select(length > 0)
+              | "\(min) \(max)"
+            '
+          )" || range=""
+
+          source="endoflife.date"
+          # The floor only ever moves up: an answer older than the recorded
+          # fallback is nonsense, not news.
+          if ! [[ "$range" =~ ^[0-9]+\ [0-9]+$ ]] || [ "${range% *}" -lt 14 ]; then
+            range="14 18"
+            source="the recorded fallback (endoflife.date was unreachable or implausible)"
+          fi
+
+          oldest="${range% *}"
+          newest="${range#* }"
+
+          if [ "$oldest" = "$newest" ]; then
+            matrix="[\"$oldest\"]"
+          else
+            matrix="[\"$oldest\", \"$newest\"]"
+          fi
+
+          {
+            echo "matrix=$matrix"
+            echo "oldest=$oldest"
+            echo "newest=$newest"
+          } >> "$GITHUB_OUTPUT"
+
+          {
+            echo "### Tested against PostgreSQL $oldest through $newest"
+            echo
+            echo "The matrix runs the ends of the range the PostgreSQL project"
+            echo "still supports — the oldest catches a feature newer than the"
+            echo "floor, the newest catches a deprecation. This run's pair came"
+            echo "from $source."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  # The same cases against PostgreSQL, once per end of the supported range the
+  # job above determined.
   #
   # This is not decoration. Until it existed the suite ran only on SQLite, and
   # five defects that made the PostgreSQL schema unusable at runtime — three
@@ -45,10 +108,11 @@ jobs:
   # to a review rather than being caught here.
   test-pgsql:
     runs-on: ubuntu-latest
+    needs: postgres-versions
     strategy:
       fail-fast: false
       matrix:
-        postgres: ["14", "18"]
+        postgres: ${{ fromJSON(needs.postgres-versions.outputs.matrix) }}
     services:
       postgres:
         image: postgres:${{ matrix.postgres }}-alpine

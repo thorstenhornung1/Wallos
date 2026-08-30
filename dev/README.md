@@ -26,6 +26,16 @@ podman exec -e WALLOS_TEST_DRIVER=pgsql wallos-dev php tests/run.php
 Each case gets its own schema there, and cases that test SQLite itself say so
 and stand aside instead of asserting something nobody claims.
 
+Which PostgreSQL versions that covers is decided by CI, not by this file: the
+`postgres-versions` job in `.github/workflows/build-release.yaml` reads the
+range the PostgreSQL project still supports from endoflife.date on every run
+(with a recorded fallback so a third-party outage cannot redden the build),
+runs the full suite — fresh install, every case, the SQLite migration with its
+sequences verified — against the oldest and the newest of that range, and
+prints "tested against PostgreSQL X through Y" in the run's job summary. The
+tested range is whatever the latest summary on `main` says; a pair of numbers
+written here would be a promise nothing keeps.
+
 **The fixture hands over the connection the application builds.**
 `wallos_test_open_database()` points `WALLOS_DB_PATH` or the `WALLOS_DB_*`
 variables at a throwaway database and then calls `wallos_database_connect()`
