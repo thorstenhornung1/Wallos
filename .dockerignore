@@ -15,3 +15,13 @@
 # Example credentials for the local dev environment; not for the image
 /dev/secrets.example/
 /dev/secrets/
+
+# Local database state must never ship inside the image: a database in the
+# build context rides COPY . . into the image, and a fresh named volume then
+# inherits it on first mount — an instance born with somebody else's data.
+# CI builds from a clean checkout; a developer's working tree is not. Found
+# by dev/container-modes.sh the first time it ran against a lived-in tree.
+db/wallos.db
+db/wallos.db-*
+db/setup_token.db
+db/pre-pgsql-*.db

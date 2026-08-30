@@ -80,6 +80,21 @@ wallos_test('everything ephemeral lives under one tmpfs', function () {
     }
 });
 
+wallos_test('a developer database cannot ride the build into the image', function () {
+    // Found by the mode gate's first real run: built from a working tree
+    // that held a local db/wallos.db, COPY . . shipped it, and a fresh named
+    // volume then inherited it — an instance born with somebody else's data
+    // and "No migrations to run" on first boot. CI builds from a clean
+    // checkout; a developer's tree is not, and the ignore file is what makes
+    // the two builds the same.
+    $ignored = file_get_contents(WALLOS_ROOT . '/.dockerignore');
+
+    foreach (['db/wallos.db', 'db/setup_token.db'] as $localState) {
+        assert_true(strpos($ignored, $localState) !== false,
+            $localState . ' stays out of the build context');
+    }
+});
+
 wallos_test('an arbitrary uid with gid 0 can run the image', function () {
     // The OpenShift convention: group 0 owns what the runtime user must
     // write, with group permissions equal to the owner's. Measured caveat

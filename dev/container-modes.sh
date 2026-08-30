@@ -183,6 +183,15 @@ check "1000:0: startup skipped the privileged calls" \
 check "1000:0: the migration chain is fully applied (through $EXPECTED_MIGRATION)" \
     "$(wait_migrated "wallos-mode-gid0-$SUFFIX")"
 
+# A fresh volume must mean a freshly created database. When the image carries
+# a database out of the build tree — the gate's first real catch, now pinned
+# by .dockerignore — first boot says "No migrations to run" instead of
+# creating one, and the instance is born with somebody else's data. Read
+# after wait_migrated, so the boot is past the point where the line appears.
+LOGS=$("$ENGINE" logs "wallos-mode-gid0-$SUFFIX" 2>&1 || true)
+check "1000:0: the database was created on this boot, not shipped in the image" \
+    "$(contains "$LOGS" 'Database does not exist')"
+
 remove_container "wallos-mode-gid0-$SUFFIX"
 remove_volumes "wallos-mode-gid0-db-$SUFFIX" "wallos-mode-gid0-logos-$SUFFIX"
 
