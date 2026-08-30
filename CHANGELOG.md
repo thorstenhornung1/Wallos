@@ -1,5 +1,43 @@
 # Changelog
 
+## [5.8.9](https://github.com/thorstenhornung1/Wallos/releases/tag/v5.8.9) (2026-08-30)
+
+The fork starts counting what it spends: every currency-provider request is
+now recorded locally, released ahead of the 2026-09-01 billing turn so the
+first observed reset can calibrate the warning threshold. And a provider
+switched to a public client can finally shed its stored secret through the
+interface.
+
+### Added
+
+* **currency:** Wallos counts its own provider requests, per calendar month,
+  recorded with the key's holder — instance settings for the shared key,
+  migration 000069 for a user's own
+  ([#106](https://github.com/thorstenhornung1/Wallos/issues/106)). The fetch
+  result carries a transport flag, so the counter bills requests that went
+  over the wire and never answers served from the per-run cache: a run over
+  accounts sharing key and currency list counts one call, exactly as the
+  provider sees it, and a refused request counts too —
+  [#104](https://github.com/thorstenhornung1/Wallos/issues/104) was hundreds
+  of failures nothing displayed. The settings page now says what it knows
+  either way: that fixer.io reports no quota at all (the #104 blindness),
+  Wallos's own count, the date rates last actually refreshed, and a plain
+  statement when the reported quota is exhausted. The rewritten usage
+  endpoint answers both providers in one shape and checks the statement
+  results the old one discarded (write-audit: 315 → 305 unchecked prepares).
+  The issue stays open for threshold calibration against the first observed
+  reset.
+
+### Fixed
+
+* **oidc:** a stored client secret can be cleared through the UI and the API
+  ([#124](https://github.com/thorstenhornung1/Wallos/issues/124)). The
+  placeholder convention stays — an empty secret field still means
+  "unchanged" — and clearing is an explicit `clear_client_secret` flag on
+  both save paths. The interface offers it as a checkbox only while a secret
+  is stored and the environment does not manage it; a new secret and the
+  flag in one request is refused as the contradiction it is.
+
 ## [5.8.8](https://github.com/thorstenhornung1/Wallos/releases/tag/v5.8.8) (2026-08-28)
 
 The first upstream merge since the fork diverged, an OIDC logout that
