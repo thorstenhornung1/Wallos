@@ -68,12 +68,23 @@ function wallos_fetch_exchange_rates($config, $codes)
     $provider = (int) $config['values']['provider'];
     $usage = ['limit' => null, 'used' => null];
 
-    // One shared credential should not spend one provider request per user, so
-    // identical requests within a single run reuse the first response.
+    // One shared credential should not spend one provider request per user.
+    // Within a run, an earlier answer serves any request whose codes it
+    // covers — the same list, or a subset of a union fetched up front (#9).
+    // A covering refusal answers too: a quota exhausted for the union is
+    // exhausted for every part of it, and asking again with fewer symbols
+    // would spend a call to learn the same thing (#117). The caller only
+    // reads the rates it owns, so extra rates in a covering answer are
+    // simply not looked at.
     static $cache = [];
-    $cacheKey = md5($provider . '|' . $apiKey . '|' . $codes);
-    if (isset($cache[$cacheKey])) {
-        return $cache[$cacheKey];
+    $requested = array_filter(array_map('trim', explode(',', $codes)));
+    $credential = $provider . '|' . $apiKey;
+
+    foreach ($cache as $entry) {
+        if ($entry['credential'] === $credential
+            && array_diff($requested, $entry['codes']) === []) {
+            return $entry['result'];
+        }
     }
 
     if ($provider === 1) {
@@ -128,7 +139,7 @@ function wallos_fetch_exchange_rates($config, $codes)
         // Cached like a success: a provider that was unreachable a moment ago
         // will not answer the next account in the same run either, and
         // retrying per account multiplies timeouts, not information (#117).
-        $cache[$cacheKey] = $failure;
+        $cache[] = ['credential' => $credential, 'codes' => $requested, 'result' => $failure];
 
         $failure['transport'] = true;
 
@@ -148,14 +159,14 @@ function wallos_fetch_exchange_rates($config, $codes)
         // includes the code list, so accounts with different currency lists
         // still ask once each; a key-level negative cache is deliberately
         // not attempted.
-        $cache[$cacheKey] = $failure;
+        $cache[] = ['credential' => $credential, 'codes' => $requested, 'result' => $failure];
 
         $failure['transport'] = true;
 
         return $failure;
     }
 
-    $cache[$cacheKey] = [
+    $fresh = [
         'success' => true,
         'rates' => $apiData['rates'],
         'usage' => $usage,
@@ -163,10 +174,85 @@ function wallos_fetch_exchange_rates($config, $codes)
         'transport' => false,
     ];
 
-    $fresh = $cache[$cacheKey];
+    $cache[] = ['credential' => $credential, 'codes' => $requested, 'result' => $fresh];
+
     $fresh['transport'] = true;
 
     return $fresh;
+}
+
+/**
+ * One provider request for everyone the shared credential serves (#9).
+ *
+ * Called by the scheduled refresh before it walks its users: the accounts
+ * that inherit the instance credential and are due today are grouped, the
+ * union of their currency codes is fetched once, and the per-user updates
+ * that follow are answered from the run cache — the covering-answer rule
+ * above is what makes a user's smaller list a hit. Users with their own key
+ * are their own group of one and gain nothing here (the issue's rule 8);
+ * a user already refreshed today neither fetches nor widens the union, the
+ * #117 rule carried forward — symbols nobody due needs are quota spent on
+ * nothing.
+ *
+ * @param SQLite3 $db
+ * @param int[]   $userIds Every account the caller is about to refresh.
+ */
+function wallos_prewarm_shared_exchange_rates($db, $userIds)
+{
+    $due = [];
+    $config = null;
+
+    foreach ($userIds as $userId) {
+        if (wallos_exchange_rates_fresh($db, $userId)) {
+            continue;
+        }
+
+        $candidate = wallos_get_effective_currency_config($db, $userId);
+
+        if (empty($candidate['valid']) || ($candidate['mode'] ?? 'instance') !== 'instance') {
+            continue;
+        }
+
+        $due[] = (int) $userId;
+        $config = $candidate;
+    }
+
+    // One due user's own fetch already is the union; only two or more share.
+    if (count($due) < 2) {
+        return;
+    }
+
+    $placeholders = implode(', ', array_fill(0, count($due), '?'));
+    $stmt = $db->prepare('SELECT DISTINCT code FROM currencies WHERE user_id IN ('
+        . $placeholders . ') ORDER BY code');
+
+    if ($stmt === false) {
+        return;
+    }
+
+    foreach ($due as $index => $userId) {
+        $stmt->bindValue($index + 1, $userId, SQLITE3_INTEGER);
+    }
+
+    $result = $stmt->execute();
+    $codes = [];
+    while ($result !== false && $row = $result->fetchArray(SQLITE3_ASSOC)) {
+        $codes[] = $row['code'];
+    }
+
+    if ($codes === []) {
+        return;
+    }
+
+    $rates = wallos_fetch_exchange_rates($config, implode(',', $codes));
+
+    // The union request is a real provider call like any other: counted
+    // (#106), and its quota headers recorded, whatever the per-user updates
+    // after it do.
+    if (!empty($rates['transport'])) {
+        wallos_count_currency_call($db, $config, $due[0]);
+        wallos_store_currency_usage($db, $config, $due[0], $rates['usage']);
+    }
 }
 
 /**

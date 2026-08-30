@@ -22,7 +22,20 @@ if ($usersToUpdateExchange === false) {
     wallos_cron_fail('could not read the user list: ' . wallos_cron_reason($db));
 }
 
-while ($userToUpdateExchange = $usersToUpdateExchange->fetchArray(SQLITE3_ASSOC)) {
+// Into an array first: the loop below is walked twice in effect — once by the
+// union prewarm, once user by user — and a cursor held open across other
+// statements is the lock-holding shape #92 just finished hunting down.
+$userRows = [];
+while ($row = $usersToUpdateExchange->fetchArray(SQLITE3_ASSOC)) {
+    $userRows[] = $row;
+}
+
+// One request for everyone the shared credential serves (#9): the union of
+// the due users' currencies is fetched once, and the per-user updates below
+// hit the run cache instead of the provider.
+wallos_prewarm_shared_exchange_rates($db, array_column($userRows, 'id'));
+
+foreach ($userRows as $userToUpdateExchange) {
     $userId = $userToUpdateExchange['id'];
     echo "For user: " . $userToUpdateExchange['username'] . "<br />";
 
