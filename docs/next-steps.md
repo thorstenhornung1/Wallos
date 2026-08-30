@@ -130,9 +130,13 @@ mounted, never assert it); the rotation half was dropped deliberately: the
 guardrails are layered now (`--rates` opt-in, the #117 startup skip, per-run
 failure caching, hard QA fences), the quota proved to recover in a window
 rather than at the month's turn, and the shared live key is accepted as the
-instance's working state. **#106** (the quota warning) stands alone and waits
-for the end of the month, where the billing-period turn gives a known reset
-time to calibrate the threshold against.
+instance's working state. The larger half of **#106** landed 2026-08-30
+(`caebe32`): Wallos counts its own provider requests per calendar month for
+both providers — fixer.io's total silence was the missing half of #104 — and
+the settings page states exhaustion, the local count and when rates last
+refreshed. What remains is calibration: the turn of 2026-09-01 shows whether
+the provider's billing period agrees with the calendar month and where the
+warning threshold should sit. The issue stays open for exactly that.
 
 ### 4. The parts of closed-enough issues that are still open
 
