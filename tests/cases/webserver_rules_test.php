@@ -22,9 +22,9 @@
   after `\.php$` is a deny rule that never runs. The comment above them says so;
   this makes it fail rather than say so.
 
-  Both files, because both ship: nginx.conf carries the server block the
-  container runs, and nginx.default.conf goes to http.d. They have drifted
-  before.
+  One file, since #125: nginx.conf carries the server block the container
+  runs. The http.d template that used to ship beside it was never included by
+  the loaded configuration, had already drifted, and is gone.
 */
 
 /**
@@ -36,8 +36,25 @@ function webserver_rules_source($path)
     return file_get_contents(WALLOS_ROOT . '/' . $path);
 }
 
+wallos_test('there is one server configuration, and nothing installs a second', function () {
+    // #125: nginx.default.conf was copied to /etc/nginx/http.d/, a directory
+    // the loaded configuration never includes — verified with nginx -T in the
+    // running container. Every effective rule lived in nginx.conf, and the
+    // dead copy had already drifted (it passed PHP to a unix socket that
+    // nothing listens on). A rule that exists only in a file nginx does not
+    // read protects nothing, which is the #94 finding one file up.
+    assert_true(!is_file(WALLOS_ROOT . '/nginx.default.conf'),
+        'the dead copy is gone');
+
+    $dockerfile = webserver_rules_source('Dockerfile');
+    assert_true(strpos($dockerfile, 'nginx.default.conf') === false,
+        'and the image no longer installs it');
+    assert_true(strpos($dockerfile, 'http.d') === false,
+        'nor anything else into the directory nginx does not include');
+});
+
 wallos_test('php is refused in every directory the web server user can write to', function () {
-    foreach (['nginx.conf', 'nginx.default.conf'] as $path) {
+    foreach (['nginx.conf'] as $path) {
         $source = webserver_rules_source($path);
 
         // The writable set, by prefix rather than one entry per directory.
@@ -54,7 +71,7 @@ wallos_test('the refusal comes before the handler that would run the file', func
     // nginx uses the first matching regex location. A deny rule placed after
     // the \.php$ handler is never reached, and the configuration still passes
     // `nginx -t` — it just executes everything.
-    foreach (['nginx.conf', 'nginx.default.conf'] as $path) {
+    foreach (['nginx.conf'] as $path) {
         $source = webserver_rules_source($path);
 
         $deny = strpos($source, '^/(db|images/uploads)/');
@@ -73,7 +90,7 @@ wallos_test('the database directory is denied whole, not by extension', function
     // carrying the whole safety margin in a layer with no reason to depend on
     // it. The 2026-08-21 test run quoted that reasoning back at the release
     // that made it.
-    foreach (['nginx.conf', 'nginx.default.conf'] as $path) {
+    foreach (['nginx.conf'] as $path) {
         $source = webserver_rules_source($path);
 
         assert_contains('location ^~ /db/', $source, $path . ' denies the directory by prefix');

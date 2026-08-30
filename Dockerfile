@@ -15,9 +15,9 @@ RUN apk upgrade --no-cache && \
 # Copy your PHP application files into the container
 COPY . .
 
-# Copy Nginx configuration
+# The one nginx configuration. The template that used to ship beside it went
+# to a directory the loaded configuration never includes, and is gone (#125).
 COPY nginx.conf /etc/nginx/nginx.conf
-COPY nginx.default.conf /etc/nginx/http.d/default.conf
 
 # PHP's ephemeral-state configuration (#85); conf.d is scanned even though no
 # php.ini is loaded.
@@ -25,7 +25,6 @@ COPY php-wallos.ini /usr/local/etc/php/conf.d/wallos.ini
 
 # Remove config files from webroot
 RUN rm -rf /var/www/html/nginx.conf && \
-    rm -rf /var/www/html/nginx.default.conf && \
     rm -rf /var/www/html/php-wallos.ini
 
 # Copy the custom crontab file

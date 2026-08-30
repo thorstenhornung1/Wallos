@@ -127,21 +127,13 @@ wallos_test('nginx logs to the container runtime, not into the container', funct
     // streams hands rotation to whatever runs the container, and the
     // healthcheck itself — 720 requests a day of no information — is excluded.
     $main = file_get_contents(WALLOS_ROOT . '/nginx.conf');
-    $server = file_get_contents(WALLOS_ROOT . '/nginx.default.conf');
 
     assert_true(strpos($main, '/dev/stdout') !== false, 'access log goes to stdout');
     assert_true(strpos($main, '/dev/stderr') !== false, 'error log goes to stderr');
-
-    // In nginx.conf, not only in the template: the server block nginx loads
-    // is the one in nginx.conf — /etc/nginx/http.d/ is never included, so a
-    // rule that exists only in nginx.default.conf protects nothing. Verified
-    // against the running container with `nginx -T` on 2026-08-30.
     assert_true(strpos($main, 'location = /health.php') !== false,
-        'the healthcheck has its own location in the loaded configuration');
+        'the healthcheck has its own location');
     assert_true(strpos($main, 'access_log     off') !== false || strpos($main, 'access_log off') !== false,
         'and it is not logged');
-    assert_true(strpos($server, 'location = /health.php') !== false,
-        'the template carries the same location');
 });
 
 wallos_test('PHP is told where its ephemeral state lives', function () {
