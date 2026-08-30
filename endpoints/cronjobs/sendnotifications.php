@@ -9,6 +9,7 @@ wallos_cron_begin('sendnotifications');
 require_once 'validate.php';
 require_once __DIR__ . '/../../includes/connect_endpoint_crontabs.php';
 require_once __DIR__ . '/../../includes/ssrf_helper.php';
+require_once __DIR__ . '/../../includes/webhook_headers.php';
 require_once __DIR__ . '/../../includes/mailer.php';
 require_once __DIR__ . '/../../includes/notification_settings.php';
 require_once __DIR__ . '/../../includes/notification_due.php';
@@ -892,10 +893,11 @@ while ($userToNotify = $usersToNotify->fetchArray(SQLITE3_ASSOC)) {
                         // Get name of user from household table
                         // $notify is keyed by household member; they are already loaded.
                         $user = $household[$userId] ?? [];
-                
-                        if ($user['name']) {
-                            $payer = $user['name'];
-                        }
+
+                        // Reset per member (#128 bycatch): carried over, a
+                        // member without a name inherited the previous
+                        // member's name in {{subscription_payer}}.
+                        $payer = $user['name'] ?? '';
                 
                         foreach ($perUser as $subscription) {
                             // Ensure the payload is reset for each subscription
@@ -916,11 +918,16 @@ while ($userToNotify = $usersToNotify->fetchArray(SQLITE3_ASSOC)) {
                             curl_setopt($ch, CURLOPT_URL, $webhook['url']);
                             curl_setopt($ch, CURLOPT_CUSTOMREQUEST, $webhook['request_method']);
                             curl_setopt($ch, CURLOPT_POSTFIELDS, $payload);
-                
-                            // Add headers if they exist
-                            if (!empty($webhook['headers'])) {
-                                $customheaders = json_decode($webhook["headers"], true);
-                                curl_setopt($ch, CURLOPT_HTTPHEADER, $customheaders);
+
+                            // Through the shared helper (#128): a JSON body
+                            // announces itself unless a custom Content-Type
+                            // already does.
+                            $customheaders = !empty($webhook['headers'])
+                                ? json_decode($webhook["headers"], true)
+                                : null;
+                            $requestHeaders = wallos_webhook_headers($payload, $customheaders);
+                            if (!empty($requestHeaders)) {
+                                curl_setopt($ch, CURLOPT_HTTPHEADER, $requestHeaders);
                             }
                 
                             curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);

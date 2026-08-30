@@ -285,6 +285,17 @@ switch ($action) {
         $icon = "";
         if ($iconUrl !== "") {
             $icon = getLogoFromUrl($iconUrl, '../../images/uploads/logos/', $name, $settings);
+            // A failure is an array (#127, upstream #1185); unchecked it
+            // used to ride into the icon column as garbage.
+            if (is_array($icon)) {
+                http_response_code(400);
+                echo json_encode([
+                    "success" => false,
+                    "title" => "Logo fetch failed",
+                    "message" => $icon['message'] ?? 'The icon could not be fetched from the URL.'
+                ]);
+                exit();
+            }
         } elseif (!empty($_FILES['paymenticon']['name'])) {
             $fileType = mime_content_type($_FILES['paymenticon']['tmp_name']);
             if (strpos($fileType, 'image') === false) {
@@ -375,6 +386,17 @@ switch ($action) {
 
         if ($iconUrl !== "") {
             $icon = getLogoFromUrl($iconUrl, '../../images/uploads/logos/', $name, $settings);
+            // Same shape as the create branch above (#127): a failure array
+            // must not overwrite the icon the method already has.
+            if (is_array($icon)) {
+                http_response_code(400);
+                echo json_encode([
+                    "success" => false,
+                    "title" => "Logo fetch failed",
+                    "message" => $icon['message'] ?? 'The icon could not be fetched from the URL.'
+                ]);
+                exit();
+            }
         } elseif (!empty($_FILES['paymenticon']['name'])) {
             $fileType = mime_content_type($_FILES['paymenticon']['tmp_name']);
             if (strpos($fileType, 'image') === false) {

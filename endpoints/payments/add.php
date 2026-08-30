@@ -218,6 +218,17 @@ $icon = "";
 
 if ($iconUrl !== "") {
     $icon = getLogoFromUrl($iconUrl, '../../images/uploads/logos/', $name, $i18n, $settings);
+    // The failure comes back as an array; unchecked it rode into the icon
+    // column and the frontend read "Unknown error" (#127, upstream #1185).
+    if (is_array($icon)) {
+        http_response_code(400);
+        header('Content-Type: application/json');
+        echo json_encode([
+            "success" => false,
+            "message" => $icon['message'] ?? translate('error', $i18n)
+        ]);
+        exit();
+    }
 } else {
     if (!empty($_FILES['paymenticon']['name'])) {
         $fileType = mime_content_type($_FILES['paymenticon']['tmp_name']);

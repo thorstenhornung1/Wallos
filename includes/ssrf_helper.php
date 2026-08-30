@@ -164,13 +164,12 @@ function validate_webhook_url_for_ssrf($url, $db, $i18n, $userId = null) {
     $is_private = wallos_ip_is_private_or_reserved($ip);
 
     if ($is_private) {
-        if ($userId != 1) {
-            die(json_encode([
-                "success" => false,
-                "message" => "Security Block: Standard users are not permitted to use internal network addresses."
-            ]));
-        }
-
+        // The allowlist first (#126; upstream #1153/#1138): listing a private
+        // target IS the administrative decision that it may be used, so it
+        // applies to every account. The old order asked who was asking before
+        // it ever read the list, which blocked standard users from targets
+        // the administrator had listed for exactly them — and it asked by
+        // comparing the account number against one, ignoring the role model.
         $allowlist = wallos_get_effective_ssrf_allowlist($db)['allowlist'];
 
         if (!in_array($urlHost, $allowlist) &&
@@ -178,9 +177,17 @@ function validate_webhook_url_for_ssrf($url, $db, $i18n, $userId = null) {
             !in_array($hostWithPort, $allowlist) &&
             !in_array($ipWithPort, $allowlist)) {
 
+            // Blocked either way; the message differs because an
+            // administrator can fix the list and a standard user can only
+            // ask for it.
+            require_once __DIR__ . '/user_roles.php';
+            $message = $userId !== null && wallos_user_is_admin($db, $userId)
+                ? "Security Block: The target IP/Port is private and not present in the Webhook Allowlist."
+                : "Security Block: This private address is not in the allowlist; an administrator can add it under Security Settings.";
+
             die(json_encode([
                 "success" => false,
-                "message" => "Security Block: The target IP/Port is private and not present in the Webhook Allowlist."
+                "message" => $message
             ]));
         }
     }
@@ -312,10 +319,10 @@ function is_url_safe_for_ssrf($url, $db, $userId = null) {
     $is_private = wallos_ip_is_private_or_reserved($ip);
 
     if ($is_private) {
-        if ($userId != 1) {
-            return false; // private and user is not admin — skip silently
-        }
-
+        // Same order as validate_webhook_url_for_ssrf and for the same
+        // reason (#126): the allowlist is the decision and applies to every
+        // account; who is asking no longer matters here, because blocked is
+        // blocked and this path skips silently either way.
         $allowlist = wallos_get_effective_ssrf_allowlist($db)['allowlist'];
 
         if (

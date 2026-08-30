@@ -3,6 +3,7 @@
 require_once '../../includes/connect_endpoint.php';
 require_once '../../includes/validate_endpoint.php';
 require_once '../../includes/ssrf_helper.php';
+require_once '../../includes/webhook_headers.php';
 
 // Variables available: {{days_until}}, {{subscription_name}}, {{subscription_price}}, {{subscription_currency}}, {{subscription_category}}, {{subscription_date}}, {{subscription_payer}}, {{subscription_days_until_payment}}, {{subscription_notes}}, {{subscription_url}}
 $fakeSubscription = [
@@ -68,8 +69,11 @@ if (
     curl_setopt($ch, CURLOPT_RESOLVE, ["{$ssrf['host']}:{$ssrf['port']}:{$ssrf['ip']}"]);
     curl_setopt($ch, CURLOPT_CUSTOMREQUEST, $requestmethod);
     curl_setopt($ch, CURLOPT_POSTFIELDS, $payload);
-    if (!empty($customheaders)) {
-        curl_setopt($ch, CURLOPT_HTTPHEADER, $customheaders);
+    // Through the shared helper (#128): the test request must send exactly
+    // what the cron will send, default Content-Type included.
+    $requestHeaders = wallos_webhook_headers($payload, $customheaders);
+    if (!empty($requestHeaders)) {
+        curl_setopt($ch, CURLOPT_HTTPHEADER, $requestHeaders);
     }
     curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
     curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 5);
