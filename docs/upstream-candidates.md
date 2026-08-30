@@ -53,10 +53,11 @@ simply missing from the SELECT. It has been there since `migrations/000027.php`.
 
 **One word in a SELECT.** Opened 2026-08-28 as **upstream PR #1181**, base
 `v5_6_0`, from `origin/upstream-fix/totp-replay` (+12/−4) — verified after the
-fact to carry exactly that one file. Deliberately alone: the next PR waits for
-the maintainer's reaction to this one. The body frames the impact as limited —
+fact to carry exactly that one file. The body frames the impact as limited —
 replaying needs the password plus a code observed inside the leeway window —
-at Thorsten's direction, not as a hard vulnerability.
+at Thorsten's direction, not as a hard vulnerability. It went out alone; after
+two days without any reaction, Thorsten approved sending the next one
+(2026-08-30) rather than waiting longer.
 
 ### 2. `logout.php` — the login token survives logout
 
@@ -69,6 +70,12 @@ matches nothing. Every logout leaves a valid remember-me token behind.
 Branch `origin/upstream-fix/logout-token` (+16/−3). The one discussion point is
 dropping the `user_id` predicate; the argument — the token is 32 random bytes
 and is itself the credential — is in the commit message.
+
+Opened 2026-08-30 as **upstream PR #1184**, base `v5_6_0`, with Thorsten's
+approval. The body states precisely what the defect does and does not do: the
+logging-out browser loses its cookie, so nothing looks wrong in normal use —
+what never happens is the revocation, so any other holder of the cookie value
+stays signed in for the token's 30-day lifetime.
 
 ### 3. `migrations/000016.php` — one `finalize()`
 

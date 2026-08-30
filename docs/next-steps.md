@@ -85,14 +85,15 @@ every logout leaves a valid token), and `migrations/000016.php` (one
 
 The base question is settled in `docs/upstream-candidates.md`: `v5_6_0`, not
 `main`. The first PR went out 2026-08-28 — **#1181**, the `totp.php` replay
-guard — and the rest wait for the maintainer's reaction to it.
+guard. After two days without any reaction, Thorsten approved sending the next
+one: **#1184**, the `logout.php` token delete, went out 2026-08-30.
 
 ### 2. Upstream pull requests
 
-`upstream-fix/totp-replay` went out 2026-08-28 as upstream PR #1181. Still
-prepared as single-file branches, waiting on the reaction to it:
-`upstream-fix/logout-token` (16 lines), `upstream-fix/disable-totp` (58),
-`upstream-fix/verify-email` (+21/−3), `upstream-fix/password-reset` (+48/−9).
+Open upstream: **#1181** (`totp-replay`, 2026-08-28) and **#1184**
+(`logout-token`, 2026-08-30). Still prepared as single-file branches:
+`upstream-fix/disable-totp` (58 lines), `upstream-fix/verify-email` (+21/−3),
+`upstream-fix/password-reset` (+48/−9).
 
 Beyond those, the candidates from the 5.8.x work that carry no PostgreSQL
 dependency, roughly by how much a reviewer has to take on trust:
