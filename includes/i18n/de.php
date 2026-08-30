@@ -443,6 +443,7 @@ $i18n = [
     "oidc_post_logout_redirect_url" => "Rücksprung-URL nach der Abmeldung (optional)",
     "oidc_issuer" => "Issuer-URL (füllt die Endpunkte unten aus)",
     "oidc_client_secret_set" => "Client Secret ist gesetzt — leer lassen, um es zu behalten",
+    "oidc_clear_client_secret" => "Gespeichertes Client Secret entfernen (Public Client)",
     "oidc_email_not_verified" => "Anmeldung fehlgeschlagen: Der Identitätsanbieter meldet, dass Ihre E-Mail-Adresse nicht bestätigt ist. Bestätigen Sie sie dort oder bitten Sie Ihre Administration, unbestätigte Adressen zuzulassen.",
     "smtp_settings" => "SMTP Einstellungen",
     "smtp_usage_info" => "Wird für die Passwortwiederherstellung und andere System-E-Mails verwendet",

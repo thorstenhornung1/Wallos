@@ -466,3 +466,87 @@ wallos_test('submitting nothing is not an error', function () {
 
     $db->close();
 });
+
+// ------------------------------------------------------- clearing the secret
+
+wallos_test('an empty secret submission keeps the stored secret', function () {
+    // The interface renders the secret field empty rather than pre-filled, so
+    // an empty submission means "unchanged". This is the placeholder rule the
+    // clear flag exists to get around.
+    $db = wallos_test_open_database();
+    wallos_save_oidc_settings($db, ['client_secret' => 's3cret'], []);
+
+    wallos_save_oidc_settings($db, ['client_secret' => '', 'client_id' => 'abc'], []);
+
+    assert_same('s3cret', wallos_get_db_oidc_settings($db)['client_secret'], 'kept');
+
+    $db->close();
+});
+
+wallos_test('clearing the secret takes an explicit request', function () {
+    // #124: an empty secret is a legitimate target state — a public client
+    // authenticates without one — and the placeholder rule made it unreachable
+    // through either save path.
+    $db = wallos_test_open_database();
+    wallos_save_oidc_settings($db, ['client_secret' => 's3cret'], []);
+
+    $result = wallos_save_oidc_settings(
+        $db,
+        ['client_secret' => '', 'clear_client_secret' => true],
+        []
+    );
+
+    assert_true($result['success'], 'the clear succeeded');
+    assert_true($result['changed'], 'and counted as a change');
+    assert_same('', wallos_get_db_oidc_settings($db)['client_secret'], 'the secret is gone');
+
+    $db->close();
+});
+
+wallos_test('a new secret and the clear flag together are refused', function () {
+    // A contradiction is refused rather than resolved: a specific refusal is
+    // what tells a bad request apart from a broken endpoint.
+    $db = wallos_test_open_database();
+    wallos_save_oidc_settings($db, ['client_secret' => 'old'], []);
+
+    $result = wallos_save_oidc_settings(
+        $db,
+        ['client_secret' => 'new', 'clear_client_secret' => true],
+        []
+    );
+
+    assert_true(!$result['success'], 'refused');
+    assert_same('old', wallos_get_db_oidc_settings($db)['client_secret'], 'and nothing was written');
+
+    $db->close();
+});
+
+wallos_test('the clear flag does not touch an environment-managed secret', function () {
+    // Same rule as every other managed field: the environment is the
+    // authority, and accepting an edit the next page load discards would be
+    // worse than refusing it.
+    $db = wallos_test_open_database();
+    wallos_save_oidc_settings($db, ['client_secret' => 'stored'], []);
+
+    wallos_save_oidc_settings(
+        $db,
+        ['clear_client_secret' => true],
+        ['client_secret' => 'OIDC_CLIENT_SECRET']
+    );
+
+    assert_same('stored', wallos_get_db_oidc_settings($db)['client_secret'], 'skipped');
+
+    $db->close();
+});
+
+wallos_test('the clear flag is reachable through both paths', function () {
+    $admin = file_get_contents(WALLOS_ROOT . '/admin.php');
+    $script = file_get_contents(WALLOS_ROOT . '/scripts/admin.js');
+    $ui = file_get_contents(WALLOS_ROOT . '/endpoints/admin/saveoidcsettings.php');
+    $api = file_get_contents(WALLOS_ROOT . '/api/admin/set_oidc_settings.php');
+
+    assert_true(strpos($admin, 'oidcClearClientSecret') !== false, 'the checkbox is rendered');
+    assert_true(strpos($script, 'oidcClearClientSecret') !== false, 'the save button submits it');
+    assert_true(strpos($ui, 'clear_client_secret') !== false, 'the interface endpoint passes it on');
+    assert_true(strpos($api, 'clear_client_secret') !== false, 'and so does the API');
+});

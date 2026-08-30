@@ -40,6 +40,14 @@ foreach ($fieldMap as $field => $key) {
     }
 }
 
+// Not in the map because it is not a column: the explicit request to clear the
+// stored client secret. The secret field itself stays a placeholder — empty
+// means "unchanged" — so switching a provider to a public client needs this
+// flag. The rules live in wallos_save_oidc_settings().
+if (!empty($data['oidcClearClientSecret'])) {
+    $submitted['clear_client_secret'] = true;
+}
+
 $oidcConfiguration = wallos_get_effective_oidc_configuration($db);
 $result = wallos_save_oidc_settings($db, $submitted, $oidcConfiguration['managed_fields']);
 

@@ -431,6 +431,21 @@ function wallos_save_oidc_settings($db, $submitted, $managedFields)
     $settings = wallos_get_db_oidc_settings($db);
     $changed = false;
 
+    // The secret field is a placeholder — an empty submission means
+    // "unchanged", see below — so an empty secret is a state the form cannot
+    // reach on its own, and a public client is exactly that state (#124).
+    // clear_client_secret is the explicit request: not a column, a flag either
+    // save path may send. Together with a new secret it is a contradiction,
+    // and a contradiction is refused rather than resolved.
+    $clearSecret = !empty($submitted['clear_client_secret']);
+    if ($clearSecret && trim((string) ($submitted['client_secret'] ?? '')) !== '') {
+        return [
+            'success' => false,
+            'error' => 'A new client secret and clear_client_secret were submitted together; send one or the other.',
+            'changed' => false,
+        ];
+    }
+
     foreach ($writable as $field => $type) {
         if (!array_key_exists($field, $submitted) || $submitted[$field] === null) {
             continue;
@@ -448,6 +463,11 @@ function wallos_save_oidc_settings($db, $submitted, $managedFields)
         $settings[$field] = $type === 'int'
             ? (int) $submitted[$field]
             : trim((string) $submitted[$field]);
+        $changed = true;
+    }
+
+    if ($clearSecret && !isset($managedFields['client_secret'])) {
+        $settings['client_secret'] = '';
         $changed = true;
     }
 

@@ -472,6 +472,7 @@ $i18n = [
     "oidc_post_logout_redirect_url" => "Post-logout redirect URL (optional)",
     "oidc_issuer" => "Issuer URL (fills in the endpoints below)",
     "oidc_client_secret_set" => "Client secret is set — leave empty to keep it",
+    "oidc_clear_client_secret" => "Remove the stored client secret (public client)",
     "oidc_email_not_verified" => "Login failed: the identity provider reports that your email address is not verified. Verify it there, or ask your administrator to allow unverified addresses.",
     "smtp_settings" => "SMTP Settings",
     "smtp_usage_info" => "Will be used for password recovery and other system emails.",

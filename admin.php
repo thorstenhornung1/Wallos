@@ -358,6 +358,19 @@ $loginDisabledAllowed = $userCount == 1 && $settings['registrations_open'] == 0;
                     placeholder="<?= $secretIsSet ? translate('oidc_client_secret_set', $i18n) : 'Client Secret' ?>"
                     value="" <?= oidc_input_attrs('client_secret', $oidcManagedFields) ?> />
             </div>
+            <?php if ($secretIsSet && !isset($oidcManagedFields['client_secret'])): ?>
+                <div class="form-group-inline">
+                    <?php
+                    // Since an empty secret field means "keep the stored
+                    // secret", a provider switched to a public client needs
+                    // this explicit request to get rid of it (#124). Only
+                    // offered while a secret is stored and the environment
+                    // does not manage it.
+                    ?>
+                    <input type="checkbox" id="oidcClearClientSecret" onchange="toggleOidcClearClientSecret()" />
+                    <label for="oidcClearClientSecret"><?= translate('oidc_clear_client_secret', $i18n) ?></label>
+                </div>
+            <?php endif; ?>
             <div class="form-group">
                 <input type="text" id="oidcAuthUrl" placeholder="Auth URL" autocomplete="off"
                     value="<?= htmlspecialchars($oidcSettings['authorization_url']) ?>" <?= oidc_input_attrs('authorization_url', $oidcManagedFields) ?> />

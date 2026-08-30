@@ -461,6 +461,18 @@ function toggleOidcEnabled() {
 
 }
 
+function toggleOidcClearClientSecret() {
+  // While the clear request is armed, the secret field is inert: the server
+  // refuses a new secret and the clear flag in one request, so the form does
+  // not offer the combination in the first place.
+  const box = document.getElementById("oidcClearClientSecret");
+  const secret = document.getElementById("oidcClientSecret");
+  secret.disabled = box.checked;
+  if (box.checked) {
+    secret.value = "";
+  }
+}
+
 function saveOidcSettingsButton() {
   const button = document.getElementById("saveOidcSettings");
   button.disabled = true;
@@ -468,6 +480,9 @@ function saveOidcSettingsButton() {
   const oidcName = document.getElementById("oidcName").value;
   const oidcClientId = document.getElementById("oidcClientId").value;
   const oidcClientSecret = document.getElementById("oidcClientSecret").value;
+  // The checkbox exists only while a secret is stored and not env-managed.
+  const oidcClearClientSecretBox = document.getElementById("oidcClearClientSecret");
+  const oidcClearClientSecret = oidcClearClientSecretBox && oidcClearClientSecretBox.checked ? 1 : 0;
   const oidcAuthUrl = document.getElementById("oidcAuthUrl").value;
   const oidcTokenUrl = document.getElementById("oidcTokenUrl").value;
   const oidcUserInfoUrl = document.getElementById("oidcUserInfoUrl").value;
@@ -488,6 +503,7 @@ function saveOidcSettingsButton() {
     oidcName: oidcName,
     oidcClientId: oidcClientId,
     oidcClientSecret: oidcClientSecret,
+    oidcClearClientSecret: oidcClearClientSecret,
     oidcAuthUrl: oidcAuthUrl,
     oidcTokenUrl: oidcTokenUrl,
     oidcUserInfoUrl: oidcUserInfoUrl,

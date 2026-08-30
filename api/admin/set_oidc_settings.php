@@ -6,7 +6,11 @@ It receives the following parameters:
 - oidc_enabled: (optional) '1' to enable OIDC logins, '0' to disable.
 - name: (optional) provider name.
 - client_id: (optional) OAuth client ID.
-- client_secret: (optional) OAuth client secret.
+- client_secret: (optional) OAuth client secret. An empty value means
+  "unchanged"; to actually remove a stored secret, send clear_client_secret.
+- clear_client_secret: (optional) '1' to clear the stored client secret, for a
+  provider switched to a public client. Contradicts a non-empty client_secret
+  in the same request, which is refused.
 - authorization_url: (optional) authorization endpoint.
 - token_url: (optional) token endpoint.
 - user_info_url: (optional) userinfo endpoint.
@@ -99,6 +103,13 @@ foreach (array_keys(wallos_oidc_writable_fields()) as $field) {
     if (isset($_POST[$field])) {
         $submitted[$field] = $_POST[$field];
     }
+}
+
+// Not a writable column: the explicit request to clear the stored secret,
+// since an empty client_secret means "unchanged" on both save paths.
+if (isset($_POST['clear_client_secret'])) {
+    $submitted['clear_client_secret'] =
+        $_POST['clear_client_secret'] === '1' || $_POST['clear_client_secret'] === 1;
 }
 
 $result = wallos_save_oidc_settings($db, $submitted, $oidcConfiguration['managed_fields']);
