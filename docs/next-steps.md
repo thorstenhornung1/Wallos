@@ -144,34 +144,26 @@ warning threshold should sit. The issue stays open for exactly that.
 
 ### 4. The parts of closed-enough issues that are still open
 
-* **#92** — the repair migration ships, so existing orphans are gone and no new
-  ones are created. Still open: a monotonic id on `user.id` (a table rebuild on
-  the most referenced table in the application) and enforced foreign keys
-  (switching on the pragma turns every existing violation into a hard error).
-  Both deserve their own decision.
-* **#87** — 23 discarded write results and 315 unchecked prepares remain, from
+* **#87** — 23 discarded write results and 305 unchecked prepares remain, from
   66 and 368. The ratchet holds the number. The open design question is whether
-  the boundary should offer a write returning rows-affected-or-null; 304 of the
-  315 carry a statement that changes data, which is the number to decide against.
+  the boundary should offer a write returning rows-affected-or-null; nearly all
+  of the remainder carry a statement that changes data, which is the number to
+  decide against.
 
-### 5. #85 and #86 — the container
+### 5. Milestone K is closed (2026-08-30)
 
-#85 (the whole webroot is copied into the writable layer on every start) is
-worth doing on its own and has no blast radius. #86 (running unprivileged) is
-measured in detail in the issue: dcron is the hard blocker and `supercronic`
-replaces it, `setcap` solves port 80 without breaking existing compose files,
-and read-only root leaves 27 kB in the writable layer.
+#85, #86, #92 and #125 all landed unreleased on main in one session: the
+container's writes are bounded, `user:` and a read-only root work with one
+tmpfs at /tmp, account ids are monotonic, declared foreign keys are enforced
+on both backends, and the dead nginx configuration is gone. The operator
+guidance lives in `docs/switching-to-this-fork.md`.
 
-Two things worth knowing before that is picked up. The migration hazard the
-issue describes — a volume owned `82:82` becoming unwritable under
-`--user 1000:1000`, with the application swallowing it — **is no longer silent**:
-`updatenextpayment.php` has no discarded write results left and six reporting
-sites, so the cron records a failure, the counter survives the next success, and
-the admin page warns. And the work is almost the same whether it is optional or
-mandatory: every piece (supercronic, setcap, nginx paths in `/tmp`) is inert
-when running as root, so `user:` in compose can be the only switch. Exactly one
-line breaks today — `startup.sh:5` writes to `/var/log/startup.log` under
-`set -euo pipefail`.
+**The next release notes must carry the #92 caveat**: where an account id was
+already reused before the fix, the inherited rows belong to a live account and
+no query can tell them apart — anyone who deleted an account and created one
+shortly after should review what that account owns. The text is in commit
+45abf4a. The same release wants a version bump that says "migrations and
+container semantics changed", not a patch number.
 
 ## Working locally
 
