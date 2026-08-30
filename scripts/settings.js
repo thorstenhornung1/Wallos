@@ -1143,7 +1143,72 @@ function loadApiUsage(endpoint, containerId, countId, fillId) {
 }
 
 function loadFixerUsage() {
-  loadApiUsage("endpoints/settings/fixer_usage.php", "fixerUsage", "fixerUsageCount", "fixerUsageFill");
+  // Not loadApiUsage: the currency endpoint answers for both providers, and
+  // only apilayer reports a quota to draw a bar from. fixer.io gets the
+  // honest statement instead — nothing is reported, here is what Wallos
+  // itself sent — plus the date the rates last refreshed (#106).
+  const usageContainer = document.getElementById("fixerUsage");
+  if (!usageContainer) {
+    return;
+  }
+
+  fetch("endpoints/settings/fixer_usage.php", {
+    headers: {
+      'X-CSRF-Token': window.csrfToken,
+    }
+  })
+    .then(response => response.json())
+    .then(data => {
+      if (!data.success) {
+        usageContainer.style.display = "none";
+        return;
+      }
+
+      const showLine = (id, on) => {
+        const line = document.getElementById(id);
+        if (line) {
+          line.style.display = on ? "" : "none";
+        }
+      };
+
+      const label = usageContainer.querySelector(".api-usage-label");
+      const track = usageContainer.querySelector(".api-usage-track");
+
+      if (data.total) {
+        const percent = Math.min(100, Math.round((data.used / data.total) * 100));
+        document.getElementById("fixerUsageCount").textContent = `${data.used} / ${data.total}`;
+
+        const fill = document.getElementById("fixerUsageFill");
+        fill.style.width = percent + "%";
+        fill.classList.toggle("warn", percent >= 80 && percent < 95);
+        fill.classList.toggle("danger", percent >= 95);
+
+        label.style.display = "";
+        track.style.display = "";
+      } else {
+        label.style.display = "none";
+        track.style.display = "none";
+      }
+
+      showLine("fixerUsageExhausted", !!data.exhausted);
+      showLine("fixerUsageUnknown", !data.provider_reports);
+
+      const hasLocalCount = data.local_calls !== null && data.local_calls !== undefined;
+      if (hasLocalCount) {
+        document.getElementById("fixerUsageLocalCount").textContent = data.local_calls;
+      }
+      showLine("fixerUsageLocal", hasLocalCount);
+
+      if (data.rates_updated) {
+        document.getElementById("fixerUsageRatesDate").textContent = data.rates_updated;
+      }
+      showLine("fixerUsageRatesUpdated", !!data.rates_updated);
+
+      usageContainer.style.display = "";
+    })
+    .catch(() => {
+      usageContainer.style.display = "none";
+    });
 }
 
 function loadGoogleSearchUsage() {

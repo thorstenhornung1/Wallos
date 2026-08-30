@@ -11,7 +11,7 @@
 #
 # Do not edit by hand — run dev/db-audit.sh --update and commit the diff.
 #
-# total: 1528 matches in 230 file(s)
+# total: 1544 matches in 232 file(s)
 admin.php	5
 api/admin/get_admin_settings.php	1
 api/admin/set_admin_settings.php	20
@@ -95,7 +95,7 @@ endpoints/settings/convert_currency.php	2
 endpoints/settings/customcss.php	3
 endpoints/settings/customtheme.php	5
 endpoints/settings/disabled_to_bottom.php	2
-endpoints/settings/fixer_usage.php	2
+endpoints/settings/fixer_usage.php	4
 endpoints/settings/google_search.php	3
 endpoints/settings/google_search_usage.php	2
 endpoints/settings/hide_disabled.php	2
@@ -128,7 +128,7 @@ includes/checkredirect.php	2
 includes/checksession.php	2
 includes/checkuser.php	1
 includes/config_helper.php	2
-includes/currency_provider.php	19
+includes/currency_provider.php	28
 includes/currency_rates.php	4
 includes/db/archive.php	1
 includes/getdbkeys.php	10
@@ -211,6 +211,7 @@ migrations/000061.php	1
 migrations/000062.php	3
 migrations/000063.php	2
 migrations/000068.php	1
+migrations/000069.php	1
 passwordreset.php	14
 profile.php	5
 registration.php	25
@@ -222,6 +223,7 @@ tests/cases/currency_quota_test.php	3
 tests/cases/currency_rates_test.php	4
 tests/cases/currency_refresh_test.php	13
 tests/cases/currency_scope_test.php	10
+tests/cases/currency_usage_test.php	4
 tests/cases/database_boundary_test.php	18
 tests/cases/integration_config_test.php	1
 tests/cases/language_migration_test.php	5

@@ -92,4 +92,13 @@ if (!$stmt->execute()) {
 wallos_reset_config_cache($db);
 wallos_store_currency_usage($db, $config, $userId, $test['usage']);
 
+// The verification above was a real provider request with the user's own key,
+// so it counts against them — recorded after the insert, because only now is
+// there a row to keep the figure in. A key the provider rejected also cost a
+// call, but its row was just deleted; that one request goes unrecorded rather
+// than growing a place to store it.
+if (!empty($test['transport'])) {
+    wallos_count_currency_call($db, $config, $userId);
+}
+
 echo json_encode(["success" => true, "message" => translate('api_key_saved', $i18n)]);

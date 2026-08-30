@@ -2,6 +2,7 @@
 require_once '../../includes/connect_endpoint.php';
 require_once '../../includes/validate_endpoint_session.php';
 require_once '../../includes/integration_config.php';
+require_once '../../includes/currency_provider.php';
 
 header('Content-Type: application/json');
 
@@ -9,47 +10,74 @@ if (!isset($_SESSION['loggedin']) || $_SESSION['loggedin'] !== true) {
     die(json_encode(["success" => false]));
 }
 
-// Usage is only available for the apilayer provider; it is captured from the
-// response headers of rate updates, so this endpoint never calls the API.
+// What the page can honestly say about provider consumption, in one shape for
+// both providers. apilayer reports its monthly figure in response headers,
+// captured from rate updates so this endpoint never calls the API; fixer.io
+// reports nothing, and for years that absence rendered as an empty area
+// indistinguishable from "plenty left" (#104). Wallos's own count and the
+// date of the last successful refresh exist either way (#106).
 $config = wallos_get_effective_currency_config($db, $userId);
 
-if ((int) ($config['values']['provider'] ?? 0) !== 1) {
-    die(json_encode(["success" => false]));
+$provider = (int) ($config['values']['provider'] ?? 0);
+$isInstance = ($config['mode'] ?? 'instance') === 'instance';
+
+$response = [
+    'success' => true,
+    'provider_reports' => $provider === 1,
+    'shared' => $isInstance,
+    'used' => null,
+    'total' => null,
+    'exhausted' => false,
+    'local_calls' => wallos_currency_local_calls($db, $config, $userId),
+    'rates_updated' => null,
+];
+
+// The last successful refresh is per user whatever the key mode: rates are
+// stored per user, and stale rates are what the reader is trying to rule out.
+$stmt = $db->prepare('SELECT date FROM last_exchange_update WHERE user_id = :userId');
+
+if ($stmt !== false) {
+    $stmt->bindValue(':userId', $userId, SQLITE3_INTEGER);
+    $result = $stmt->execute();
+    $row = $result ? $result->fetchArray(SQLITE3_ASSOC) : false;
+
+    if ($row && !empty($row['date'])) {
+        $response['rates_updated'] = $row['date'];
+    }
 }
 
-if ($config['mode'] === 'instance') {
-    // A shared credential has shared quota, so it is reported as such instead
-    // of looking like this user's private allowance.
-    $instance = wallos_get_instance_settings($db, 'currency');
+if ($provider === 1) {
+    $used = null;
+    $limit = null;
 
-    if (!isset($instance['usage_used']) || empty($instance['usage_limit'])) {
-        die(json_encode(["success" => false]));
+    if ($isInstance) {
+        // A shared credential has shared quota, so it is reported as such
+        // instead of looking like this user's private allowance.
+        $instance = wallos_get_instance_settings($db, 'currency');
+        $used = $instance['usage_used'] ?? null;
+        $limit = $instance['usage_limit'] ?? null;
+    } elseif ($db->columnExists('fixer', 'usage_used')) {
+        $stmt = $db->prepare('SELECT usage_used, usage_limit FROM fixer WHERE user_id = :userId');
+
+        if ($stmt !== false) {
+            $stmt->bindValue(':userId', $userId, SQLITE3_INTEGER);
+            $result = $stmt->execute();
+            $row = $result ? $result->fetchArray(SQLITE3_ASSOC) : false;
+
+            if ($row) {
+                $used = $row['usage_used'];
+                $limit = $row['usage_limit'];
+            }
+        }
     }
 
-    die(json_encode([
-        "success" => true,
-        "used" => (int) $instance['usage_used'],
-        "total" => (int) $instance['usage_limit'],
-        "shared" => true,
-    ]));
+    if ($used !== null && !empty($limit)) {
+        $response['used'] = (int) $used;
+        $response['total'] = (int) $limit;
+        $response['exhausted'] = (int) $used >= (int) $limit;
+    }
 }
 
-if ($db->columnExists('fixer', 'usage_used') == 0) {
-    die(json_encode(["success" => false]));
-}
+$db->close();
 
-$stmt = $db->prepare("SELECT usage_used, usage_limit FROM fixer WHERE user_id = :userId");
-$stmt->bindValue(':userId', $userId, SQLITE3_INTEGER);
-$result = $stmt->execute();
-$row = $result ? $result->fetchArray(SQLITE3_ASSOC) : false;
-
-if (!$row || $row['usage_used'] === null || !$row['usage_limit']) {
-    die(json_encode(["success" => false]));
-}
-
-die(json_encode([
-    "success" => true,
-    "used" => (int) $row['usage_used'],
-    "total" => (int) $row['usage_limit'],
-    "shared" => false,
-]));
+die(json_encode($response));

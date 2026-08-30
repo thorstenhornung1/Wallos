@@ -39,9 +39,14 @@ if (!function_exists('wallos_provider_http_get')) {
 /**
  * Fetches exchange rates with EUR as the base currency.
  *
+ * The transport flag says whether this answer cost a request over the wire —
+ * false for a refused config and for answers served from the per-run cache.
+ * Call sites count provider consumption by it (#106), so a cached answer
+ * must never carry the mark of the request it reuses.
+ *
  * @param array  $config Result of wallos_get_effective_currency_config().
  * @param string $codes  Comma separated currency codes.
- * @return array{success: bool, rates: array, usage: array{limit: int|null, used: int|null}, message: string}
+ * @return array{success: bool, rates: array, usage: array{limit: int|null, used: int|null}, message: string, transport: bool}
  */
 function wallos_fetch_exchange_rates($config, $codes)
 {
@@ -50,6 +55,7 @@ function wallos_fetch_exchange_rates($config, $codes)
         'rates' => [],
         'usage' => ['limit' => null, 'used' => null],
         'message' => '',
+        'transport' => false,
     ];
 
     if (empty($config['valid'])) {
@@ -124,6 +130,8 @@ function wallos_fetch_exchange_rates($config, $codes)
         // retrying per account multiplies timeouts, not information (#117).
         $cache[$cacheKey] = $failure;
 
+        $failure['transport'] = true;
+
         return $failure;
     }
 
@@ -142,6 +150,8 @@ function wallos_fetch_exchange_rates($config, $codes)
         // not attempted.
         $cache[$cacheKey] = $failure;
 
+        $failure['transport'] = true;
+
         return $failure;
     }
 
@@ -150,9 +160,135 @@ function wallos_fetch_exchange_rates($config, $codes)
         'rates' => $apiData['rates'],
         'usage' => $usage,
         'message' => '',
+        'transport' => false,
     ];
 
-    return $cache[$cacheKey];
+    $fresh = $cache[$cacheKey];
+    $fresh['transport'] = true;
+
+    return $fresh;
+}
+
+/**
+ * Counts one provider request made from this installation.
+ *
+ * The provider's own figure arrives only in apilayer's response headers;
+ * fixer.io reports nothing, which is how a QA round spent six months of a
+ * 100-call tier while the usage area stayed empty (#104). This records what
+ * Wallos itself sends — per calendar month, with the key's holder: the
+ * instance when the key is shared, the user when it is their own. An
+ * estimate by design: it cannot see other software using the same key, and
+ * it counts attempts whether or not the provider accepted them. Whether the
+ * provider's billing period agrees with the calendar month is what the turn
+ * of 2026-09-01 is calibrated against.
+ *
+ * @param SQLite3 $db
+ * @param array   $config Result of wallos_get_effective_currency_config().
+ * @param int     $userId
+ */
+function wallos_count_currency_call($db, $config, $userId)
+{
+    $month = date('Y-m');
+
+    if (($config['mode'] ?? 'instance') === 'instance') {
+        $instance = wallos_get_instance_settings($db, 'currency');
+        $calls = ($instance['local_calls_month'] ?? '') === $month
+            ? (int) ($instance['local_calls'] ?? 0)
+            : 0;
+
+        wallos_set_instance_setting($db, 'currency', 'local_calls', (string) ($calls + 1));
+        wallos_set_instance_setting($db, 'currency', 'local_calls_month', $month);
+
+        return;
+    }
+
+    if (!$db->columnExists('fixer', 'local_calls')) {
+        return;
+    }
+
+    $stmt = $db->prepare('SELECT local_calls, local_calls_month FROM fixer WHERE user_id = :userId');
+
+    if ($stmt === false) {
+        return;
+    }
+
+    $stmt->bindValue(':userId', $userId, SQLITE3_INTEGER);
+    $result = $stmt->execute();
+    $row = $result ? $result->fetchArray(SQLITE3_ASSOC) : false;
+
+    if (!$row) {
+        // No stored key row means nowhere to keep the figure; the request
+        // itself already happened, so there is nothing useful to refuse.
+        return;
+    }
+
+    $calls = ($row['local_calls_month'] ?? '') === $month ? (int) $row['local_calls'] : 0;
+
+    $stmt = $db->prepare('UPDATE fixer SET local_calls = :calls, local_calls_month = :month WHERE user_id = :userId');
+
+    if ($stmt === false) {
+        error_log('Wallos: could not record the provider call for user ' . $userId . ': '
+            . $db->lastErrorMsg());
+
+        return;
+    }
+
+    $stmt->bindValue(':calls', $calls + 1, SQLITE3_INTEGER);
+    $stmt->bindValue(':month', $month, SQLITE3_TEXT);
+    $stmt->bindValue(':userId', $userId, SQLITE3_INTEGER);
+
+    // The counter is what makes consumption visible on the settings page; a
+    // figure that silently stopped moving would repeat the defect it fixes.
+    if ($stmt->execute() === false) {
+        error_log('Wallos: could not record the provider call for user ' . $userId . ': '
+            . $db->lastErrorMsg());
+    }
+}
+
+/**
+ * The local request count for whoever holds the effective key, in the
+ * current calendar month.
+ *
+ * A month that has turned since the last request answers zero without
+ * writing anything; null means the installation cannot count yet — a
+ * database from before migration 000069.
+ *
+ * @param SQLite3 $db
+ * @param array   $config Result of wallos_get_effective_currency_config().
+ * @param int     $userId
+ * @return int|null
+ */
+function wallos_currency_local_calls($db, $config, $userId)
+{
+    $month = date('Y-m');
+
+    if (($config['mode'] ?? 'instance') === 'instance') {
+        $instance = wallos_get_instance_settings($db, 'currency');
+
+        return ($instance['local_calls_month'] ?? '') === $month
+            ? (int) ($instance['local_calls'] ?? 0)
+            : 0;
+    }
+
+    if (!$db->columnExists('fixer', 'local_calls')) {
+        return null;
+    }
+
+    $stmt = $db->prepare('SELECT local_calls, local_calls_month FROM fixer WHERE user_id = :userId');
+
+    if ($stmt === false) {
+        return null;
+    }
+
+    $stmt->bindValue(':userId', $userId, SQLITE3_INTEGER);
+    $result = $stmt->execute();
+    $row = $result ? $result->fetchArray(SQLITE3_ASSOC) : false;
+
+    if (!$row) {
+        return 0;
+    }
+
+    return ($row['local_calls_month'] ?? '') === $month ? (int) $row['local_calls'] : 0;
 }
 
 /**
@@ -227,6 +363,14 @@ function wallos_update_exchange_rates_for_user($db, $userId)
     }
 
     $rates = wallos_fetch_exchange_rates($config, $codes);
+
+    // Counted per request that went over the wire, not per account: the
+    // per-run cache answers repeat asks without spending quota, and the
+    // counter has to agree with what the provider saw (#106).
+    if (!empty($rates['transport'])) {
+        wallos_count_currency_call($db, $config, $userId);
+    }
+
     wallos_store_currency_usage($db, $config, $userId, $rates['usage']);
 
     if (!$rates['success']) {

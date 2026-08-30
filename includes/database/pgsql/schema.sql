@@ -20,7 +20,7 @@
 --   * Every identifier is quoted, because "user" and "order" are reserved words
 --     and a keyword list kept in the generator would be wrong eventually.
 
--- 42 tables, 67 migrations recorded as applied.
+-- 42 tables, 68 migrations recorded as applied.
 
 CREATE TABLE "admin" (
     "id" SERIAL PRIMARY KEY,
@@ -150,7 +150,9 @@ CREATE TABLE "fixer" (
     "usage_used" INTEGER DEFAULT NULL,
     "usage_limit" INTEGER DEFAULT NULL,
     "usage_updated_at" TEXT DEFAULT NULL,
-    "provider_mode" TEXT DEFAULT 'instance'
+    "provider_mode" TEXT DEFAULT 'instance',
+    "local_calls" INTEGER DEFAULT 0,
+    "local_calls_month" TEXT DEFAULT ''
 );
 
 CREATE TABLE "frequencies" (
@@ -632,7 +634,8 @@ INSERT INTO "migrations" ("id", "migration") VALUES
     (64, 'migrations/000065.php'),
     (65, 'migrations/000066.php'),
     (66, 'migrations/000067.php'),
-    (67, 'migrations/000068.php');
+    (67, 'migrations/000068.php'),
+    (68, 'migrations/000069.php');
 
 INSERT INTO "payment_methods" ("id", "name", "icon", "enabled", "order", "user_id") VALUES
     (1, 'PayPal', 'images/uploads/icons/paypal.png', 1, 1, 1),

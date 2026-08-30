@@ -8,7 +8,7 @@
 #
 # Do not edit by hand — run dev/write-audit.php --update and commit the diff.
 #
-# 117 file(s), 23 discarded result(s), 306 unchecked prepare(s).
+# 116 file(s), 23 discarded result(s), 305 unchecked prepare(s).
 
 admin.php	0	4
 api/admin/get_admin_settings.php	0	1
@@ -75,7 +75,6 @@ endpoints/settings/convert_currency.php	0	1
 endpoints/settings/customcss.php	1	2
 endpoints/settings/customtheme.php	1	2
 endpoints/settings/disabled_to_bottom.php	0	1
-endpoints/settings/fixer_usage.php	0	1
 endpoints/settings/google_search.php	1	2
 endpoints/settings/google_search_usage.php	0	1
 endpoints/settings/hide_disabled.php	0	1

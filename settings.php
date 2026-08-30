@@ -1270,6 +1270,31 @@ if ($budgetPeriodAnchorDate === '1970-01-01' || !preg_match('/^\d{4}-\d{2}-\d{2}
                 <div class="api-usage-track">
                     <span class="api-usage-fill" id="fixerUsageFill"></span>
                 </div>
+                <?php
+                // The bar above exists only when the provider reports quota
+                // (apilayer does, in its response headers; fixer.io does not).
+                // These lines carry what can be said either way: that nothing
+                // is reported rather than an empty area reading as "plenty
+                // left", Wallos's own count of the requests it sent, when the
+                // rates last actually refreshed, and — plainly — that the
+                // quota is gone (#106).
+                ?>
+                <div class="settings-notes">
+                    <p id="fixerUsageExhausted" style="display: none;">
+                        <i class="fa-solid fa-triangle-exclamation"></i>
+                        <?= translate('currency_quota_exhausted', $i18n) ?>
+                    </p>
+                    <p id="fixerUsageUnknown" style="display: none;">
+                        <i class="fa-solid fa-circle-info"></i>
+                        <?= translate('currency_no_provider_quota', $i18n) ?>
+                    </p>
+                    <p id="fixerUsageLocal" style="display: none;">
+                        <?= translate('currency_requests_sent', $i18n) ?>: <span id="fixerUsageLocalCount"></span>
+                    </p>
+                    <p id="fixerUsageRatesUpdated" style="display: none;">
+                        <?= translate('currency_rates_last_updated', $i18n) ?>: <span id="fixerUsageRatesDate"></span>
+                    </p>
+                </div>
             </div>
             <div class="settings-notes">
                 <p><i class="fa-solid fa-circle-info"></i><?= translate('fixer_info', $i18n) ?></p>
