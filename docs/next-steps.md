@@ -103,6 +103,23 @@ named condition.
    call**: the big new feature blocks, milestone J (families, households,
    shared workspaces) first among them.
 
+The night of 2026-08-30/31 closed most of this list: #80 landed (the CI
+matrix asks PostgreSQL's own support range; milestone E is history), the
+four container modes run as an executable gate on every push — its first
+real run caught db/wallos.db riding COPY . . into locally built images —
+and the local QA round proved the day's changes on a live instance while
+catching four defects of our own, all fixed the same night (a vacuum-green
+e2e check among them). An upstream-issue triage of all 62 open issues found
+seven defects dormant in this fork; #126 (SSRF allowlist order), #127
+(swallowed logo failures) and #128 (webhooks posting JSON unlabelled) are
+fixed, #129–#132 (IPv6-less hosts, notification i18n, CSV export, row
+alignment) wait as the small backlog. Upstream itself is idle: nothing
+merged there since our v5_6_0 merge; the single portable find (#1183's
+guards) is in. The test instance holds a recorded #106 baseline
+(local_calls=2, quota mid-429) for Tuesday's calibration; three QA access
+decisions wait on Thorsten (QA account, admin access, an Authentik QA
+login).
+
 ## Next, in the order I would take them
 
 ### 1. Upstream pull requests — the highest-value work left
