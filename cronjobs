@@ -24,15 +24,15 @@
 # the only one that shows a job which stopped being started at all.
 
 # Run the scripts every day
-0 1 * * * WALLOS_CRON_STRICT=1 /usr/local/bin/php /var/www/html/endpoints/cronjobs/updatenextpayment.php > /var/log/cron/updatenextpayment.log 2>> /proc/1/fd/2
-0 2 * * * WALLOS_CRON_STRICT=1 /usr/local/bin/php /var/www/html/endpoints/cronjobs/updateexchange.php > /var/log/cron/updateexchange.log 2>> /proc/1/fd/2
-0 8 * * * WALLOS_CRON_STRICT=1 /usr/local/bin/php /var/www/html/endpoints/cronjobs/sendcancellationnotifications.php > /var/log/cron/sendcancellationnotifications.log 2>> /proc/1/fd/2
-0 9 * * * WALLOS_CRON_STRICT=1 /usr/local/bin/php /var/www/html/endpoints/cronjobs/sendnotifications.php > /var/log/cron/sendnotifications.log 2>> /proc/1/fd/2
-*/2 * * * * WALLOS_CRON_STRICT=1 /usr/local/bin/php /var/www/html/endpoints/cronjobs/sendverificationemails.php > /var/log/cron/sendverificationemails.log 2>> /proc/1/fd/2
-*/2 * * * * WALLOS_CRON_STRICT=1 /usr/local/bin/php /var/www/html/endpoints/cronjobs/sendresetpasswordemails.php > /var/log/cron/sendresetpasswordemails.log 2>> /proc/1/fd/2
-0 */6 * * * WALLOS_CRON_STRICT=1 /usr/local/bin/php /var/www/html/endpoints/cronjobs/checkforupdates.php > /var/log/cron/checkforupdates.log 2>> /proc/1/fd/2
-30 1 * * 1 WALLOS_CRON_STRICT=1 /usr/local/bin/php /var/www/html/endpoints/cronjobs/storetotalyearlycost.php > /var/log/cron/storetotalyearlycost.log 2>> /proc/1/fd/2
-0 3 * * * WALLOS_CRON_STRICT=1 /usr/local/bin/php /var/www/html/endpoints/cronjobs/cleanupresettokens.php > /var/log/cron/cleanupresettokens.log 2>> /proc/1/fd/2
-15 3 * * * WALLOS_CRON_STRICT=1 /usr/local/bin/php /var/www/html/endpoints/cronjobs/cleanupsessions.php > /var/log/cron/cleanupsessions.log 2>> /proc/1/fd/2
-30 3 * * 1 WALLOS_CRON_STRICT=1 /usr/local/bin/php /var/www/html/endpoints/cronjobs/generaterecommendations.php weekly > /var/log/cron/generaterecommendations.log 2>> /proc/1/fd/2
-0 4 1 * * WALLOS_CRON_STRICT=1 /usr/local/bin/php /var/www/html/endpoints/cronjobs/generaterecommendations.php monthly > /var/log/cron/generaterecommendations.log 2>> /proc/1/fd/2
+0 1 * * * WALLOS_CRON_STRICT=1 /usr/local/bin/php /var/www/html/endpoints/cronjobs/updatenextpayment.php > /tmp/cron/updatenextpayment.log 2>> /proc/1/fd/2
+0 2 * * * WALLOS_CRON_STRICT=1 /usr/local/bin/php /var/www/html/endpoints/cronjobs/updateexchange.php > /tmp/cron/updateexchange.log 2>> /proc/1/fd/2
+0 8 * * * WALLOS_CRON_STRICT=1 /usr/local/bin/php /var/www/html/endpoints/cronjobs/sendcancellationnotifications.php > /tmp/cron/sendcancellationnotifications.log 2>> /proc/1/fd/2
+0 9 * * * WALLOS_CRON_STRICT=1 /usr/local/bin/php /var/www/html/endpoints/cronjobs/sendnotifications.php > /tmp/cron/sendnotifications.log 2>> /proc/1/fd/2
+*/2 * * * * WALLOS_CRON_STRICT=1 /usr/local/bin/php /var/www/html/endpoints/cronjobs/sendverificationemails.php > /tmp/cron/sendverificationemails.log 2>> /proc/1/fd/2
+*/2 * * * * WALLOS_CRON_STRICT=1 /usr/local/bin/php /var/www/html/endpoints/cronjobs/sendresetpasswordemails.php > /tmp/cron/sendresetpasswordemails.log 2>> /proc/1/fd/2
+0 */6 * * * WALLOS_CRON_STRICT=1 /usr/local/bin/php /var/www/html/endpoints/cronjobs/checkforupdates.php > /tmp/cron/checkforupdates.log 2>> /proc/1/fd/2
+30 1 * * 1 WALLOS_CRON_STRICT=1 /usr/local/bin/php /var/www/html/endpoints/cronjobs/storetotalyearlycost.php > /tmp/cron/storetotalyearlycost.log 2>> /proc/1/fd/2
+0 3 * * * WALLOS_CRON_STRICT=1 /usr/local/bin/php /var/www/html/endpoints/cronjobs/cleanupresettokens.php > /tmp/cron/cleanupresettokens.log 2>> /proc/1/fd/2
+15 3 * * * WALLOS_CRON_STRICT=1 /usr/local/bin/php /var/www/html/endpoints/cronjobs/cleanupsessions.php > /tmp/cron/cleanupsessions.log 2>> /proc/1/fd/2
+30 3 * * 1 WALLOS_CRON_STRICT=1 /usr/local/bin/php /var/www/html/endpoints/cronjobs/generaterecommendations.php weekly > /tmp/cron/generaterecommendations.log 2>> /proc/1/fd/2
+0 4 1 * * WALLOS_CRON_STRICT=1 /usr/local/bin/php /var/www/html/endpoints/cronjobs/generaterecommendations.php monthly > /tmp/cron/generaterecommendations.log 2>> /proc/1/fd/2

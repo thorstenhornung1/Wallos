@@ -112,8 +112,10 @@ wallos_test('the directories the container makes writable are the ones refused',
 
     sort($writable);
 
-    // .tmp is refused by its own prefix rule rather than by extension, because
-    // nothing under it is ever meant to be served at all.
-    assert_same(['.tmp', 'db', 'images/uploads'], $writable,
-        'the writable set is db/, images/uploads/ and .tmp/ — and nothing else');
+    // .tmp left the webroot with #86 — restore staging lives under the system
+    // temp directory now, so the writable set shrank to the two data mounts.
+    // The nginx prefix rule denying /.tmp/ stays for images that predate the
+    // move.
+    assert_same(['db', 'images/uploads'], $writable,
+        'the writable set is db/ and images/uploads/ — and nothing else');
 });

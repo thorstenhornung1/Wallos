@@ -77,8 +77,8 @@ wallos_test('restore staging cannot leak past the request', function () {
 
         assert_true(strpos($source, 'register_shutdown_function') !== false,
             $path . ' cleans its staging on every exit path');
-        assert_true(strpos($source, "__DIR__ . '/../../.tmp'") !== false,
-            $path . ' resolves the staging directory absolutely');
+        assert_true(strpos($source, "sys_get_temp_dir() . '/wallos-restore'") !== false,
+            $path . ' resolves the staging directory absolutely, outside the webroot (#86)');
     }
 });
 
@@ -105,14 +105,20 @@ wallos_test('the cron log files hold one run, not history', function () {
     // The commentary log per job is diagnostic only — outcomes live in the
     // cron_runs table — so each run truncates its file instead of appending
     // forever to a log nothing rotates.
+    $jobLines = 0;
     foreach (file(WALLOS_ROOT . '/cronjobs') as $line) {
-        if (strpos($line, '/var/log/cron/') === false) {
+        if (strpos($line, '/tmp/cron/') === false) {
             continue;
         }
 
-        assert_true(!preg_match('/>>\s*\/var\/log\/cron\//', $line),
+        $jobLines++;
+        assert_true(!preg_match('/>>\s*\/tmp\/cron\//', $line),
             'a job appends to its log instead of truncating it: ' . trim($line));
     }
+
+    // Counted, so a path change cannot quietly turn this into a test of
+    // nothing — that is what happened when the logs moved for #86.
+    assert_true($jobLines >= 10, 'the job lines were actually seen (got ' . $jobLines . ')');
 });
 
 wallos_test('nginx logs to the container runtime, not into the container', function () {

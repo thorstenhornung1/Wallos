@@ -151,3 +151,59 @@ Upstream ignores the added columns and the extra table, so an existing
 installation keeps working. The instance configuration itself stops applying —
 users who inherited it will need their own settings again, which is why the
 migration never deletes what they had before.
+
+## Running unprivileged, and read-only
+
+Since #86 the container runs under `user:` and with a read-only root
+filesystem; both are optional, and the default — root with `PUID`/`PGID` —
+stays the recommended path for plain Docker.
+
+**`PUID`/`PGID`** (root mode, the default): the container starts as root,
+remaps `www-data` to the given ids, chowns the two data mounts and drops to
+that identity for every request and cron job. This is what existing compose
+files already do, and nothing about it changed.
+
+**`user:` mode**: the container starts and stays unprivileged. Nothing inside
+it can remap users or fix ownership, so the two mounts have to be writable by
+the chosen identity up front. The image follows the gid-0 convention, so the
+simplest form works against fresh volumes without any host-side preparation:
+
+```yaml
+services:
+  wallos:
+    image: ghcr.io/thorstenhornung1/wallos:latest
+    user: "1000:0"        # any uid; gid 0 is what grants access
+    ports:
+      - "8282:80"         # port 80 works unprivileged (bind capability)
+    volumes:
+      - wallos-db:/var/www/html/db
+      - wallos-logos:/var/www/html/images/uploads/logos
+```
+
+For an **arbitrary gid** (`user: 1000:1000`) or existing bind mounts, prepare
+the directories on the host first — `chown -R 1000:1000 <db-dir> <logos-dir>`.
+An unprepared mount does not fail silently: the startup preflight refuses to
+start and prints exactly that command. Note that SQLite needs write access to
+the directory, not just the database file, for its `-wal` and `-journal`
+companions.
+
+**Read-only root**: everything ephemeral lives under `/tmp`, so one tmpfs
+covers it:
+
+```yaml
+    read_only: true
+    tmpfs:
+      - /tmp
+```
+
+**Dropped capabilities**: port 80 works unprivileged because the nginx binary
+carries `cap_net_bind_service`. A deployment that runs
+`cap_drop: [ALL]` — the Kubernetes `restricted` profile, for instance — loses
+that, so move the listener up instead:
+
+```yaml
+    environment:
+      WALLOS_HTTP_PORT: "8080"
+```
+
+The built-in healthcheck follows the same variable.

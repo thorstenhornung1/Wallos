@@ -6,7 +6,7 @@ WORKDIR /var/www/html
 
 # Update packages and install dependencies
 RUN apk upgrade --no-cache && \
-    apk add --no-cache dumb-init shadow sqlite-dev libpng libpng-dev libjpeg-turbo libjpeg-turbo-dev freetype freetype-dev curl autoconf libgomp icu-dev icu-data-full nginx dcron tzdata libzip-dev sqlite libwebp-dev libpq-dev && \
+    apk add --no-cache dumb-init shadow sqlite-dev libpng libpng-dev libjpeg-turbo libjpeg-turbo-dev freetype freetype-dev curl autoconf libgomp icu-dev icu-data-full nginx supercronic libcap-setcap tzdata libzip-dev sqlite libwebp-dev libpq-dev && \
     docker-php-ext-install pdo pdo_sqlite pdo_pgsql calendar && \
     docker-php-ext-enable pdo pdo_sqlite pdo_pgsql && \
     docker-php-ext-configure gd --with-freetype --with-jpeg --with-webp && \
@@ -31,11 +31,11 @@ RUN rm -rf /var/www/html/nginx.conf && \
 # Copy the custom crontab file
 COPY cronjobs /etc/cron.d/cronjobs
 
-# Convert the line endings, allow read access to the cron file, and create cron log folder
+# Convert the line endings and allow read access to the cron file. supercronic
+# reads it in place — no crontab installation, no per-user mapping, and the job
+# logs land under /tmp (#86).
 RUN dos2unix /etc/cron.d/cronjobs && \
     chmod 0644 /etc/cron.d/cronjobs && \
-    /usr/bin/crontab /etc/cron.d/cronjobs && \
-    mkdir /var/log/cron && \
     # The application code belongs to root; only the data belongs to www-data.
     #
     # Both halves matter. The base image leaves /var/www/html at mode 1777, so
@@ -46,8 +46,22 @@ RUN dos2unix /etc/cron.d/cronjobs && \
     # together they are a two-minute path from code execution to container root.
     chown -R root:root /var/www/html && \
     chmod 0755 /var/www/html && \
-    mkdir -p /var/www/html/db /var/www/html/images/uploads/logos/avatars /var/www/html/.tmp && \
-    chown -R www-data:www-data /var/www/html/db /var/www/html/images/uploads /var/www/html/.tmp && \
+    mkdir -p /var/www/html/db /var/www/html/images/uploads/logos/avatars && \
+    chown -R www-data:www-data /var/www/html/db /var/www/html/images/uploads && \
+    # The gid-0 convention (#86): group 0 owns the data directories with the
+    # owner's permissions, so `user: <uid>:0` can write fresh volumes without
+    # any host-side chown. An arbitrary gid still cannot — the startup
+    # preflight refuses that loudly, naming the chown to run.
+    chgrp -R 0 /var/www/html/db /var/www/html/images/uploads && \
+    chmod -R g=u /var/www/html/db /var/www/html/images/uploads && \
+    # The bind capability on the binary, not on the process: existing compose
+    # files keep port 80 without running as root (#86). The uncapped copy is
+    # for deployments that drop every capability — the kernel refuses to exec
+    # a binary whose file capabilities the bounding set cannot grant, so under
+    # cap_drop ALL the capped binary does not merely fail to bind, it fails
+    # to start. Those deployments set WALLOS_HTTP_PORT and get the copy.
+    cp /usr/sbin/nginx /usr/sbin/nginx-nocap && \
+    setcap cap_net_bind_service=+ep /usr/sbin/nginx && \
     chmod +x /var/www/html/startup.sh && \
     echo 'pm.max_children = 15' >> /usr/local/etc/php-fpm.d/zz-docker.conf && \
     echo 'pm.max_requests = 500' >> /usr/local/etc/php-fpm.d/zz-docker.conf && \
@@ -63,9 +77,11 @@ EXPOSE 80
 
 ENTRYPOINT ["dumb-init", "--"]
 
-# Requires docker engine 25+ for the --start-interval flag
+# Requires docker engine 25+ for the --start-interval flag. Shell form on
+# purpose: the port has to follow WALLOS_HTTP_PORT (#86), and only the shell
+# form expands it.
 HEALTHCHECK --interval=2m --timeout=2s --start-period=20s --start-interval=5s --retries=3 \
-    CMD ["curl", "-fsS", "http://127.0.0.1/health.php"]
+    CMD curl -fsS "http://127.0.0.1:${WALLOS_HTTP_PORT:-80}/health.php"
 
 # Start both PHP-FPM, Nginx
 CMD ["/var/www/html/startup.sh"]

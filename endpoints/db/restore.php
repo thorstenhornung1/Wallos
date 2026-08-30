@@ -49,8 +49,11 @@ if (!wallos_db_file_backup_supported($db)) {
 function emptyRestoreFolder()
 {
     // Absolute, because this also runs as a shutdown hook and the working
-    // directory at shutdown is not guaranteed to be this script's.
-    $staging = __DIR__ . '/../../.tmp';
+    // directory at shutdown is not guaranteed to be this script's. Under the
+    // system temp directory since #86: staging inside the webroot was the
+    // last writable path there, and it needed its own mount on a read-only
+    // root — one tmpfs at /tmp covers this instead.
+    $staging = sys_get_temp_dir() . '/wallos-restore';
 
     if (!is_dir($staging)) {
         return;
@@ -73,7 +76,15 @@ if (isset($_FILES['file'])) {
     $fileError = $file['error'];
 
     if ($fileError === 0) {
-        $fileDestination = '../../.tmp/restore.zip';
+        $stagingDir = sys_get_temp_dir() . '/wallos-restore';
+        if (!is_dir($stagingDir) && !mkdir($stagingDir, 0700, true)) {
+            die(json_encode([
+                "success" => false,
+                "message" => "Could not create the staging directory"
+            ]));
+        }
+
+        $fileDestination = $stagingDir . '/restore.zip';
         move_uploaded_file($fileTmpName, $fileDestination);
 
         // From here on the staging directory holds data. Most failure paths
@@ -87,12 +98,11 @@ if (isset($_FILES['file'])) {
         $zip = new ZipArchive();
         if ($zip->open($fileDestination) === true) {
             // Validate all entries before extracting — ZipArchive::extractTo() does not
-            // guarantee protection against path traversal (Zip Slip), and the extraction
-            // target sits under the web root, so a crafted archive could otherwise drop
-            // an executable script here (RCE).
-            // Extensions the web server may execute if extracted into a servable path.
-            // .tmp/ is denied at the nginx layer as the primary control; this is defense
-            // in depth for other deployments (Apache).
+            // guarantee protection against path traversal (Zip Slip). The extraction
+            // target used to sit under the web root; it is outside now (#86), and the
+            // checks stay as defense in depth: a traversal entry could still escape
+            // the staging directory, and the logos copy below moves files into a
+            // servable path afterwards.
             $blockedExtensions = [
                 'php', 'php3', 'php4', 'php5', 'php7', 'php8', 'phtml', 'pht',
                 'phps', 'phar', 'shtml', 'cgi', 'pl', 'py', 'sh',
@@ -117,7 +127,7 @@ if (isset($_FILES['file'])) {
                     ]));
                 }
             }
-            $zip->extractTo('../../.tmp/restore/');
+            $zip->extractTo($stagingDir . '/restore/');
             $zip->close();
         } else {
             die(json_encode([
@@ -126,13 +136,15 @@ if (isset($_FILES['file'])) {
             ]));
         }
 
-        if (file_exists('../../.tmp/restore/wallos.db')) {
+        if (file_exists($stagingDir . '/restore/wallos.db')) {
             $db->close();
 
             if (file_exists('../../db/wallos.db')) {
                 unlink('../../db/wallos.db');
             }
-            rename('../../.tmp/restore/wallos.db', '../../db/wallos.db');
+            // rename() across the tmpfs/volume boundary falls back to
+            // copy-and-delete for files, which is exactly what is wanted.
+            rename($stagingDir . '/restore/wallos.db', '../../db/wallos.db');
 
             // Upstream's eb0d24b, taken through the boundary: a restored file
             // can be behind the code, so the chain runs before anything reads
@@ -157,7 +169,7 @@ if (isset($_FILES['file'])) {
                 ]));
             }
 
-            if (file_exists('../../.tmp/restore/logos/')) {
+            if (file_exists($stagingDir . '/restore/logos/')) {
                 $dir = '../../images/uploads/logos/';
                 $di = new RecursiveDirectoryIterator($dir, FilesystemIterator::SKIP_DOTS);
                 $ri = new RecursiveIteratorIterator($di, RecursiveIteratorIterator::CHILD_FIRST);
@@ -170,13 +182,13 @@ if (isset($_FILES['file'])) {
                     }
                 }
 
-                $dir = new RecursiveDirectoryIterator('../../.tmp/restore/logos/');
+                $dir = new RecursiveDirectoryIterator($stagingDir . '/restore/logos/');
                 $ite = new RecursiveIteratorIterator($dir);
                 $allowedExtensions = ['png', 'jpg', 'jpeg', 'gif', 'webp'];
 
                 foreach ($ite as $filePath) {
                     if (in_array(pathinfo($filePath, PATHINFO_EXTENSION), $allowedExtensions)) {
-                        $destination = str_replace('../../.tmp/restore/', '../../images/uploads/', $filePath);
+                        $destination = str_replace($stagingDir . '/restore/', '../../images/uploads/', $filePath);
                         $destinationDir = pathinfo($destination, PATHINFO_DIRNAME);
 
                         if (!is_dir($destinationDir)) {
