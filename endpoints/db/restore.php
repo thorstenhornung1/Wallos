@@ -48,8 +48,16 @@ if (!wallos_db_file_backup_supported($db)) {
 
 function emptyRestoreFolder()
 {
+    // Absolute, because this also runs as a shutdown hook and the working
+    // directory at shutdown is not guaranteed to be this script's.
+    $staging = __DIR__ . '/../../.tmp';
+
+    if (!is_dir($staging)) {
+        return;
+    }
+
     $files = new RecursiveIteratorIterator(
-        new RecursiveDirectoryIterator('../../.tmp', RecursiveDirectoryIterator::SKIP_DOTS),
+        new RecursiveDirectoryIterator($staging, RecursiveDirectoryIterator::SKIP_DOTS),
         RecursiveIteratorIterator::CHILD_FIRST
     );
 
@@ -67,6 +75,14 @@ if (isset($_FILES['file'])) {
     if ($fileError === 0) {
         $fileDestination = '../../.tmp/restore.zip';
         move_uploaded_file($fileTmpName, $fileDestination);
+
+        // From here on the staging directory holds data. Most failure paths
+        // below clean up after themselves, but two historically did not — a
+        // zip that refuses to open, a migration that fails — and the next
+        // path added would be a leak again (#85). Registered once, this runs
+        // whatever way the request leaves; by then everything worth keeping
+        // has been moved out of the staging directory.
+        register_shutdown_function('emptyRestoreFolder');
 
         $zip = new ZipArchive();
         if ($zip->open($fileDestination) === true) {

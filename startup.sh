@@ -54,6 +54,14 @@ shutdown_once() {
 # Handle all common stop signals
 trap 'shutdown_once' SIGTERM SIGINT SIGQUIT
 
+# PHP's session directory, named in php-wallos.ini. Created on every start
+# because a tmpfs at /tmp begins empty; 0700 and owned by the worker user so
+# no other process reads session data. Before php-fpm, so the first request
+# finds it.
+mkdir -p /tmp/wallos-sessions
+chown www-data:www-data /tmp/wallos-sessions 2>/dev/null || true
+chmod 700 /tmp/wallos-sessions
+
 # Start both PHP-FPM and Nginx
 echo "Launching php-fpm"
 php-fpm -F &

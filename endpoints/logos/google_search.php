@@ -87,4 +87,13 @@ foreach (array_slice($data['images_results'] ?? [], 0, 12) as $item) {
 
 $payload = json_encode(['results' => $results]);
 file_put_contents($cacheFile, $payload);
+
+// One cache file per distinct term, and nothing ever deleted them (#85).
+// Swept on the write path, expired siblings only — same as search.php.
+foreach (glob(sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'wallos-logo-search-google-*.json') ?: [] as $staleFile) {
+    if (time() - filemtime($staleFile) >= 86400) {
+        @unlink($staleFile);
+    }
+}
+
 echo $payload;

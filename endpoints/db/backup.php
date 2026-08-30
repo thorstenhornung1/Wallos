@@ -47,8 +47,16 @@ if (!wallos_db_file_backup_supported($db)) {
     header('Content-Length: ' . filesize($archivePath));
     header('Cache-Control: no-store');
 
-    readfile($archivePath);
+    // Unlinked before a byte is sent: with the unlink after the stream, an
+    // aborted download kept the full archive forever (#85). The open handle
+    // keeps the bytes alive exactly as long as the request sending them.
+    $archive = fopen($archivePath, 'rb');
     unlink($archivePath);
+
+    if ($archive !== false) {
+        fpassthru($archive);
+        fclose($archive);
+    }
     exit;
 }
 
@@ -132,6 +140,13 @@ header('Content-Disposition: attachment; filename="' . $downloadName . '"');
 header('Content-Length: ' . filesize($zipname));
 header('Cache-Control: no-store');
 
-readfile($zipname);
+// Same as the row-based branch above: the path goes first, the open handle
+// streams, and an aborted download leaves nothing behind.
+$archive = fopen($zipname, 'rb');
 unlink($zipname);
+
+if ($archive !== false) {
+    fpassthru($archive);
+    fclose($archive);
+}
 exit;

@@ -206,6 +206,17 @@ if (isset($_GET['search'])) {
     if ($results) {
         $payload = json_encode(['results' => $results]);
         file_put_contents($cacheFile, $payload);
+
+        // One cache file per distinct term, and nothing ever deleted them
+        // (#85). The write is the rare path, so it pays for the sweep:
+        // expired siblings go, which bounds the directory to the terms
+        // searched within one TTL.
+        foreach (glob(sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'wallos-logo-search-v2-*.json') ?: [] as $staleFile) {
+            if (time() - filemtime($staleFile) >= 3600) {
+                @unlink($staleFile);
+            }
+        }
+
         echo $payload;
     } elseif ($source === 'brave') {
         echo json_encode(['error' => 'Brave returned no results or rate-limited the request. Try again in a minute.']);
