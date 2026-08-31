@@ -7,18 +7,19 @@ file is the part that is in neither.
 
 ## The state right now
 
-Released: **5.8.9** (2026-08-30, as authorised),
-`ghcr.io/thorstenhornung1/wallos:5.8.9`,
-`sha256:1234d1e28f0f41a94995ab68eae67d9554b458d53c1e9fad58e97ab75c5b6e5e`.
-It carries the #106 request counter (migration 000069) and the #124 secret
-clear. 489 tests on SQLite and PostgreSQL 14 locally, the CI run on the tag
-green, all five gates green: `dev/db-audit.sh`, `dev/sh-audit.sh`,
-`dev/write-audit.php`, the Semgrep run, and `dev/js-audit.sh`.
-
-The test instance is still pinned to **5.8.8**; moving the pin is the QA
-operator's call. Worth making before the billing turn of **2026-09-01 (a
-Tuesday)** — the counter can only observe the reset if it is running when
-the reset happens; missed, the next window is 2026-10-01.
+Released: **5.9.0** (2026-08-31, as authorised),
+`ghcr.io/thorstenhornung1/wallos:5.9.0`,
+`sha256:f92e0d51bfd4bcd080bd85b18c07e81701210456f6e9a6ab95839db47d861a83`.
+Milestone K whole, one settings row per user (#17), the union fetch (#9),
+the self-updating PostgreSQL matrix (#80), the dormant upstream defects
+\#126–#128, the QA round's four findings — and supercronic instead of dcron,
+which the test instance's #106 counter caught firing every job twice.
+Released ahead of the billing turn on Thorsten's decision, so Tuesday's
+calibration measures this release: expected counter movement is exactly +1
+per cron night. 529 tests on SQLite and PostgreSQL, all gates, e2e, the four
+container modes booted, the release notes carry the #92 caveat. The test
+instance follows the current release (operator decision 8308acc) and is
+being redeployed to this tag.
 
 ## What 2026-08-24 turned up, after this file was first written
 
