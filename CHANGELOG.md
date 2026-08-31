@@ -1,5 +1,86 @@
 # Changelog
 
+## [5.9.0](https://github.com/thorstenhornung1/Wallos/releases/tag/v5.9.0) (2026-08-31)
+
+A minor bump on purpose: this release rebuilds the most-referenced table,
+switches the cron runner, and changes what the container may be asked to do —
+three migrations (000070–000072) and image semantics, not a patch. Everything
+here ran the full suite on SQLite and PostgreSQL (529 tests), every gate, the
+end-to-end suite, an executable check of the four container modes, and an
+upgrade probe against a copy of a real, lived-in database.
+
+### ⚠️ If an account was ever deleted on your installation (#92)
+
+Account ids used to be handed out again: delete the newest account, create
+another, and it received the same id — together with any rows an old
+(pre-5.8.5) deletion had left behind, indistinguishable from its own data.
+5.9.0 closes the mechanism: ids are monotonic now, the declared foreign keys
+are enforced on both backends, and leftover orphans are repaired or named.
+What no migration can repair is inheritance that already happened — those
+rows belong to a live account and cannot be told apart. If an account was
+created shortly after another was deleted, review what it owns.
+
+### Added
+
+* **container:** runs unprivileged and read-only
+  ([#86](https://github.com/thorstenhornung1/Wallos/issues/86), upstream
+  \#955). `user: <uid>:0` works against fresh volumes with no host-side
+  preparation (gid-0 convention); a read-only root needs exactly one tmpfs at
+  `/tmp`; port 80 works without root, and deployments that drop every
+  capability move the listener with `WALLOS_HTTP_PORT` — the healthcheck
+  follows. An unprepared volume refuses to start loudly, naming the chown to
+  run. The four modes boot as a CI gate on every change
+  (`dev/container-modes.sh`), and its first real run already caught a local
+  database riding `COPY . .` into locally built images — `.dockerignore`
+  closes that. Operator guidance in `docs/switching-to-this-fork.md`,
+  including the PUID/PGID path that was never documented.
+* **currency:** one provider request per scheduled refresh for everyone
+  sharing the instance credential, whatever their currency lists — the union
+  of the due users' symbols is fetched once and every per-user update derives
+  from it ([#9](https://github.com/thorstenhornung1/Wallos/issues/9)). A
+  covering refusal answers the subsets too, so an exhausted quota costs one
+  call to learn, not one per list.
+* **database:** a second settings row per user is refused by the database
+  itself ([#17](https://github.com/thorstenhornung1/Wallos/issues/17),
+  migration 000070), after existing duplicates are resolved in favour of the
+  row each user was already being served.
+* **ci:** the PostgreSQL matrix asks the PostgreSQL project which versions
+  are supported and tests both ends of that range
+  ([#80](https://github.com/thorstenhornung1/Wallos/issues/80)); the tested
+  span is printed by every run instead of promised in prose.
+
+### Fixed
+
+* **cron:** supercronic replaces dcron, which could not run jobs
+  unprivileged at all — and which was observed on the test instance firing
+  **every job twice**, doubling among other things the currency quota spent
+  per night. One runner, one firing, any uid.
+* **container:** every write the container makes without being asked is
+  bounded ([#85](https://github.com/thorstenhornung1/Wallos/issues/85),
+  upstream #955): PHP's ephemeral state is configured (sessions no longer
+  pile up one file per cron run), logo-search caches sweep themselves, the
+  backup archive cannot outlive an aborted download, restore staging is
+  cleaned on every exit path and left the webroot, cron logs truncate per
+  run, nginx logs to the standard streams with the healthcheck excluded.
+  The dead second nginx configuration is gone
+  ([#125](https://github.com/thorstenhornung1/Wallos/issues/125)).
+* **security/correctness, found dormant via upstream's tracker:** the SSRF
+  gate consulted the allowlist only after hard-blocking every non-admin
+  ([#126](https://github.com/thorstenhornung1/Wallos/issues/126)); a failed
+  logo fetch turned payment-method creation into "Unknown error"
+  ([#127](https://github.com/thorstenhornung1/Wallos/issues/127)); webhooks
+  posted JSON labelled as a form, which n8n-class receivers mis-parsed, and
+  a household member without a name inherited the previous member's in the
+  payload ([#128](https://github.com/thorstenhornung1/Wallos/issues/128));
+  statistics sprayed warnings over subscriptions whose category, payer or
+  payment method is gone (upstream #1179/#1182, fix equivalent to upstream
+  PR #1183).
+* **QA round of 2026-08-30, all four findings:** the e2e suite's second
+  account was never actually created (a vacuum-green refusal check); both
+  restore endpoints answered refusals with HTTP 200; the OIDC settings API
+  labelled deliberate refusals "Database error"; a dead staging artifact
+  remained. See `docs/test-results-2026-08-30-local.md`.
+
 ## [5.8.9](https://github.com/thorstenhornung1/Wallos/releases/tag/v5.8.9) (2026-08-30)
 
 The fork starts counting what it spends: every currency-provider request is
