@@ -311,3 +311,45 @@ jobs:
 
       - name: Show published tags
         run: jq -r '.tags[]' <<< "$DOCKER_METADATA_OUTPUT_JSON"
+
+  # The GitHub release object is part of the release, not an afterthought:
+  # checkforupdates asks /releases/latest, so a tag pushed without a release
+  # left every installation believing the previous version was current —
+  # caught by the test instance the night 5.9.0 shipped as a tag only. The
+  # notes are the tag's CHANGELOG section, which carries anything a release
+  # must say (5.9.0's #92 caveat, for instance). Idempotent: a release that
+  # already exists — created by hand with a better title — is left alone.
+  release:
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [test, test-pgsql, merge]
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Create the GitHub release from the changelog section
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag="$GITHUB_REF_NAME"
+          version="${tag#v}"
+
+          if gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "Release $tag already exists; leaving it alone."
+            exit 0
+          fi
+
+          awk -v v="$version" '
+            $0 ~ ("^## \\[" v "\\]") { on = 1; next }
+            on && /^## \[/ { exit }
+            on { print }
+          ' CHANGELOG.md > notes.md
+
+          if ! [ -s notes.md ]; then
+            echo "No CHANGELOG section for $version — refusing to publish an empty release." >&2
+            exit 1
+          fi
+
+          gh release create "$tag" --repo "$GITHUB_REPOSITORY" \
+            --title "$version" --notes-file notes.md --verify-tag
