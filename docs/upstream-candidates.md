@@ -37,6 +37,36 @@ the PRs (`69b1e3f`, `fd96cdc`, `a566380`, `6809cba`) — and the stale PRs again
 `267f057` (#1175) also brought the scoping fix to `main`. The branches
 `origin/perf/*` and `origin/fix/scope-currency-rate-updates` are therefore spent.
 
+## 2026-09-01: the maintainer moved — the ground shifted
+
+Both open PRs were merged on 2026-09-01 (~20:30 UTC), silently, as is his
+pattern: **#1181** (totp replay) and **#1184** (logout token) went into his
+collective PR **#1187 "v5.5.0"** (47 files, squashed to `main`), release-please
+cut **5.5.0** (#1188). He also fixed the stats warnings himself (41494ef,
+closes his #1182; our equivalent guard is already in the fork, so the next
+merge meets code of the same shape — his open contributor PR #1183 was left
+unused).
+
+Consequences, each one binding for whoever picks this up:
+
+* **The base is `upstream/main` now.** `v5_6_0` has not moved since our merge
+  and is dead; #1187 carried its content home. Every future PR opens against
+  `main`.
+* **#1187 must be merged into the fork** (the next upstream merge, successor
+  to b373668). Landmines mapped in advance: his new `migrations/000056.php`
+  collides with ours — renumber to **≥ 000073** on merge (the divergence rule
+  below); he touched `includes/ssrf_helper.php` (reconcile with our #126
+  allowlist-order fix), `totp.php` again, `logout.php`,
+  `stats_calculations.php` (ours is equivalent), `handle_oidc_callback.php`,
+  payment-method delete/toggle, and an i18n batch.
+* **The three remaining single-file branches need re-verification against
+  5.5.0 before anything is sent** — `totp.php` changed upstream, so
+  `upstream-fix/disable-totp` in particular may no longer apply or may be
+  partly absorbed. Verify each against `upstream/main`, rebase, then ask
+  Thorsten for the send — the nothing-without-his-approval rule stands.
+* `origin/upstream-fix/totp-replay` and `origin/upstream-fix/logout-token`
+  are **spent**.
+
 ## Portable, in the order they should go out
 
 Priority is by how little a reviewer has to take on trust, not by how much the

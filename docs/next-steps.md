@@ -74,6 +74,65 @@ for now. `docs/fork-and-upstream.md` and issue #32 hold the longer form.
 stack, PostgreSQL 18, pinned to docker-infra-3) belongs to whoever is running
 QA. Local work happens in `dev/compose.yaml` instead — see below.
 
+## Where this stands after 2026-09-02, and what comes next
+
+Written for picking the thread back up after a context clear. The section
+below this one is the 2026-08-30 plan it executes; kept for the reasoning.
+
+**Done and verified since that plan was written:** 5.9.0 released
+(2026-08-31, ahead of the billing turn on Thorsten's call), deployed on the
+test instance, and it measured itself: the 2026-09-01 calibration confirmed
+all four expectations (counter rollover, one union call per cron night for
+all users, status=ok with the failure history frozen by design) — **#106
+closed, milestone A closed**, no code change needed. The GitHub release
+objects for 5.8.9/5.9.0 were missing (checkforupdates read v5.8.8 as
+latest); both published, and the workflow now creates the release object on
+every tag (711ca86) — verified live by the instance's next checker run.
+Milestones B, D, E, F, H, I, K are closed; open remain A′s successors only:
+C, G, J, Performance (2), Price history.
+
+**Upstream moved on 2026-09-01** — both our PRs merged, release 5.5.0, base
+is `upstream/main` now. The full new situation, the landmines for the 5.5.0
+merge (migration renumbering ≥000073, his ssrf_helper vs our #126), and the
+re-verification duty for the three remaining single-file branches live in
+`docs/upstream-candidates.md`, section "2026-09-01: the maintainer moved".
+Sending anything still needs Thorsten's explicit approval.
+
+**In order, next:**
+
+1. **Merge upstream 5.5.0 into the fork** (successor to b373668) — with the
+   mapped landmines from upstream-candidates.md.
+2. **Re-verify the three prepared single-file branches against 5.5.0**, then
+   ask Thorsten for the send.
+3. **The daily shadow migration** (Thorsten approved the shape 2026-08-31):
+   a nightly copy of the production SQLite database → fork migration chain →
+   `dev/migrate-to-pgsql.php` → verification + read-only boot smoke. Script
+   `dev/shadow-migrate.sh` to build; the operator session wires the schedule
+   and the production-backup access.
+4. **The upstream distillate for #32**: a port branch on `upstream/main`
+   carrying ONLY boundary → PostgreSQL backend → migration tool, as three
+   reviewable PRs; open the #32 RFC conversation first. Once the distillate
+   exists, point the shadow pipeline at it.
+5. **Small backlog:** #129 (IPv6-less hosts), #130 (notification i18n), #131
+   (CSV export), #132 (row alignment), the #87 design question (23 discarded
+   results, 305 unchecked prepares, write-returning-rows decision),
+   Performance #18/#19, the 4a note (an OIDC save without an oauth_settings
+   row would persist discovery URLs — unverified).
+6. **Milestone J stays parked** until PostgreSQL can be ported upstream —
+   Thorsten's explicit call.
+
+**One loose end outside the repo:** the OIDC QA roundtrip (B3) on the test
+instance is credential-blocked — two "Invalid password" rejections of a
+value whose transmission is proven byte-exact (sha256 prefix afd21957; the
+operator session holds the credential file). Authentik is healthy again
+(the CephFS incident of 2026-08-31 is fixed and hardened). Waiting on
+Thorsten's own private-window counter-probe as user `oidc qa user`; the
+likely cause is the password being set on a different Authentik object than
+the one the login form matches. `require_email_verified` is active on the
+instance and waits as the next hurdle after the password. Coordination runs
+via the operator session ("diagnose-belegparser-llm-config"), which owns
+the test instance and its infrastructure.
+
 ## The road from here (2026-08-30, Thorsten's direction)
 
 Three closing moves, then a release; the big feature work waits behind a
