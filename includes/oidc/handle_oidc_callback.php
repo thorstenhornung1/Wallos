@@ -51,13 +51,13 @@ curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
 curl_setopt($ch, CURLOPT_POSTFIELDS, http_build_query($postFields));
 curl_setopt($ch, CURLOPT_POST, true);
 curl_setopt($ch, CURLOPT_HTTPHEADER, ['Content-Type: application/x-www-form-urlencoded']);
-curl_setopt($ch, CURLOPT_RESOLVE, ["{$tokenUrlInfo['host']}:{$tokenUrlInfo['port']}:{$tokenUrlInfo['ip']}"]);
+curl_setopt($ch, CURLOPT_RESOLVE, ["{$tokenUrlInfo['host']}:{$tokenUrlInfo['port']}:" . implode(',', $tokenUrlInfo['ips'])]);
 $response = curl_exec($ch);
 $curlError = curl_errno($ch) ? curl_error($ch) : null;
 $httpCode = (int) curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
 unset($ch);
 
-$tokenData = json_decode($response, true);
+$tokenData = $response !== false ? json_decode($response, true) : null;
 if (!$tokenData || !isset($tokenData['access_token'])) {
     // The provider's own error body says why — invalid_client, invalid_grant,
     // redirect_uri mismatch — and discarding it is what turns a five-minute
@@ -88,14 +88,18 @@ curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
 curl_setopt($ch, CURLOPT_HTTPHEADER, [
     'Authorization: Bearer ' . $tokenData['access_token']
 ]);
-curl_setopt($ch, CURLOPT_RESOLVE, ["{$userInfoUrlInfo['host']}:{$userInfoUrlInfo['port']}:{$userInfoUrlInfo['ip']}"]);
+curl_setopt($ch, CURLOPT_RESOLVE, ["{$userInfoUrlInfo['host']}:{$userInfoUrlInfo['port']}:" . implode(',', $userInfoUrlInfo['ips'])]);
 $response = curl_exec($ch);
+$curlError = curl_errno($ch) ? curl_error($ch) : null;
+$httpCode = (int) curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
 unset($ch);
 
-$userInfo = json_decode($response, true);
+$userInfo = $response !== false ? json_decode($response, true) : null;
 if (!$userInfo || !isset($userInfo[$oidcSettings['user_identifier_field']])) {
     require_once __DIR__ . '/diagnostics.php';
     wallos_oidc_log_failure('userinfo_failed', [
+        'http_status' => $httpCode ?: null,
+        'curl_error' => $curlError,
         'identifier_field' => $oidcSettings['user_identifier_field'],
         'claims_returned' => is_array($userInfo) ? implode(',', array_keys($userInfo)) : null,
         'provider_error' => is_array($userInfo) ? ($userInfo['error'] ?? null) : null,

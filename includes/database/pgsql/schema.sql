@@ -20,7 +20,7 @@
 --   * Every identifier is quoted, because "user" and "order" are reserved words
 --     and a keyword list kept in the generator would be wrong eventually.
 
--- 42 tables, 71 migrations recorded as applied.
+-- 42 tables, 72 migrations recorded as applied.
 
 CREATE TABLE "admin" (
     "id" SERIAL PRIMARY KEY,
@@ -39,7 +39,8 @@ CREATE TABLE "admin" (
     "update_notification" INTEGER DEFAULT 0,
     "oidc_oauth_enabled" INTEGER DEFAULT 0,
     "local_webhook_notifications_allowlist" TEXT DEFAULT '',
-    "smtp_from_name" TEXT DEFAULT ''
+    "smtp_from_name" TEXT DEFAULT '',
+    "allow_standard_users_local_webhooks" INTEGER DEFAULT 0
 );
 
 CREATE TABLE "ai_recommendations" (
@@ -476,8 +477,8 @@ CREATE INDEX "idx_user_roles_user_role" ON "user_roles" ("user_id", "role");
 -- chain creates. Columns defaulting to CURRENT_TIMESTAMP are omitted so they
 -- record the moment of installation rather than the moment of generation.
 
-INSERT INTO "admin" ("id", "registrations_open", "max_users", "require_email_verification", "server_url", "smtp_address", "smtp_port", "smtp_username", "smtp_password", "from_email", "encryption", "login_disabled", "latest_version", "update_notification", "oidc_oauth_enabled", "local_webhook_notifications_allowlist", "smtp_from_name") VALUES
-    (1, 0, 0, 0, '', '', 587, '', '', '', 'tls', 0, 'v2.21.1', 0, 0, '', '');
+INSERT INTO "admin" ("id", "registrations_open", "max_users", "require_email_verification", "server_url", "smtp_address", "smtp_port", "smtp_username", "smtp_password", "from_email", "encryption", "login_disabled", "latest_version", "update_notification", "oidc_oauth_enabled", "local_webhook_notifications_allowlist", "smtp_from_name", "allow_standard_users_local_webhooks") VALUES
+    (1, 0, 0, 0, '', '', 587, '', '', '', 'tls', 0, 'v2.21.1', 0, 0, '', '', 0);
 
 INSERT INTO "categories" ("id", "name", "order", "user_id") VALUES
     (1, 'No category', 1, 1),
@@ -645,7 +646,8 @@ INSERT INTO "migrations" ("id", "migration") VALUES
     (68, 'migrations/000069.php'),
     (69, 'migrations/000070.php'),
     (70, 'migrations/000071.php'),
-    (71, 'migrations/000072.php');
+    (71, 'migrations/000072.php'),
+    (72, 'migrations/000073.php');
 
 INSERT INTO "payment_methods" ("id", "name", "icon", "enabled", "order", "user_id") VALUES
     (1, 'PayPal', 'images/uploads/icons/paypal.png', 1, 1, 1),

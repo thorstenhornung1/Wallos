@@ -1,5 +1,58 @@
 # Changelog
 
+## Unreleased
+
+**Upstream 5.5.0 is merged** — the second merge since the fork left 5.4.4, and
+the one that carried this fork's own two pull requests home: the maintainer
+merged #1181 (the TOTP replay guard that never ran) and #1184 (the login token
+that survived logout) into his collective PR #1187 and released 5.5.0. The
+comparison base for anything future is `upstream/main` now; `v5_6_0` is dead.
+
+### Fixed
+
+* **auth:** a remember-me token issued by the 2FA login is revoked on logout
+  again. `logout.php` revokes the token it finds in `$_SESSION['token']`, and
+  `totp.php` was the one login path that never put it there — so an account
+  with 2FA kept a usable token across a logout while an account without 2FA
+  did not. The same defect as upstream #1184, surviving in the path reachable
+  only by the users who had done the most for their security. Found by the
+  merge, which carries upstream's line for it; a gate now asserts that every
+  path issuing a token names it in the session.
+
+### Changed
+
+* **security:** who may reach a private address is the instance's decision.
+  Upstream 5.5.0 answers #1153/#1138 with an explicit setting —
+  *Allow standard users to use the Webhook Allowlist*, off by default — and
+  the fork follows it instead of keeping the ordering it had used since #126.
+  The setting is strictly more expressive: switched on it is exactly the
+  fork's previous behaviour, switched off it is the stricter one, and an
+  allowlist entered for an administrator's own internal service no longer
+  becomes reachable by every account on a shared instance. What stays from
+  #126 is the half upstream cannot have: the gate asks whether the caller is
+  an administrator through the role model, never whether the account number
+  is one. Migration `000073` adds the column (upstream numbers it 000056,
+  which this fork's subscription indexes already occupy).
+* **oidc:** an endpoint host resolves to all of its addresses rather than one,
+  and each is validated separately before curl is pinned to the survivors —
+  upstream's fix for providers behind a CDN or anycast proxy (their #1145),
+  with the anti-rebinding guarantee intact. The user-info call now reports its
+  HTTP status and curl error into this fork's OIDC diagnostics, which had them
+  for the token exchange only.
+* **security:** the theme cookies are validated against a fixed list and
+  encoded before they reach an inline script (upstream's reflected-XSS fix),
+  on the login, 2FA and application pages.
+* **api:** disabling a payment method that subscriptions still use is refused
+  on the API path too — upstream added the guard with an inline count; it goes
+  through this fork's shared `wallos_subscriptions_referencing()` like the
+  other seven paths, which also reports the cross-account references (#82) an
+  inline count cannot see. The admin settings endpoint stopped expressing its
+  column types in the file-backed backend's constants while it was open (#41):
+  eighteen fewer of them, and the value is cast before it is bound.
+* **ui:** the security settings section keeps this fork's `#95` element name.
+  Upstream's newly placed save button arrived with an id shadowing its own
+  handler, the exact defect that gate exists for.
+
 ## [5.9.0](https://github.com/thorstenhornung1/Wallos/releases/tag/v5.9.0) (2026-08-31)
 
 A minor bump on purpose: this release rebuilds the most-referenced table,

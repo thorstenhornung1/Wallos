@@ -17,6 +17,7 @@ It receives the following parameters:
 - update_notification: (optional) '1' or '0' (check for wallos updates).
 - oidc_oauth_enabled: (optional) '1' or '0' (enable OIDC login).
 - local_webhook_notifications_allowlist: (optional) comma-separated IP/hosts allowlist.
+- allow_standard_users_local_webhooks: (optional) '1' or '0' (let standard users target allowlisted internal addresses).
 
 It returns a JSON object with the following properties:
 - success: whether the request was successful (boolean).
@@ -152,22 +153,27 @@ if (!empty($smtp_address) && !empty($smtp_port)) {
 $fields = [];
 $params = [];
 
+// The map says which POST keys may be written and whether each is a number.
+// It used to say so in the file-backed backend's type constants, which issue
+// #41 keeps inside the adapter; the tag is the endpoint's own vocabulary now,
+// and the value is cast before it is bound, so no type has to travel with it.
 $columnsMap = [
-    'registrations_open' => SQLITE3_INTEGER,
-    'max_users' => SQLITE3_INTEGER,
-    'require_email_verification' => SQLITE3_INTEGER,
-    'server_url' => SQLITE3_TEXT,
-    'smtp_address' => SQLITE3_TEXT,
-    'smtp_port' => SQLITE3_INTEGER,
-    'smtp_username' => SQLITE3_TEXT,
-    'smtp_password' => SQLITE3_TEXT,
-    'from_email' => SQLITE3_TEXT,
-    'smtp_from_name' => SQLITE3_TEXT,
-    'encryption' => SQLITE3_TEXT,
-    'login_disabled' => SQLITE3_INTEGER,
-    'update_notification' => SQLITE3_INTEGER,
-    'oidc_oauth_enabled' => SQLITE3_INTEGER,
-    'local_webhook_notifications_allowlist' => SQLITE3_TEXT
+    'registrations_open' => 'int',
+    'max_users' => 'int',
+    'require_email_verification' => 'int',
+    'server_url' => 'text',
+    'smtp_address' => 'text',
+    'smtp_port' => 'int',
+    'smtp_username' => 'text',
+    'smtp_password' => 'text',
+    'from_email' => 'text',
+    'smtp_from_name' => 'text',
+    'encryption' => 'text',
+    'login_disabled' => 'int',
+    'update_notification' => 'int',
+    'oidc_oauth_enabled' => 'int',
+    'local_webhook_notifications_allowlist' => 'text',
+    'allow_standard_users_local_webhooks' => 'int'
 ];
 
 if (wallos_get_effective_ssrf_allowlist($db)['is_managed']) {
@@ -197,25 +203,17 @@ foreach ($managedSmtpColumns as $field => $column) {
 foreach ($columnsMap as $postKey => $dataType) {
     if (isset($_POST[$postKey])) {
         $fields[] = "$postKey = :$postKey";
-        if ($dataType === SQLITE3_INTEGER) {
-            $params[$postKey] = [
-                'val' => intval($_POST[$postKey]),
-                'type' => SQLITE3_INTEGER
-            ];
-        } else {
-            $params[$postKey] = [
-                'val' => $_POST[$postKey],
-                'type' => SQLITE3_TEXT
-            ];
-        }
+        $params[$postKey] = $dataType === 'int'
+            ? intval($_POST[$postKey])
+            : $_POST[$postKey];
     }
 }
 
 if (!empty($fields)) {
     $sqlUpdate = "UPDATE admin SET " . implode(', ', $fields) . " WHERE id = 1";
     $stmtUpdate = $db->prepare($sqlUpdate);
-    foreach ($params as $key => $data) {
-        $stmtUpdate->bindValue(':' . $key, $data['val'], $data['type']);
+    foreach ($params as $key => $value) {
+        $stmtUpdate->bindValue(':' . $key, $value);
     }
     $resultUpdate = $stmtUpdate->execute();
 

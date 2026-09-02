@@ -9,6 +9,7 @@ require_once 'includes/i18n/getlang.php';
 require_once 'includes/i18n/' . $lang . '.php';
 
 require_once 'includes/version.php';
+require_once 'includes/theme_helpers.php';
 
 if ($userCount == 0) {
     header("Location: registration.php");
@@ -124,14 +125,14 @@ if (isset($_SESSION['token'])) {
 $theme = "light";
 $updateThemeSettings = false;
 if (isset($_COOKIE['theme'])) {
-    $theme = $_COOKIE['theme'];
+    $theme = sanitize_theme_mode($_COOKIE['theme']);
 } else {
     $updateThemeSettings = true;
 }
 
 $colorTheme = "blue";
 if (isset($_COOKIE['colorTheme'])) {
-    $colorTheme = $_COOKIE['colorTheme'];
+    $colorTheme = sanitize_color_theme($_COOKIE['colorTheme']);
 }
 
 // Check if OIDC is enabled and resolve any environment overrides.
@@ -386,7 +387,7 @@ if (isset($_GET['error'])) {
     <link rel="stylesheet" href="styles/login-dark-theme.css?<?= $version ?>" id="dark-theme" <?= $theme == "light" ? "disabled" : "" ?>>
     <script type="text/javascript">
         window.update_theme_settings = "<?= $updateThemeSettings ?>";
-        window.color_theme = "<?= $colorTheme ?>";
+        window.color_theme = <?= json_encode($colorTheme, JSON_HEX_TAG | JSON_HEX_QUOT | JSON_HEX_AMP | JSON_HEX_APOS) ?>;
     </script>
     <script type="text/javascript" src="scripts/login.js?<?= $version ?>"></script>
     <script type="text/javascript" src="scripts/auth-theme.js?<?= $version ?>"></script>

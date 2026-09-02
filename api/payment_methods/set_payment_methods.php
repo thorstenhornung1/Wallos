@@ -381,6 +381,24 @@ switch ($action) {
             $enabled = ($_POST['enabled'] === '0' || $_POST['enabled'] === 0) ? 0 : 1;
         }
 
+        if ($enabled == 0 && $paymentMethod['enabled'] == 1) {
+            // Upstream 5.5.0 added this guard with its own inline count. It
+            // goes through the shared one instead, like the delete path below
+            // and the six others: a private copy is what let issue #93 differ
+            // from its siblings, and the shared count also reports the
+            // cross-account references (#82) an inline one cannot see.
+            $count = wallos_subscriptions_referencing($db, 'payment_methods', $paymentId, $userId);
+
+            if ($count > 0) {
+                echo json_encode([
+                    'success' => false,
+                    'title' => 'Payment method in use',
+                    'message' => 'This payment method cannot be disabled because it is in use by one or more subscriptions.'
+                ]);
+                exit;
+            }
+        }
+
         $icon = $paymentMethod['icon'];
         $iconUrl = $_POST['icon_url'] ?? $_POST['icon-url'] ?? '';
 

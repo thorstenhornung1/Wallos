@@ -10,17 +10,19 @@ function wallos_get_ssrf_allowlist_env_value()
 /**
  * Returns the effective SSRF allowlist: SSRF_ALLOWLIST env var if set (full
  * override, same semantics as the OIDC_* env vars), otherwise the DB-stored
- * local_webhook_notifications_allowlist value.
+ * local_webhook_notifications_allowlist value. Also returns whether standard
+ * (non-admin) users are allowed to target hosts on that allowlist.
  *
  * @param SQLite3 $db
- * @return array{allowlist: string[], raw: string, is_managed: bool}
+ * @return array{allowlist: string[], raw: string, is_managed: bool, allow_standard_users: bool}
  */
 function wallos_get_effective_ssrf_allowlist($db)
 {
-    $stmt = $db->prepare('SELECT local_webhook_notifications_allowlist FROM admin LIMIT 1');
+    $stmt = $db->prepare('SELECT local_webhook_notifications_allowlist, allow_standard_users_local_webhooks FROM admin LIMIT 1');
     $result = $stmt->execute();
     $row = $result ? $result->fetchArray(SQLITE3_ASSOC) : false;
     $dbValue = $row ? $row['local_webhook_notifications_allowlist'] : '';
+    $allowStandardUsers = $row ? (bool) $row['allow_standard_users_local_webhooks'] : false;
 
     $envValue = wallos_get_ssrf_allowlist_env_value();
     $isManaged = $envValue !== null && trim((string) $envValue) !== '';
@@ -32,6 +34,7 @@ function wallos_get_effective_ssrf_allowlist($db)
         'allowlist' => $allowlist,
         'raw' => (string) $rawValue,
         'is_managed' => $isManaged,
+        'allow_standard_users' => $allowStandardUsers,
     ];
 }
 
@@ -164,13 +167,30 @@ function validate_webhook_url_for_ssrf($url, $db, $i18n, $userId = null) {
     $is_private = wallos_ip_is_private_or_reserved($ip);
 
     if ($is_private) {
-        // The allowlist first (#126; upstream #1153/#1138): listing a private
-        // target IS the administrative decision that it may be used, so it
-        // applies to every account. The old order asked who was asking before
-        // it ever read the list, which blocked standard users from targets
-        // the administrator had listed for exactly them — and it asked by
-        // comparing the account number against one, ignoring the role model.
-        $allowlist = wallos_get_effective_ssrf_allowlist($db)['allowlist'];
+        // Who may reach a private target at all is the instance's decision
+        // (upstream 5.5.0, #1153/#1138): standard accounts are refused unless
+        // the administrator has opted them in. That setting is what #126 was
+        // really asking for — an allowlist the administrator can make apply
+        // to the people it is maintained for — so the fork follows it rather
+        // than keeping its own order.
+        //
+        // What stays from #126 is the other half: the question is "is this an
+        // administrator", answered through the role model, not "is this
+        // account number one". Upstream has no roles; this fork does, and a
+        // second administrator must not be refused like a standard user
+        // (tests/cases/user_roles_test.php forbids that pattern).
+        require_once __DIR__ . '/user_roles.php';
+        $ssrfConfiguration = wallos_get_effective_ssrf_allowlist($db);
+        $isAdmin = $userId !== null && wallos_user_is_admin($db, $userId);
+
+        if (!$isAdmin && !$ssrfConfiguration['allow_standard_users']) {
+            die(json_encode([
+                "success" => false,
+                "message" => "Security Block: Standard users are not permitted to use internal network addresses."
+            ]));
+        }
+
+        $allowlist = $ssrfConfiguration['allowlist'];
 
         if (!in_array($urlHost, $allowlist) &&
             !in_array($ip, $allowlist) &&
@@ -180,8 +200,7 @@ function validate_webhook_url_for_ssrf($url, $db, $i18n, $userId = null) {
             // Blocked either way; the message differs because an
             // administrator can fix the list and a standard user can only
             // ask for it.
-            require_once __DIR__ . '/user_roles.php';
-            $message = $userId !== null && wallos_user_is_admin($db, $userId)
+            $message = $isAdmin
                 ? "Security Block: The target IP/Port is private and not present in the Webhook Allowlist."
                 : "Security Block: This private address is not in the allowlist; an administrator can add it under Security Settings.";
 
@@ -242,11 +261,21 @@ function validate_smtp_host($host, $port, $db) {
 /**
  * Validates an OIDC endpoint URL (token_url, user_info_url) against SSRF.
  * Private/reserved IPs (RFC-1918, link-local, loopback, CGNAT) are only
- * allowed if the host or IP appears in the admin Security Settings allowlist,
+ * allowed if the host or IP appears in the admin Security Settings allowlist.
+ *
+ * Resolves *every* A record for the host (not just one) and validates each
+ * individually, so a CDN/anycast-fronted hostname (e.g. behind Cloudflare)
+ * keeps the same connection redundancy plain DNS resolution would give it.
+ * Only IPs that individually pass the check are ever returned — an IP that
+ * fails is simply dropped from the candidate list, never let through because
+ * a sibling IP passed. That keeps the anti-DNS-rebinding guarantee intact:
+ * the caller must pin curl to exactly this returned set (see
+ * handle_oidc_callback.php), so it can only ever connect to an address that
+ * was validated in this same call, with no second DNS lookup in between.
  *
  * @param string  $url
  * @param SQLite3 $db
- * @return array|false ['host', 'ip', 'port'] on success, false on failure
+ * @return array|false ['host', 'ip', 'ips', 'port'] on success, false on failure
  */
 function validate_oidc_endpoint_url($url, $db) {
     $parsed = parse_url($url);
@@ -257,34 +286,50 @@ function validate_oidc_endpoint_url($url, $db) {
 
     $host = $parsed['host'];
     $port = $parsed['port'] ?? '';
-    $ip   = gethostbyname($host);
 
-    // DNS failure — gethostbyname returns the input unchanged on failure
-    if ($ip === $host && filter_var($host, FILTER_VALIDATE_IP) === false) return false;
+    if (filter_var($host, FILTER_VALIDATE_IP) !== false) {
+        $ips = [$host];
+    } else {
+        $ips = gethostbynamel($host);
+        if ($ips === false || count($ips) === 0) return false; // DNS failure
+    }
 
     $targetPort = $port ?: ($scheme === 'https' ? 443 : 80);
 
-    $is_private = wallos_ip_is_private_or_reserved($ip);
+    $allowlist = null; // fetched lazily, only if a private IP is actually seen
+    $validIps = [];
 
-    if ($is_private) {
-        $allowlist = wallos_get_effective_ssrf_allowlist($db)['allowlist'];
+    foreach ($ips as $ip) {
+        if (!wallos_ip_is_private_or_reserved($ip)) {
+            $validIps[] = $ip;
+            continue;
+        }
+
+        if ($allowlist === null) {
+            $allowlist = wallos_get_effective_ssrf_allowlist($db)['allowlist'];
+        }
 
         $hostWithPort = $host . ':' . $targetPort;
         $ipWithPort   = $ip   . ':' . $targetPort;
 
         if (
-            !in_array($host,         $allowlist) &&
-            !in_array($ip,           $allowlist) &&
-            !in_array($hostWithPort, $allowlist) &&
-            !in_array($ipWithPort,   $allowlist)
+            in_array($host,         $allowlist) ||
+            in_array($ip,           $allowlist) ||
+            in_array($hostWithPort, $allowlist) ||
+            in_array($ipWithPort,   $allowlist)
         ) {
-            return false;
+            $validIps[] = $ip;
         }
+        // else: this specific IP is private and not allowlisted — dropped,
+        // never pinned, even though other IPs for this host may have passed.
     }
+
+    if (count($validIps) === 0) return false;
 
     return [
         'host' => $host,
-        'ip'   => $ip,
+        'ip'   => $validIps[0],
+        'ips'  => $validIps,
         'port' => $targetPort,
     ];
 }
@@ -319,11 +364,18 @@ function is_url_safe_for_ssrf($url, $db, $userId = null) {
     $is_private = wallos_ip_is_private_or_reserved($ip);
 
     if ($is_private) {
-        // Same order as validate_webhook_url_for_ssrf and for the same
-        // reason (#126): the allowlist is the decision and applies to every
-        // account; who is asking no longer matters here, because blocked is
-        // blocked and this path skips silently either way.
-        $allowlist = wallos_get_effective_ssrf_allowlist($db)['allowlist'];
+        // The same rule as validate_webhook_url_for_ssrf, decided by role
+        // rather than by account number — see the reasoning there. This path
+        // is the notification cron, so a refusal skips silently.
+        require_once __DIR__ . '/user_roles.php';
+        $ssrfConfiguration = wallos_get_effective_ssrf_allowlist($db);
+
+        if (($userId === null || !wallos_user_is_admin($db, $userId))
+            && !$ssrfConfiguration['allow_standard_users']) {
+            return false;
+        }
+
+        $allowlist = $ssrfConfiguration['allowlist'];
 
         if (
             !in_array($urlHost, $allowlist) &&

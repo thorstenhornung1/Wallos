@@ -11,10 +11,10 @@
 #
 # Do not edit by hand — run dev/db-audit.sh --update and commit the diff.
 #
-# total: 1569 matches in 238 file(s)
+# total: 1549 matches in 237 file(s)
 admin.php	5
 api/admin/get_admin_settings.php	1
-api/admin/set_admin_settings.php	20
+api/admin/set_admin_settings.php	2
 api/admin/set_disable_password_login.php	1
 api/admin/set_oidc_settings.php	1
 api/categories/get_categories.php	3
@@ -242,7 +242,6 @@ tests/cases/portable_sql_test.php	2
 tests/cases/session_retention_test.php	9
 tests/cases/session_tokens_test.php	6
 tests/cases/settings_row_test.php	2
-tests/cases/ssrf_allowlist_test.php	2
 tests/cases/stats_orphans_test.php	4
 tests/cases/subscription_index_test.php	6
 tests/cases/totp_replay_test.php	6

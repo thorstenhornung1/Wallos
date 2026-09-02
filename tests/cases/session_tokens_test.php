@@ -208,3 +208,27 @@ wallos_test('logout notices a token it could not revoke', function () {
     assert_true(strpos($source, 'wallos_revoke_login_token($db, $sessionToken) === false') !== false,
         'the result is checked rather than discarded');
 });
+
+wallos_test('every login path names the token it issued in the session', function () {
+    // logout.php revokes the token it finds in $_SESSION['token'], so a login
+    // path that stores a remember-me row without naming it there hands out a
+    // credential no logout can take back. That is #1184 again, and it survived
+    // the fix in exactly one path: totp.php, the 2FA login. An account with
+    // 2FA kept its token across a logout while an account without 2FA did not
+    // — the same defect, reachable only by the users who had done the most for
+    // their security. Found merging upstream 5.5.0, which carries the line.
+    $paths = [
+        'login.php',
+        'totp.php',
+        'includes/oidc/oidc_login.php',
+    ];
+
+    foreach ($paths as $path) {
+        $source = file_get_contents(WALLOS_ROOT . '/' . $path);
+
+        assert_true(strpos($source, 'INSERT INTO login_tokens') !== false,
+            $path . ' still issues a remember-me token');
+        assert_true(strpos($source, "\$_SESSION['token'] = \$token;") !== false,
+            $path . ' names the issued token in the session, so logout can revoke it');
+    }
+});
