@@ -685,25 +685,43 @@ Both halves are required. Setting only one is reported in the configuration
 check rather than silently ignored, so you do not end up believing rights are
 being synchronised when nothing is happening.
 
-### 7.2 Limitations that used to be here
+### 7.2 Limitations, and the ones that used to be here
 
-Both entries this section carried are fixed, and they are named rather than
-deleted: a section listing solved defects as current is itself a finding,
-because a reader takes it as a reason not to test.
+Solved entries are named rather than deleted: a section listing solved defects
+as current is itself a finding, because a reader takes it as a reason not to
+test. The same is true the other way round, which is how the currency entry
+below came to be corrected on 2026-09-02 — it had been folded into the language
+fix and declared solved, and an OIDC sign-in that day showed EUR on an account
+that had correctly taken German.
 
-* **an auto-created user is always English and EUR** ([#34](https://github.com/thorstenhornung1/Wallos/issues/34),
-  [#35](https://github.com/thorstenhornung1/Wallos/issues/35),
-  [#40](https://github.com/thorstenhornung1/Wallos/issues/40)) — fixed in 5.6.0
+**Still open:**
+
+* **an auto-created user always gets EUR**
+  ([#40](https://github.com/thorstenhornung1/Wallos/issues/40)) —
+  `includes/oidc/oidc_create_user.php` sets `$main_currency_id = 1` and then
+  resolves that to the new account's own EUR row. There is no instance default
+  currency and no claim is consulted. On an instance whose users are mostly on
+  EUR this is invisible, because the wrong mechanism and the right answer
+  coincide: **a provisioned account showing EUR proves nothing here.** Read the
+  code, or provision against an instance whose default is not EUR.
+
+**Fixed:**
+
+* **an auto-created user is always English** ([#34](https://github.com/thorstenhornung1/Wallos/issues/34),
+  [#35](https://github.com/thorstenhornung1/Wallos/issues/35)) — fixed in 5.6.0
   and verified on 2026-08-16 through the instance default and the `locale` claim
-  separately, which is what tells a working claim apart from a lucky default
+  separately, which is what tells a working claim apart from a lucky default.
+  Re-confirmed live on 2026-09-02: an account provisioned on 5.9.0 came up in
+  German. Note that this only ever covered the language; #40 above is the other
+  half of the same symptom and is open.
 * **logging out in Authentik leaves the Wallos session alive**
   ([#37](https://github.com/thorstenhornung1/Wallos/issues/37),
   [#49](https://github.com/thorstenhornung1/Wallos/issues/49)) — this is what
   back-channel logout addresses; verified end to end on 2026-08-20, including
   the endpoint path rather than only the page
 
-Nothing here is a known limitation at present. If a test in section 7 fails,
-treat it as a finding rather than as something already recorded.
+Apart from #40, a failure in section 7 is a finding rather than something
+already recorded.
 
 ### 7.3 Logout
 
