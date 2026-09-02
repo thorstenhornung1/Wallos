@@ -6,9 +6,10 @@ below was confirmed to exist upstream by reading the upstream file; anything
 that could not be confirmed is marked as such.
 
 **Check the base before opening anything.** The comparison stand is
-`upstream/v5_6_0`, not `upstream/main`: `main` is release 5.4.5, and `v5_6_0` is
-twelve commits further on and carries the actual development. Line numbers below
-refer to `v5_6_0`.
+`upstream/main`, release 5.5.0, since 2026-09-01 — see "the maintainer moved"
+below. `v5_6_0` is dead: #1187 carried its content home and it has not moved
+since. Line numbers written before that date still refer to `v5_6_0`, which is
+why each entry names the ref it was checked against.
 
 ## Nothing goes to the maintainer without Thorsten asking for it
 
@@ -52,20 +53,84 @@ Consequences, each one binding for whoever picks this up:
 * **The base is `upstream/main` now.** `v5_6_0` has not moved since our merge
   and is dead; #1187 carried its content home. Every future PR opens against
   `main`.
-* **#1187 must be merged into the fork** (the next upstream merge, successor
-  to b373668). Landmines mapped in advance: his new `migrations/000056.php`
-  collides with ours — renumber to **≥ 000073** on merge (the divergence rule
-  below); he touched `includes/ssrf_helper.php` (reconcile with our #126
-  allowlist-order fix), `totp.php` again, `logout.php`,
-  `stats_calculations.php` (ours is equivalent), `handle_oidc_callback.php`,
-  payment-method delete/toggle, and an i18n batch.
-* **The three remaining single-file branches need re-verification against
-  5.5.0 before anything is sent** — `totp.php` changed upstream, so
-  `upstream-fix/disable-totp` in particular may no longer apply or may be
-  partly absorbed. Verify each against `upstream/main`, rebase, then ask
-  Thorsten for the send — the nothing-without-his-approval rule stands.
+* **#1187 is merged into the fork** — `7697283`, 2026-09-02. See the section
+  below for what the merge actually cost and found.
+* **The three remaining single-file branches are re-verified and rebased onto
+  `upstream/main`** (2026-09-02). All three defects still exist there. Each is
+  one file and applies cleanly. They wait on Thorsten's send, as before.
 * `origin/upstream-fix/totp-replay` and `origin/upstream-fix/logout-token`
   are **spent**.
+
+## 2026-09-02: the merge, and what it found
+
+`7697283` merges upstream 5.5.0. Three things are worth knowing before the
+next merge.
+
+**The squash moved the merge base.** #1187 squashed `v5_6_0` into `main`, so
+`upstream/main` does not carry `v5_6_0` as an ancestor and git fell back to
+5.4.4 — re-offering everything this fork already merged at `b373668`. Nine of
+the twenty-four conflicts were that artefact. The check that settles it, for
+next time:
+
+```sh
+git diff <the upstream ref we last merged>:$file upstream/main:$file
+```
+
+Empty means upstream contributed nothing since, and our side is simply newer.
+Do not resolve those by eye.
+
+**Two files were rebuilt byte-wise.** Resolving `admin.php` and
+`includes/oidc/handle_oidc_callback.php` with a text tool rewrote 876 and 205
+CRLF lines and turned a two-line change into a 1765-line diff. The tree mixes
+line endings; conflict resolution in these files has to be binary-safe
+(`git merge-file --diff3` plus a byte-level marker strip). The same trap bit a
+later one-line insert: a replacement that matches a line *without* its newline
+inserts before the existing `\r`, leaving `';\r\r\n`. Check for `\r\r\n`.
+
+**What it found, in this fork rather than upstream:** `totp.php` issued a
+remember-me token and never named it in `$_SESSION['token']`, which is the
+only thing `logout.php` revokes. An account with 2FA therefore kept a usable
+token across a logout while an account without 2FA did not — upstream #1184
+again, surviving in the one login path the fix had not touched. Upstream
+carries the line; the fork did not. `tests/cases/session_tokens_test.php` now
+asserts that every token-issuing path names it.
+
+**Decisions taken in the merge, so they are not re-litigated:**
+
+* The SSRF gate follows upstream's `allow_standard_users_local_webhooks`
+  opt-in rather than the ordering the fork used since #126. Upstream's setting
+  is strictly more expressive — on it is the fork's previous behaviour, off it
+  is stricter — and it answers what #126 asked for without letting an
+  allowlist entered for an administrator's internal service become reachable
+  by every account. The half upstream cannot have stays: the gate asks the
+  role model, never the account number.
+* His `migrations/000056.php` is our `000073` (000056 is this fork's
+  subscription indexes, which he shipped as his 000055), through the boundary
+  rather than `pragma_table_info`.
+* His inline in-use count in `api/payment_methods/set_payment_methods.php`
+  goes through the shared `wallos_subscriptions_referencing()`.
+* His newly placed save button arrived with an id shadowing its own handler —
+  the #95 defect. Placement taken, name kept.
+
+### New candidate: `registration.php`, the page his own XSS fix missed
+
+5.5.0 fixed reflected XSS through the `theme` and `colorTheme` cookies —
+validate against a fixed list, encode what reaches the inline script — in
+`login.php`, `totp.php` and `includes/header.php`. `registration.php` still
+carries `window.colorTheme = "<?= $colorTheme ?>";` straight from the cookie.
+It is the one page of the four reachable with no account at all.
+
+**Prepared: `upstream-fix/registration-theme-xss`**, based on `upstream/main`,
++4/−3, one file, using the sanitizers 5.5.0 itself added — nothing new for a
+reviewer to take on trust. The fork's own fix is `7ddc45d`, which also found
+`passwordreset.php` and `verifyemail.php` reading both cookies unvalidated;
+neither emits into a script, so neither was injectable, and they are fork-side
+tidying rather than part of this PR.
+
+Also still upstream, found while checking the above and not yet prepared:
+`includes/stats_calculations.php` orders by `'order'` — a string constant, not
+the column. SQLite sorts by nothing and PostgreSQL refuses the statement
+outright. Our fix is one line (`"order"` double-quoted); it travels alone.
 
 ## Portable, in the order they should go out
 
@@ -146,7 +211,11 @@ not a first PR.
   `DELETE FROM totp` both unchecked, then `success: true`. If the update fails
   and the delete succeeds, the account keeps `totp_enabled = 1` with no
   enrolment row: unreachable by any credential, and the user has just read "2FA
-  is off". Branch `origin/upstream-fix/disable-totp` (+58/−14).
+  is off". Branch `origin/upstream-fix/disable-totp`, rebased onto
+  `upstream/main` 2026-09-02 (+58/−14, one file). Re-verified: the defect is
+  intact and now sits in *two* branches upstream — the TOTP path and the
+  backup-code path — and the patch covers both. `enable_totp.php` moved in
+  5.5.0; `disable_totp.php` did not.
 * **#97a** — `includes/validate_endpoint.php` (22 lines) contains no
   `http_response_code` at all; three exit paths all answer 200. Needs adapting:
   ours uses `wallos_user_is_admin()`, upstream `$userId !== 1`.
@@ -156,13 +225,22 @@ not a first PR.
   version goes through the boundary. Also needs a `payment_method_in_use` key.
 * **`verifyemail.php`** — the DELETE *is* the verification and its result is
   discarded; the redirect to `login.php?validated=true` happens regardless.
-  **Prepared: `origin/upstream-fix/verify-email`**, based on `v5_6_0`, +21/−3,
-  one file. Uses only the SQLite3 API, so it applies as-is.
+  **Prepared: `origin/upstream-fix/verify-email`**, rebased onto
+  `upstream/main` 2026-09-02, +24/−6, one file. Uses only the SQLite3 API, so
+  it applies as-is. The re-verification changed it: it used to redirect a
+  failure to `login.php?validated=false`, and upstream's `login.php` only ever
+  reads `validated == "true"` — so the person would have landed on a silent
+  page. It now falls through to `verifyemail.php`'s own error box, which
+  already renders `email_verification_failed`. No new message, one fewer
+  redirect. A stray reference to a fork issue number was removed with it.
 * **`passwordreset.php`** — DELETE then INSERT, neither checked,
   `$hasSuccessMessage = true` unconditional. If the insert fails the old token
   is already gone and the account has no way back.
-  **Prepared: `origin/upstream-fix/password-reset`**, based on `v5_6_0`,
-  +48/−9, one file.
+  **Prepared: `origin/upstream-fix/password-reset`**, rebased onto
+  `upstream/main` 2026-09-02, +48/−9, one file. Re-verified: the defect is
+  intact at `upstream/main:passwordreset.php:63-75`, and `$hasErrorMessage`
+  already exists there and renders `translate('error')` in an error box, so
+  the patch needs no new key.
 
   Two things a reviewer will look for, and both are deliberate. The fork's fix
   lives in `includes/password_reset.php` and uses the boundary's
@@ -210,12 +288,13 @@ gap) with it.
 
 ## The base, decided
 
-**`v5_6_0`**, if a pull request is ever authorised — not `main`, despite `main`
-being the default branch.
+**`upstream/main`**, since 2026-09-01.
 
-The evidence is what happened to the last four: opened against `main`, closed
-unmerged, and merged into `v5_6_0` by hand. `main` receives release merges
-(#1176 "chore(main): release 5.4.5", #1175 "V5 6 0", #1160 "V5 4 3"), so the
-version branch is where development lands and `main` is where it surfaces.
-Opening against `main` again would repeat a step the maintainer already had to
-do manually four times.
+This reverses what this section said before, and the reversal is the
+maintainer's doing rather than a change of mind. The first four PRs were
+opened against `main`, closed unmerged, and merged into `v5_6_0` by hand,
+which is why `v5_6_0` was the answer. #1181 and #1184 were then opened against
+`v5_6_0` — and he merged them by folding `v5_6_0` wholesale into `main` as the
+squashed #1187, after which `v5_6_0` stopped moving. There is no version
+branch to aim at now; the four branches prepared here are all rebased onto
+`main`.

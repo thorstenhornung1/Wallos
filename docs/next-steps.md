@@ -21,6 +21,14 @@ container modes booted, the release notes carry the #92 caveat. The test
 instance follows the current release (operator decision 8308acc) and is
 being redeployed to this tag.
 
+**Unreleased on `main` since then:** the upstream 5.5.0 merge and two security
+fixes it turned up — a remember-me token the 2FA login left un-revokable, and
+the theme-cookie XSS on the registration page. Both are in `CHANGELOG.md`
+under *Unreleased*; the next release notes want them, and the SSRF change
+(standard accounts now need an explicit instance opt-in to reach allowlisted
+private addresses, which is upstream's default) is an operator-visible
+behaviour change that belongs in them too.
+
 ## What 2026-08-24 turned up, after this file was first written
 
 The test instance was found running the 5.8.5 image on **SQLite**, with a
@@ -74,7 +82,92 @@ for now. `docs/fork-and-upstream.md` and issue #32 hold the longer form.
 stack, PostgreSQL 18, pinned to docker-infra-3) belongs to whoever is running
 QA. Local work happens in `dev/compose.yaml` instead — see below.
 
-## Where this stands after 2026-09-02, and what comes next
+## Where this stands after the 2026-09-02 merge session
+
+Written for picking the thread back up. The section below this one is the
+state before this session; kept for the reasoning.
+
+**Upstream 5.5.0 is merged** (`7697283`) and `main` carries it. The merge base
+had moved: #1187 squashed `v5_6_0` into upstream `main`, so git fell back to
+5.4.4 and nine of the twenty-four conflicts were content this fork already
+had. `docs/upstream-candidates.md`, section "2026-09-02: the merge, and what
+it found", holds the mechanics — including the one-line check that tells a
+real conflict from a squash artefact, and the byte-level trap in the two files
+with mixed line endings.
+
+**The merge found a live defect in the fork.** `totp.php` issued a remember-me
+token and never named it in `$_SESSION['token']`, which is the only thing
+`logout.php` revokes — so an account with 2FA kept a usable token across a
+logout while an account without 2FA did not. Upstream #1184 again, in the one
+login path its fix had not touched. Fixed, with a gate over every
+token-issuing path.
+
+**And a second one, reachable without an account.** Upstream's own 5.5.0 XSS
+fix for the theme cookies missed `registration.php`, which still wrote the
+cookie into an inline script. Fixed in the fork (`7ddc45d`) and prepared as a
+fourth upstream branch. The gate that found it also turned up
+`passwordreset.php` and `verifyemail.php` reading both cookies unvalidated —
+not injectable, fixed for uniformity.
+
+**Four upstream branches now wait on Thorsten's send**, all rebased onto
+`upstream/main` and all one file:
+
+| branch | file | size |
+|---|---|---|
+| `upstream-fix/registration-theme-xss` | `registration.php` | +4/−3 |
+| `upstream-fix/verify-email` | `verifyemail.php` | +24/−6 |
+| `upstream-fix/password-reset` | `passwordreset.php` | +48/−9 |
+| `upstream-fix/disable-totp` | `endpoints/user/disable_totp.php` | +58/−14 |
+
+Re-verification was not a formality: all three older defects still exist on
+`upstream/main`, but `verify-email` had to be rewritten. It redirected a
+failure to `login.php?validated=false`, and upstream's `login.php` only reads
+`validated == "true"` — the person would have landed on a page with nothing to
+say. It now falls through to `verifyemail.php`'s own error box. A stray
+reference to a fork issue number went with it.
+
+533 tests green on SQLite and PostgreSQL, boundary audit unchanged (two files
+improved during the merge), write audit at baseline.
+
+**In order, next:**
+
+1. **The send decision.** Four branches, ready. The
+   nothing-without-Thorsten's-approval rule stands; the registration XSS is
+   the natural first, being four lines of a shape the maintainer just wrote
+   himself.
+2. **The daily shadow migration** (shape approved 2026-08-31): a nightly copy
+   of the production SQLite database → fork migration chain →
+   `dev/migrate-to-pgsql.php` → verification + read-only boot smoke. Script
+   `dev/shadow-migrate.sh` to build; the operator session wires the schedule
+   and the production-backup access.
+3. **The upstream distillate for #32**: a port branch on `upstream/main`
+   carrying ONLY boundary → PostgreSQL backend → migration tool, as three
+   reviewable PRs; open the #32 RFC conversation first. Once the distillate
+   exists, point the shadow pipeline at it.
+4. **Small backlog:** #129 (IPv6-less hosts), #130 (notification i18n), #131
+   (CSV export), #132 (row alignment), the #87 design question (23 discarded
+   results, 305 unchecked prepares, write-returning-rows decision),
+   Performance #18/#19, the 4a note (an OIDC save without an oauth_settings
+   row would persist discovery URLs — unverified).
+5. **Milestone J stays parked** until PostgreSQL can be ported upstream —
+   Thorsten's explicit call.
+
+**One loose end outside the repo, unchanged:** the OIDC QA roundtrip (B3) on
+the test instance is credential-blocked — two "Invalid password" rejections of
+a value whose transmission is proven byte-exact (sha256 prefix afd21957; the
+operator session holds the credential file). Authentik is healthy again.
+Waiting on Thorsten's own private-window counter-probe as user `oidc qa user`;
+the likely cause is the password being set on a different Authentik object
+than the one the login form matches. `require_email_verified` is active and
+waits as the next hurdle. Coordination runs via the operator session
+("diagnose-belegparser-llm-config"), which owns the test instance.
+
+One thing the merge improved for exactly this: the OIDC user-info call now
+reports its HTTP status and curl error into the fork's OIDC diagnostics, which
+had them for the token exchange only. If B3 gets past the password and fails
+later, the log will say why.
+
+## Where this stood after 2026-09-02, before the merge
 
 Written for picking the thread back up after a context clear. The section
 below this one is the 2026-08-30 plan it executes; kept for the reasoning.
