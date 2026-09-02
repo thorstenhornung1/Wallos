@@ -8,6 +8,7 @@ require_once 'includes/i18n/getlang.php';
 require_once 'includes/i18n/' . $lang . '.php';
 
 require_once 'includes/version.php';
+require_once 'includes/theme_helpers.php';
 
 if ($userCount == 0) {
     header("Location: registration.php");
@@ -31,12 +32,12 @@ if (isset($_SESSION['loggedin']) && $_SESSION['loggedin'] === true) {
 
 $theme = "light";
 if (isset($_COOKIE['theme'])) {
-    $theme = $_COOKIE['theme'];
+    $theme = sanitize_theme_mode($_COOKIE['theme']);
 }
 
 $colorTheme = "blue";
 if (isset($_COOKIE['colorTheme'])) {
-    $colorTheme = $_COOKIE['colorTheme'];
+    $colorTheme = sanitize_color_theme($_COOKIE['colorTheme']);
 }
 
 $validated = false;

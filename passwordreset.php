@@ -10,6 +10,7 @@ require_once 'includes/i18n/getlang.php';
 require_once 'includes/i18n/' . $lang . '.php';
 
 require_once 'includes/version.php';
+require_once 'includes/theme_helpers.php';
 
 $secondsInMonth = 30 * 24 * 60 * 60;
 if (session_status() === PHP_SESSION_NONE) {
@@ -31,12 +32,12 @@ $resetMode = false;
 
 $theme = "light";
 if (isset($_COOKIE['theme'])) {
-    $theme = $_COOKIE['theme'];
+    $theme = sanitize_theme_mode($_COOKIE['theme']);
 }
 
 $colorTheme = "blue";
 if (isset($_COOKIE['colorTheme'])) {
-    $colorTheme = $_COOKIE['colorTheme'];
+    $colorTheme = sanitize_color_theme($_COOKIE['colorTheme']);
 }
 
 $settings = $db->querySingle("SELECT * FROM admin", true);
