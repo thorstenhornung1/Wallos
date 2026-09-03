@@ -132,6 +132,103 @@ Also still upstream, found while checking the above and not yet prepared:
 the column. SQLite sorts by nothing and PostgreSQL refuses the statement
 outright. Our fix is one line (`"order"` double-quoted); it travels alone.
 
+## 2026-09-03: the list re-verified against 5.5.0, and much longer
+
+Every candidate below this section was re-read in the upstream file at
+`upstream/main`. The list held; it also grew by seventeen. What follows is the
+part that changes how the work is done — the full re-verification is the list
+itself, updated in place.
+
+### Two rules that apply to every PR from here on
+
+**Strip fork issue numbers from the comment prose.** The maintainer takes our
+comments *verbatim* — `upstream/main:logout.php:26-34` is our text, published
+unedited. A `#87` in a comment therefore ships to a repository where #87 is
+somebody else's issue. The same goes for fork version numbers ("5.8.2") and
+fork migration numbers (000065–000071). Upstream numbers like #1185 and #990
+are real there and stay. The four prepared branches were checked and are clean;
+one of them had carried a stray `#87` until 2026-09-02.
+
+**Bring a regression test.** Upstream now has our test harness —
+`tests/bootstrap.php`, `tests/run.php`, the fixture that runs the migration
+chain — all of it arrived through #1165–#1168. Every candidate here can ship
+with a test the maintainer runs himself. That is the largest lever this fork
+has upstream, and none of the PRs so far have used it.
+
+### The prepared branches, corrected
+
+`upstream-fix/password-reset` **fixed only half its file** and would have gone
+out as a half fix. `passwordreset.php` reports success over unchecked writes
+twice: issuing the token (`:63-75`, which the branch had) and *using* it
+(`:114-123`, which it had not). The second is worse — the password UPDATE is
+unchecked, the token is consumed regardless, and the person is told the
+password changed while the old one still works and the one link back in has
+been spent. Both halves are now in the branch (`2ed9ea7`).
+
+The lesson generalises: these files carry the same defect more than once, and
+finding it in one place is not finding it. Check the whole file before sending.
+
+Likewise the payment-methods logo fix must cover **three** call sites, not one:
+`endpoints/payments/add.php:220` and `api/payment_methods/set_payment_methods.php`
+at `:286` (add) and `:395` (edit). The edit branch is the worst of the three —
+a failed fetch overwrites a working icon.
+
+### The strongest new candidates
+
+Ordered, as always, by how little a reviewer has to take on trust.
+
+* **The file that contradicts itself.** `api/settings/set_settings.php` discards
+  four writes (`:83-90`, `:133-142`) and answers `success: true` at `:239` —
+  while the settings UPDATE *in the same file* (`:227-236`) checks its result
+  and answers "Database error". The contrast is the whole argument; no second
+  file needed. Same shape in `api/fixer/set_fixer.php:141-144`, where the
+  DELETE is unchecked and the INSERT right below it is checked.
+* **A name leaking between people.** `endpoints/cronjobs/sendnotifications.php:871-873`
+  sets `$payer` inside the per-user loop and never resets it, so a household
+  member without a name inherits the previous member's name in
+  `{{subscription_payer}}` — into an outgoing webhook. Three lines.
+* **`endpoints/user/enable_totp.php:97-118` — the heaviest single finding.**
+  DELETE, INSERT and `UPDATE user SET totp_enabled = 1`, none checked, no
+  transaction, then a hardcoded `success: true` with the backup codes. If the
+  INSERT fails while the UPDATE succeeds, the account has `totp_enabled = 1`
+  and no secret: `login.php` sends the person to `totp.php`, which has nothing
+  to check against. No code and no backup code ever works again — and they have
+  just printed ten of them. Our fix uses the boundary's transaction methods;
+  the rewrite to `exec('BEGIN')` is the same trick `upstream-fix/password-reset`
+  already uses, so it is proven.
+* **Twelve tables nobody deletes.** `deleteaccount.php` is a second complete
+  copy of the `deleteuser.php` defect — the table lists are identical. The
+  portable half is not the atomicity (that needs fork work) but the *coverage*:
+  both paths delete 19 tables, upstream has 38, and twelve user-bound ones are
+  never touched, `login_tokens` and `password_resets` among them. Upstream's
+  `user` table has no `AUTOINCREMENT`, so SQLite hands a deleted id straight
+  back out — which is what turns twelve tidy-up lines into a security argument.
+  Send the coverage; leave the atomicity.
+* **`endpoints/db/backup.php:85-86`** — `readfile()` then `unlink()`. An aborted
+  download ends the script inside `readfile()`, the unlink never runs, and a
+  complete database-and-uploads archive stays in the temp directory forever.
+  Offer `register_shutdown_function` in the body: unlink-before-read is
+  POSIX-only and a reviewer will say so.
+
+### Conversations, not patches
+
+`login.php:143-144` never consumes an OIDC callback (only
+`includes/checksession.php` does), so a provider callback aimed at `login.php`
+is discarded silently — expect "then configure the right redirect URI".
+`api/admin/get_oidc_settings.php:92` returns `client_secret` including one
+resolved from `OIDC_CLIENT_SECRET_FILE`, and `admin.php` renders it as a text
+input: admin-only, so hardening rather than a hole, but a mounted container
+secret ends up in the page source. Both change a UX contract and want agreement
+first.
+
+### Checked and dropped
+
+#93 (upstream fixed it), the nginx work (the real hole is the Dockerfile
+`chown`, and proposing our fix without the ownership work would give a false
+sense of it), everything PostgreSQL-motivated, the `cron_run.php` reporting, and
+the `integration_config.php` and `validate_endpoint_session.php` refactorings —
+upstream already checks the session inline there.
+
 ## Portable, in the order they should go out
 
 Priority is by how little a reviewer has to take on trust, not by how much the
