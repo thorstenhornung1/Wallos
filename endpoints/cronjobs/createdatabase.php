@@ -1,5 +1,19 @@
 <?php
 
+// Reported like the other jobs. wallos_cron_jobs() has always listed this one
+// as "Schema installation", and wallos_cron_write() carries a guard written
+// for it by name — but nothing here ever opened a run, so the overview said
+// "No run recorded" from the first boot to the last. A permanent entry in the
+// never-reported count is worse than no entry: that count exists to make a
+// dead cron visible, and a reader who learns to expect a one in it has been
+// trained to ignore the thing it is for.
+//
+// The very first boot of a fresh installation still records nothing, because
+// this script is what creates the table the row would go in. Every boot after
+// it reports.
+require_once __DIR__ . '/../../includes/cron_run.php';
+wallos_cron_begin('createdatabase');
+
 require_once __DIR__ . '/../../includes/database/connection.php';
 require_once __DIR__ . '/../../includes/database/configuration.php';
 
@@ -12,15 +26,29 @@ if ($databaseConfiguration['error'] === null && $databaseConfiguration['driver']
     require_once __DIR__ . '/../../includes/database/pgsql/install.php';
 
     $db = wallos_database_connect();
+    wallos_cron_database($db);
+
+    // Asked before, because install_if_needed() answers nothing and the
+    // difference between "applied the baseline" and "found it already there"
+    // is the whole content of this job's report.
+    $baselineMissing = wallos_pgsql_needs_baseline($db);
+
     wallos_pgsql_install_if_needed($db);
+
+    if ($baselineMissing) {
+        wallos_cron_count('installed');
+    }
+
+    wallos_cron_done($baselineMissing ? 'postgresql baseline applied' : 'schema already present');
     $db->close();
 
     return;
 }
 
 $databaseFile = wallos_database_path();
+$schemaExisted = file_exists($databaseFile);
 
-if (!file_exists($databaseFile)) {
+if (!$schemaExisted) {
     echo "Database does not exist. Creating it...\n";
     $db = wallos_database_connect($databaseFile, SQLITE3_OPEN_CREATE | SQLITE3_OPEN_READWRITE);
 
@@ -305,5 +333,13 @@ if (!file_exists($databaseFile)) {
     }
 
 }
+
+wallos_cron_database($db);
+
+if (!$schemaExisted) {
+    wallos_cron_count('installed');
+}
+
+wallos_cron_done($schemaExisted ? 'schema already present' : 'sqlite schema created');
 
 ?>

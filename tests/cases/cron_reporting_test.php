@@ -431,6 +431,34 @@ wallos_test('the admin page knows about exactly the jobs the crontab runs', func
         'and the only job described but not scheduled is the one startup.sh runs');
 });
 
+wallos_test('every job the page describes actually opens a run', function () {
+    // The gap this closes: createdatabase was described in wallos_cron_jobs()
+    // from the beginning, wallos_cron_write() carried a guard naming it, and
+    // the script itself never called wallos_cron_begin(). The overview said
+    // "No run recorded" for it on every installation that has ever existed,
+    // and the summary counted a permanent one in "never reported" — the count
+    // whose entire purpose is to make a dead cron visible.
+    //
+    // Matching on the script rather than on a list, so a job added later is
+    // covered without touching this case.
+    foreach (wallos_cron_jobs() as $name => $job) {
+        // A job that reports under several names — the recommendations run
+        // weekly and monthly — builds the suffix at runtime from one script.
+        $script = strpos($name, ':') === false ? $name : strstr($name, ':', true);
+        $path = 'endpoints/cronjobs/' . $script . '.php';
+
+        assert_true(file_exists(WALLOS_ROOT . '/' . $path),
+            $name . ' is described by wallos_cron_jobs() and has a script: ' . $path);
+
+        $source = file_get_contents(WALLOS_ROOT . '/' . $path);
+
+        assert_contains("wallos_cron_begin('" . $script, $source,
+            $path . ' opens a reported run, so the job can appear on the page at all');
+        assert_contains('wallos_cron_done(', $source,
+            $path . ' reaches its own end, so a clean run is not recorded as stopped');
+    }
+});
+
 wallos_test('every scheduled job asks for its exit status', function () {
     $lines = preg_split('/\R/', file_get_contents(WALLOS_ROOT . '/cronjobs'));
     $jobLines = 0;

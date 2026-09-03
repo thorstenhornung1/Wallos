@@ -541,6 +541,8 @@ function wallos_test_database()
             // it is building a SQLite schema at all.
             symlink(WALLOS_ROOT . '/includes/database/configuration.php', $sandbox . '/includes/database/configuration.php');
             symlink(WALLOS_ROOT . '/includes/config_helper.php', $sandbox . '/includes/config_helper.php');
+            // It reports itself like every other scheduled job.
+            symlink(WALLOS_ROOT . '/includes/cron_run.php', $sandbox . '/includes/cron_run.php');
         }
 
         $databaseFile = $sandbox . '/db/wallos.db';
@@ -553,6 +555,17 @@ function wallos_test_database()
             putenv('WALLOS_DB_PATH=' . $databaseFile);
             ob_start();
             require $sandbox . '/endpoints/cronjobs/createdatabase.php';
+
+            // Disarmed immediately. The script opens a reported run, which
+            // registers a shutdown hook and an exception handler — in *this*
+            // process, because the fixture includes the script rather than
+            // running it. Left armed, the hook would write a run row when the
+            // suite exits, into whatever database is configured by then: the
+            // developer's real one, since WALLOS_DB_PATH is cleared below.
+            // And the handler would swallow the runner's own exceptions.
+            unset($GLOBALS['wallos_cron_run']);
+            restore_exception_handler();
+
             $db = wallos_database_connect($databaseFile);
             require $sandbox . '/includes/run_migrations.php';
             $db->close();
