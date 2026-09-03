@@ -165,6 +165,15 @@ Every one of them carries, without exception:
 * **no fork issue numbers, versions or migration numbers in the prose.** He
   publishes our comments verbatim.
 
+**Every `upstream-fix/*` branch tracks `origin`, and it has to be set.** Cutting
+one with `git checkout -b X upstream/main` makes `upstream` its tracking remote,
+so a bare `git push` from it aims at `ellite/Wallos`. Eight branches were in
+that state on 2026-09-03 and were repointed. The push would have failed for want
+of write access, which is luck rather than a safeguard — the rule here is that
+nothing reaches the maintainer without Thorsten asking for it, and a rule that
+holds only because a credential is missing is not being kept. After cutting a
+branch: `git branch --set-upstream-to=origin/<name>`.
+
 **Never `git add -A` on an upstream branch.** It carries *upstream's*
 `.gitignore`, not this fork's, so everything this fork ignores is fair game
 there: `dev/secrets/` went into a commit that way on 2026-09-03 and had to be
