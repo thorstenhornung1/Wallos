@@ -27,9 +27,29 @@ development database holds 36 `household` rows, 48 `currencies` rows and 48
 `user_id` are missed by both deletion endpoints, and `login_tokens` is missed by
 the self-service one, so a self-deleted account keeps a valid remember-me token.
 Deletion here is a hand-maintained list of statements duplicated across two
-files. `PRAGMA foreign_keys` is never switched on anywhere in the project, so no
-declared cascade has ever fired and every referential rule that exists is
-application code — a fact `endpoints/admin/deleteuser.php:117` states out loud.
+files.
+
+**Corrected 2026-09-03.** This used to continue "`PRAGMA foreign_keys` is never
+switched on anywhere in the project, so no declared cascade has ever fired and
+every referential rule that exists is application code". Milestone K turned
+enforcement on at every connection (`includes/database/sqlite/database.php:44`)
+and migration 000072 repairs the orphans the unenforced years produced, so the
+second half is out of date.
+
+What replaces it is more specific. Exactly three of the declared keys carry
+`ON DELETE CASCADE` — `login_tokens`, `user_roles` and `oidc_sessions`, on both
+backends — and the rest carry no `ON DELETE` clause at all. With enforcement on,
+that means removing a `user` row cascades those three and is *refused* wherever
+any other child row still exists. The old order, which deleted the `user` row
+first, would now fail on its first statement for any account that owns
+anything.
+
+Which is why deletion in this fork no longer lives in those two files:
+`includes/user_deletion.php` derives the tables from the schema through
+`tablesWithColumn('user_id')`, orders them so the `user` row goes last, and runs
+the whole thing in a transaction. The premise this ADR was written against is
+gone, and the mechanism it worried about — a hand-maintained list duplicated
+across two files — is gone with it.
 
 The milestone opens three lifecycle questions and answers none of them. They have
 to be decided together, because they share one mechanism and one failure mode:

@@ -66,8 +66,18 @@ needs and what a workspace-scoped person cannot provide.
 The XOR survives unchanged and for the reason #68 gives: an object owned by both
 a person and a workspace has two sets of editing rules and no way to choose
 between them. In SQLite this is expressible as a `CHECK` constraint rather than
-left to convention, which matters here because `PRAGMA foreign_keys` is never
-switched on in this codebase and no declared foreign key has ever been enforced.
+left to convention.
+
+**Corrected 2026-09-03.** This paragraph used to end "which matters here because
+`PRAGMA foreign_keys` is never switched on in this codebase and no declared
+foreign key has ever been enforced". That was true when it was written and is
+not any more: milestone K turned enforcement on for every connection
+(`includes/database/sqlite/database.php:44`), and migration 000072 repairs what
+the unenforced years left behind. The `CHECK` constraint is still the right
+call — a foreign key cannot express "exactly one of these two columns" whatever
+the enforcement setting — but it no longer rests on the surrounding keys being
+decorative. An argument that outlives its premise is worth more when the
+premise is corrected in place than when it is quietly deleted.
 
 The advance calculation in #76 becomes statable, including its failure mode:
 resolve the source's `owner_user_id` to the person in the *subscription's*
