@@ -140,11 +140,28 @@ cannot work through is a queue he stops reading. Each of these stands alone,
 each is one concern, and the order is what to send *next* rather than what is
 worth most.
 
+**All five are built and pushed as of 2026-09-03, each with a regression test
+that upstream's own harness runs, each checked by breaking it.** They wait on
+the send decision alone.
+
+| branch | files | test |
+|---|---|---|
+| `upstream-fix/registration-theme-xss` | +95/−3 | `theme_cookie_test.php` |
+| `upstream-fix/payment-logo-result` | +177/−6 | `logo_fetch_result_test.php` |
+| `upstream-fix/enable-totp` | +152/−17 | `totp_enrolment_test.php` |
+| `upstream-fix/password-reset` | +181/−18 | `password_reset_test.php` |
+| `upstream-fix/delete-account-coverage` | +132 | `account_deletion_test.php` |
+
 Every one of them carries, without exception:
 
-* **a regression test.** Upstream has our harness since #1165–#1168 and has
-  never been offered a test with a fix. It is the largest lever this fork has
-  and it has never been pulled.
+* **a regression test.** Upstream has our harness since #1165–#1168 and had
+  never been offered a test with a fix. It is the largest lever this fork has,
+  and until today it had never been pulled. Where the endpoint cannot be run
+  from a test — most of these are scripts that need a session — the guard is
+  structural, which is the idiom upstream's suite already carries, because we
+  put it there in #1167. Two of the five also assert their guarantee against
+  the built schema: that a rollback takes both halves of a 2FA enrolment with
+  it, and that a rolled back token swap puts the previous reset token back.
 * **no fork issue numbers, versions or migration numbers in the prose.** He
   publishes our comments verbatim.
 
