@@ -539,7 +539,10 @@ wallos_test('a job succeeding now but failing lately is not reported as healthy'
 
     assert_same(WALLOS_CRON_CHECK_WARNING, $check['status'], 'succeeding now is not the whole answer');
     assert_contains('sent=2', $check['detail'], 'the last run is still described');
-    assert_contains('3 times', $check['detail'], 'and so is how often it has failed');
+    assert_contains('3 times in total', $check['detail'],
+        'and so is how often it has failed, said as the lifetime figure it is: '
+        . 'the timestamp beside it is recent by construction, so an unlabelled '
+        . 'count reads as three recent failures');
     assert_contains('SMTP timeout', $check['detail'], 'with the reason');
 
     $summary = cron_run_check($checks, 'Scheduled jobs');

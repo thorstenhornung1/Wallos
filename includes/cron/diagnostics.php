@@ -315,9 +315,22 @@ function wallos_cron_checks($runs, $now)
 
         if ($recent !== null) {
             $unreliable++;
+
+            // "in total" is not padding. The timestamp is recent by
+            // construction — this line only appears while the last failure is
+            // inside the window — but the count beside it is the job's whole
+            // life, and the two read as one claim. "Failed 34 times, most
+            // recently two days ago" describes a job in freefall; the truth
+            // behind that exact reading was a month of refusals from an
+            // exhausted API quota, of which the last happened to be recent.
+            // The recent count is not recoverable — cron_runs keeps one row
+            // per job, a timestamp and a running total, not a history — so
+            // saying which number this is costs two words and is the whole
+            // fix available.
             $checks[] = wallos_cron_check($job['label'], WALLOS_CRON_CHECK_WARNING,
                 $succeeded . ' It last failed ' . $recent['when'] . ' and has failed '
                 . $recent['count'] . ' time' . ($recent['count'] === 1 ? '' : 's')
+                . ' in total'
                 . ($recent['detail'] === '' ? '.' : ': ' . $recent['detail']));
 
             continue;
