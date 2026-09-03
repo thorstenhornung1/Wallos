@@ -132,6 +132,111 @@ Also still upstream, found while checking the above and not yet prepared:
 the column. SQLite sorts by nothing and PostgreSQL refuses the statement
 outright. Our fix is one line (`"order"` double-quoted); it travels alone.
 
+## The five to send, in this order
+
+Decided 2026-09-03 out of the full list below. Five, not seventeen: the
+maintainer is one person who merges in silence and in batches, and a queue he
+cannot work through is a queue he stops reading. Each of these stands alone,
+each is one concern, and the order is what to send *next* rather than what is
+worth most.
+
+Every one of them carries, without exception:
+
+* **a regression test.** Upstream has our harness since #1165–#1168 and has
+  never been offered a test with a fix. It is the largest lever this fork has
+  and it has never been pulled.
+* **no fork issue numbers, versions or migration numbers in the prose.** He
+  publishes our comments verbatim.
+
+### 1. `registration.php` — finish the XSS fix he started
+
+Ready: `upstream-fix/registration-theme-xss`, +4/−3.
+
+5.5.0 fixed reflected XSS through the theme cookies in `login.php`, `totp.php`
+and `includes/header.php`, using sanitizers he wrote, and missed
+`registration.php` — the one page of the four reachable with no account. Four
+lines, his own helpers, his own pattern. There is nothing to take on trust,
+which is exactly why it goes first: it re-opens the conversation at zero cost
+after two silent merges.
+
+### 2. The payment-method logo failure — `Closes #1185`
+
+`endpoints/payments/add.php:220`, `api/payment_methods/set_payment_methods.php:286`
+and `:395`. ~+30, three call sites.
+
+**#1185 is open, reported 2026-08-30 by a user**: "Unknown error, please try
+again" when adding AMEX, logo found, nothing in the log. This is that. On
+failure the logo helper returns an array where a string is expected, and it is
+bound anyway. Upstream's own `endpoints/subscription/add.php:271` shows the
+correct pattern.
+
+All three call sites, not one — the edit branch is the worst of them, because a
+failed fetch overwrites a working icon. A PR that closes a live complaint in
+his tracker is worth more than any correctness argument we can make in the
+abstract.
+
+### 3. `endpoints/user/enable_totp.php` — the account nobody can reach again
+
++60/−17, one file. The heaviest single finding in the tree.
+
+DELETE, INSERT and `UPDATE user SET totp_enabled = 1`, none of them checked, no
+transaction, then a hardcoded `success: true` with ten backup codes. If the
+INSERT fails while the UPDATE succeeds, the account has `totp_enabled = 1` and
+no secret: `login.php` sends the person to `totp.php`, which has nothing to
+check against. No code and no backup code ever works again, and they have just
+printed ten of them.
+
+Our fix uses the boundary's transaction methods; the rewrite to `exec('BEGIN')`
+is the same one `upstream-fix/password-reset` already carries, so it is proven
+rather than invented. Note the file already holds our prose from #1181.
+
+### 4. `passwordreset.php` — both halves
+
+Ready: `upstream-fix/password-reset`, +88/−18, corrected 2026-09-03.
+
+Same argument as 3, one step less severe, and it goes after 3 so the reviewer
+meets the worst case while the pattern is fresh. Issuing the token and using it
+both reported success over unchecked writes; the second is the one that tells
+somebody their password changed while the old one still works and the only link
+back in has been spent.
+
+### 5. Account deletion — the twelve tables nobody removes
+
+`endpoints/settings/deleteaccount.php` and `endpoints/admin/deleteuser.php`,
+two files, mechanical.
+
+Both delete 19 tables; upstream has 38, and twelve user-bound ones are never
+touched — `login_tokens` and `password_resets` among them. Upstream's `user`
+table has no `AUTOINCREMENT`, so SQLite hands a deleted id straight back out:
+delete the newest account, create another, and it inherits the leftovers. That
+is what turns twelve tidy-up lines into a security argument.
+
+**Coverage only. Leave the atomicity out** — that half needs fork work and
+would turn a mechanical diff into a design discussion.
+
+### Held back deliberately
+
+`api/settings/set_settings.php` and `api/fixer/set_fixer.php` are the best
+*arguments* on the list — each file contradicts itself, no second file needed —
+but they fix nothing anyone has noticed. They are the next batch once these
+five land, and they will be easier then, because 3 and 4 will have established
+the same argument on files where the consequence was visible.
+
+`upstream-fix/verify-email` and `upstream-fix/disable-totp` stay prepared and
+unsent for the same reason. The `$payer` leak in `sendnotifications.php` is
+three lines and obviously right, but narrow — it rides along with the next
+notification change rather than spending a PR.
+
+The OIDC callback (`login.php:143-144`) and the client secret in
+`get_oidc_settings.php:92` are conversations, not patches. Opening them as PRs
+would ask him to accept a changed UX contract in a diff.
+
+### How to send them
+
+One at a time, and wait. He merged #1181 and #1184 within days, silently, into a
+collective release PR. Five at once asks him to schedule a review; one at a time
+asks him to click merge. Send 1, and send 2 and 3 once it lands.
+
 ## 2026-09-03: the list re-verified against 5.5.0, and much longer
 
 Every candidate below this section was re-read in the upstream file at
