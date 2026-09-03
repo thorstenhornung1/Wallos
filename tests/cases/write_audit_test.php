@@ -121,6 +121,102 @@ wallos_test('prose about execute() is not a call to it', function () {
     assert_same(0, count($comments['discarded']), 'comments and strings are not code');
 });
 
+wallos_test('a write nobody read, and a response that says it worked', function () {
+    $found = write_audit_scan_snippet('
+        $statement = $db->prepare("DELETE FROM css WHERE user_id = 1");
+        $statement->execute();
+        echo json_encode(["success" => true]);
+    ');
+
+    assert_same(1, count($found['unreported']),
+        'the response claims what the write never confirmed');
+
+    // The negative control the whole third number rests on: the same two
+    // statements, one of them asked.
+    $checked = write_audit_scan_snippet('
+        $statement = $db->prepare("DELETE FROM css WHERE user_id = 1");
+        if ($statement->execute() === false) { exit(1); }
+        echo json_encode(["success" => true]);
+    ');
+
+    assert_same(0, count($checked['unreported']), 'a checked write is not a finding');
+});
+
+wallos_test('an assignment nobody reads is not a check', function () {
+    // Forty of the eighty findings in the upstream tree are this exact shape,
+    // almost all of them in the two account deletion paths. Accepting an
+    // assignment as consultation loses the case the number exists for.
+    $ignored = write_audit_scan_snippet('
+        $statement = $db->prepare("UPDATE user SET name = :n WHERE id = 1");
+        $result = $statement->execute();
+        echo json_encode(["success" => true]);
+    ');
+
+    assert_same(1, count($ignored['unreported']), 'assigned and never looked at again');
+
+    $read = write_audit_scan_snippet('
+        $statement = $db->prepare("UPDATE user SET name = :n WHERE id = 1");
+        $result = $statement->execute();
+        if (!$result) { exit(1); }
+        echo json_encode(["success" => true]);
+    ');
+
+    assert_same(0, count($read['unreported']), 'assigned and read is a check');
+});
+
+wallos_test('the other arm of a conditional is not reachable from this one', function () {
+    // Why the scope is the nesting path rather than the file: a write in one
+    // arm and a success response in the other never run together, and a
+    // file-wide rule cannot tell that from the shape it is looking for.
+    $siblings = write_audit_scan_snippet('
+        $statement = $db->prepare("DELETE FROM css WHERE user_id = 1");
+        if ($wanted) {
+            $statement->execute();
+        } else {
+            echo json_encode(["success" => true]);
+        }
+    ');
+
+    assert_same(0, count($siblings['unreported']),
+        'the response is in the branch the write did not take');
+});
+
+wallos_test('control leaving before the response cuts the pair', function () {
+    $left = write_audit_scan_snippet('
+        $statement = $db->prepare("DELETE FROM css WHERE user_id = 1");
+        $statement->execute();
+        exit(1);
+        echo json_encode(["success" => true]);
+    ');
+
+    assert_same(0, count($left['unreported']), 'the response is never reached');
+
+    // And the trap that made every such response cut itself off while this was
+    // being built: the interrupt has to count at the end of its statement, not
+    // at the keyword, because die(json_encode(["success" => true])) *is* the
+    // response.
+    $inside = write_audit_scan_snippet('
+        $statement = $db->prepare("DELETE FROM css WHERE user_id = 1");
+        $statement->execute();
+        die(json_encode(["success" => true]));
+    ');
+
+    assert_same(1, count($inside['unreported']), 'a response inside a die() still counts');
+});
+
+wallos_test('asking changes() is asking', function () {
+    // Not the execute() result, but a genuine outcome check. Without this two
+    // correct files in this tree are reported.
+    $asked = write_audit_scan_snippet('
+        $statement = $db->prepare("DELETE FROM css WHERE user_id = 1");
+        $statement->execute();
+        if ($db->changes() === 0) { exit(1); }
+        echo json_encode(["success" => true]);
+    ');
+
+    assert_same(0, count($asked['unreported']), 'the outcome was checked another way');
+});
+
 wallos_test('the committed baseline matches this working tree', function () {
     $measured = write_audit_measure(WALLOS_ROOT);
     $baseline = write_audit_read_baseline(WALLOS_ROOT . '/dev/write-audit-baseline.txt');

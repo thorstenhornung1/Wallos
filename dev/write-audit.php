@@ -228,6 +228,557 @@ function write_audit_statement_writes($token)
  * @param string $source
  * @return array{discarded: int[], unchecked: int[]}
  */
+/**
+ * For every token: the stack of enclosing block ids, and the id of the nearest
+ * enclosing function body (0 at file level).
+ *
+ * This is what makes the third number possible, and the reason neither
+ * "function" nor "file" works as a scope. The endpoints this exists for are
+ * scripts without functions, so a per-function rule sees nothing; and a
+ * per-file rule cannot tell the four discarded writes in a file from the
+ * checked one beside them.
+ *
+ * The answer is neither: two positions lie on a shared control path exactly
+ * when one block path is a prefix of the other. `} else {` closes one block and
+ * opens another, so the two arms of a conditional never share a path and a
+ * write in one arm is never paired with a response in the other.
+ *
+ * @param array<int, array> $tokens
+ * @return array{0: array<int, int[]>, 1: array<int, int>}
+ */
+function write_audit_blocks(array $tokens)
+{
+    $count = count($tokens);
+    $paths = [];
+    $functions = [];
+    $stack = [0];
+    $functionStack = [0];
+    $next = 1;
+    $pendingFunction = false;
+
+    for ($i = 0; $i < $count; $i++) {
+        $type = $tokens[$i][0];
+
+        // `else:` and `elseif (...):` close the arm before them first.
+        if (in_array($type, [T_ELSE, T_ELSEIF], true)
+            && write_audit_alternative_arm($tokens, $i) && count($stack) > 1) {
+            array_pop($stack);
+            array_pop($functionStack);
+        }
+
+        if (in_array($type, [T_ENDIF, T_ENDFOR, T_ENDFOREACH, T_ENDWHILE, T_ENDSWITCH,
+                T_ENDDECLARE], true) && count($stack) > 1) {
+            array_pop($stack);
+            array_pop($functionStack);
+        }
+
+        $paths[$i] = $stack;
+        $functions[$i] = $functionStack[count($functionStack) - 1];
+
+        if ($type === T_FUNCTION || $type === T_FN) {
+            $pendingFunction = true;
+        }
+
+        if ($type === '{' || $type === T_CURLY_OPEN || $type === T_DOLLAR_OPEN_CURLY_BRACES) {
+            $id = $next++;
+            $stack[] = $id;
+            $functionStack[] = $pendingFunction ? $id : $functionStack[count($functionStack) - 1];
+            $pendingFunction = false;
+
+            continue;
+        }
+
+        if ($type === '}') {
+            if (count($stack) > 1) {
+                array_pop($stack);
+                array_pop($functionStack);
+            }
+
+            continue;
+        }
+
+        // The alternative syntax opens a block with a colon rather than a brace.
+        if (in_array($type, [T_IF, T_ELSEIF, T_FOR, T_FOREACH, T_WHILE, T_SWITCH], true)) {
+            $after = write_audit_past_condition($tokens, $i);
+
+            if ($after !== null && ($tokens[$after][0] ?? null) === ':') {
+                $stack[] = $next++;
+                $functionStack[] = $functionStack[count($functionStack) - 1];
+            }
+
+            continue;
+        }
+
+        if ($type === T_ELSE && ($tokens[$i + 1][0] ?? null) === ':') {
+            $stack[] = $next++;
+            $functionStack[] = $functionStack[count($functionStack) - 1];
+        }
+    }
+
+    return [$paths, $functions];
+}
+
+/**
+ * Whether an else/elseif belongs to the alternative syntax rather than braces.
+ *
+ * @param array<int, array> $tokens
+ * @param int               $index
+ * @return bool
+ */
+function write_audit_alternative_arm(array $tokens, $index)
+{
+    if ($tokens[$index][0] === T_ELSE) {
+        return ($tokens[$index + 1][0] ?? null) === ':';
+    }
+
+    $after = write_audit_past_condition($tokens, $index);
+
+    return $after !== null && ($tokens[$after][0] ?? null) === ':';
+}
+
+/**
+ * The index just past the parenthesised condition following a control keyword.
+ *
+ * @param array<int, array> $tokens
+ * @param int               $index
+ * @return int|null
+ */
+function write_audit_past_condition(array $tokens, $index)
+{
+    $count = count($tokens);
+    $i = $index + 1;
+
+    if (($tokens[$i][0] ?? null) !== '(') {
+        return $i;
+    }
+
+    $depth = 0;
+
+    for (; $i < $count; $i++) {
+        if ($tokens[$i][0] === '(') {
+            $depth++;
+        } elseif ($tokens[$i][0] === ')') {
+            $depth--;
+
+            if ($depth === 0) {
+                return $i + 1;
+            }
+        }
+    }
+
+    return null;
+}
+
+/**
+ * Whether one block path is a prefix of (or equal to) another.
+ *
+ * @param int[] $prefix
+ * @param int[] $path
+ * @return bool
+ */
+function write_audit_path_prefix(array $prefix, array $path)
+{
+    if (count($prefix) > count($path)) {
+        return false;
+    }
+
+    foreach ($prefix as $depth => $id) {
+        if ($path[$depth] !== $id) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+/**
+ * Whether a SQL literal opens a statement that changes data.
+ *
+ * A guess, and it is allowed to be one. Anything not recognised is treated the
+ * same as a read, and the cost of that was measured rather than assumed:
+ * calling every unrecognised statement a write changes nothing in either tree.
+ * The reason is structural — a statement whose result is read has its result
+ * read, so a SELECT nobody consults is a SELECT nobody fetched from, and it
+ * fails the consultation test on its own.
+ *
+ * There is deliberately no list of the keywords that only read. It would be
+ * dead weight, since only 'write' is ever acted on — and one of the words it
+ * would have to contain is the one the boundary audit looks for, which is how
+ * this function first arrived carrying a false positive.
+ *
+ * @param string $literal
+ * @return bool
+ */
+function write_audit_sql_writes($literal)
+{
+    $sql = ltrim(trim($literal, "'\""), " \t\n\r(");
+
+    return preg_match('/^(INSERT|UPDATE|DELETE|REPLACE|CREATE|DROP|ALTER|TRUNCATE)\b/i', $sql) === 1;
+}
+
+/**
+ * Where the object expression whose method is called at $index begins.
+ *
+ * @param array<int, array> $tokens
+ * @param int               $index
+ * @return int
+ */
+function write_audit_receiver(array $tokens, $index)
+{
+    $i = $index;
+
+    while ($i > 0 && in_array($tokens[$i - 1][0], [T_VARIABLE, T_STRING, T_OBJECT_OPERATOR,
+            T_NULLSAFE_OBJECT_OPERATOR, T_DOUBLE_COLON, ']', ')'], true)) {
+        $i--;
+    }
+
+    return $i;
+}
+
+/**
+ * Whether anything looks at the value of the call whose arrow sits at $index.
+ *
+ * Three ways it can be, and only three: the call sits inside a larger
+ * expression, it is chained, or its value is assigned to a variable that is
+ * read again.
+ *
+ * The last clause is half the rule. An assignment alone is not consultation —
+ * `$result = $stmt->execute();` with nothing ever reading `$result` is the most
+ * common shape of this defect, forty of the eighty findings in the upstream
+ * tree, almost all of them in the two account deletion paths.
+ *
+ * @param array<int, array>       $tokens
+ * @param int                     $index
+ * @param array<string, int[]>    $reads  variable name => indices where read
+ * @return array{consulted: bool, why: string}
+ */
+function write_audit_result_consulted(array $tokens, $index, array $reads)
+{
+    $count = count($tokens);
+    $i = $index + 2;
+
+    if (($tokens[$i][0] ?? null) !== '(') {
+        return ['consulted' => true, 'why' => 'not-a-call'];
+    }
+
+    $depth = 0;
+
+    for (; $i < $count; $i++) {
+        if ($tokens[$i][0] === '(') {
+            $depth++;
+        } elseif ($tokens[$i][0] === ')') {
+            $depth--;
+
+            if ($depth === 0) {
+                break;
+            }
+        }
+    }
+
+    $after = $tokens[$i + 1][0] ?? null;
+
+    if (in_array($after, [T_OBJECT_OPERATOR, T_NULLSAFE_OBJECT_OPERATOR, T_IS_IDENTICAL,
+            T_IS_NOT_IDENTICAL, T_IS_EQUAL, T_IS_NOT_EQUAL, T_BOOLEAN_AND, T_BOOLEAN_OR,
+            T_LOGICAL_AND, T_LOGICAL_OR, T_COALESCE, T_INSTANCEOF,
+            '?', ')', ',', '.', '['], true)) {
+        return ['consulted' => true, 'why' => 'expression'];
+    }
+
+    $start = write_audit_receiver($tokens, $index);
+    $before = $tokens[$start - 1][0] ?? null;
+
+    if ($before === '=') {
+        $target = $tokens[$start - 2] ?? null;
+
+        if ($target === null || $target[0] !== T_VARIABLE) {
+            return ['consulted' => true, 'why' => 'assigned-elsewhere'];
+        }
+
+        foreach ($reads[$target[1]] ?? [] as $read) {
+            if ($read > $i) {
+                return ['consulted' => true, 'why' => 'assigned-and-read'];
+            }
+        }
+
+        return ['consulted' => false, 'why' => 'assigned-never-read'];
+    }
+
+    if ($before === null || in_array($before, [';', '{', '}', T_OPEN_TAG, T_ELSE], true)) {
+        return ['consulted' => false, 'why' => 'discarded'];
+    }
+
+    return ['consulted' => true, 'why' => 'expression'];
+}
+
+/**
+ * Writes whose result nobody read, followed by a response that claims success.
+ *
+ * The third number, and a different question from the first two. Those ask
+ * whether a result was read; this asks whether anything downstream *told the
+ * user it went well* without having asked. That is the shape behind the
+ * enrolment that hands out ten backup codes for a 2FA row it never wrote, and
+ * behind the password reset that spends the one link back in and says the
+ * password changed.
+ *
+ * A write is paired with the first success signal that it can actually reach:
+ * later in the file, in the same function body, on a shared control path, with
+ * no exit, die, return, throw, break or continue in between on the write's own
+ * path. Everything else — a sibling branch, a response before the write, a
+ * branch that leaves anyway — is not reachable and is not reported.
+ *
+ * A $db->changes() call on the write's own path counts as having asked. It is
+ * not the execute() result, but it is a genuine outcome check, and without this
+ * two correct files are reported.
+ *
+ * What it does not see, and the number is worth less if this is forgotten: a
+ * statement reached through a variable reused for something else; a prepare()
+ * and its execute() in different files; and — the important one — the family
+ * where success is hardcoded as an HTTP status rather than as a body. PHP
+ * answers 200 by default and nobody contradicts it, which is a different defect
+ * with a different fix, and this number says nothing about it.
+ *
+ * @param array<int, array> $tokens
+ * @return array<int, array{line: int, signal: int, why: string}>
+ */
+function write_audit_unreported(array $tokens)
+{
+    $count = count($tokens);
+    list($paths, $functions) = write_audit_blocks($tokens);
+
+    $sqlKinds = [];
+    $statementKinds = [];
+    $reads = [];
+    $writes = [];
+    $signals = [];
+    $interrupts = [];
+    $changes = [];
+
+    // Whether a result was ever read is a question about the whole file, so it
+    // cannot be answered while still walking towards the end of it.
+    for ($i = 0; $i < $count; $i++) {
+        if ($tokens[$i][0] !== T_VARIABLE) {
+            continue;
+        }
+
+        $after = $tokens[$i + 1][0] ?? null;
+        $before = $tokens[$i - 1][0] ?? null;
+
+        if ($after === '=' && $before !== '.' && $before !== '(') {
+            continue;
+        }
+
+        $reads[$tokens[$i][1]][] = $i;
+    }
+
+    for ($i = 0; $i < $count; $i++) {
+        $token = $tokens[$i];
+
+        // $sql = "UPDATE ..." — only the first literal of the right-hand side,
+        // so that "UPDATE x SET " . implode(...) . " WHERE ..." is recognised.
+        // A variable once seen holding a write keeps that answer, or a query
+        // built in two branches is read as whichever branch comes last.
+        if ($token[0] === T_VARIABLE && ($tokens[$i + 1][0] ?? null) === '='
+            && ($tokens[$i + 2][0] ?? null) === T_CONSTANT_ENCAPSED_STRING
+            && ($sqlKinds[$token[1]] ?? null) !== 'write') {
+            $sqlKinds[$token[1]] = write_audit_sql_writes($tokens[$i + 2][1]) ? 'write' : 'other';
+        }
+
+        if ($token[0] !== T_OBJECT_OPERATOR && $token[0] !== T_NULLSAFE_OBJECT_OPERATOR) {
+            continue;
+        }
+
+        $name = $tokens[$i + 1] ?? null;
+
+        if ($name === null || $name[0] !== T_STRING) {
+            continue;
+        }
+
+        $method = strtolower($name[1]);
+
+        if ($method === 'changes') {
+            $changes[] = $i;
+
+            continue;
+        }
+
+        if (in_array($method, ['prepare', 'exec', 'query', 'querysingle'], true)) {
+            $argument = $tokens[$i + 3] ?? null;
+            $kind = 'other';
+
+            if ($argument !== null && $argument[0] === T_CONSTANT_ENCAPSED_STRING) {
+                $kind = write_audit_sql_writes($argument[1]) ? 'write' : 'other';
+            } elseif ($argument !== null && $argument[0] === T_VARIABLE) {
+                $kind = $sqlKinds[$argument[1]] ?? 'other';
+            }
+
+            if ($method === 'prepare') {
+                $assignment = $tokens[$i - 2] ?? null;
+                $target = $tokens[$i - 3] ?? null;
+
+                if ($assignment !== null && $assignment[0] === '='
+                    && $target !== null && $target[0] === T_VARIABLE) {
+                    $statementKinds[$target[1]] = $kind;
+                }
+
+                continue;
+            }
+
+            // exec() and query() carry the write and its result in one call.
+            if ($kind === 'write') {
+                $consulted = write_audit_result_consulted($tokens, $i, $reads);
+
+                if ($consulted['consulted'] === false) {
+                    $writes[] = ['index' => $i, 'line' => $name[2], 'why' => $consulted['why']];
+                }
+            }
+
+            continue;
+        }
+
+        if ($method !== 'execute') {
+            continue;
+        }
+
+        $receiver = write_audit_receiver($tokens, $i);
+        $kind = $tokens[$receiver][0] === T_VARIABLE
+            ? ($statementKinds[$tokens[$receiver][1]] ?? 'other')
+            : 'other';
+
+        if ($kind !== 'write') {
+            continue;
+        }
+
+        $consulted = write_audit_result_consulted($tokens, $i, $reads);
+
+        if ($consulted['consulted'] === false) {
+            $writes[] = ['index' => $i, 'line' => $name[2], 'why' => $consulted['why']];
+        }
+    }
+
+    if ($writes === []) {
+        return [];
+    }
+
+    for ($i = 0; $i < $count; $i++) {
+        $token = $tokens[$i];
+
+        if ($token[0] === T_CONSTANT_ENCAPSED_STRING) {
+            if (strtolower(trim($token[1], "'\"")) === 'success'
+                && ($tokens[$i + 1][0] ?? null) === T_DOUBLE_ARROW
+                && ($tokens[$i + 2][0] ?? null) === T_STRING
+                && strtolower($tokens[$i + 2][1]) === 'true') {
+                $signals[] = $i;
+            } elseif (preg_match('/"success"\s*:\s*true/i', $token[1])) {
+                $signals[] = $i;
+            }
+        }
+
+        // $hasSuccessMessage = true, and its relatives. Measured: this adds the
+        // four findings in passwordreset.php and not one anywhere else.
+        if ($token[0] === T_VARIABLE
+            && preg_match('/success|saved|updated|deleted|created/i', $token[1])
+            && ($tokens[$i + 1][0] ?? null) === '='
+            && ($tokens[$i + 2][0] ?? null) === T_STRING
+            && strtolower($tokens[$i + 2][1]) === 'true') {
+            $signals[] = $i;
+        }
+
+        if ($token[0] === T_STRING && strtolower($token[1]) === 'http_response_code'
+            && ($tokens[$i + 1][0] ?? null) === '('
+            && ($tokens[$i + 2][0] ?? null) === T_LNUMBER
+            && (int) $tokens[$i + 2][1] >= 200 && (int) $tokens[$i + 2][1] < 300) {
+            $signals[] = $i;
+        }
+
+        if ($token[0] === T_RETURN && ($tokens[$i + 1][0] ?? null) === T_STRING
+            && strtolower($tokens[$i + 1][1]) === 'true'
+            && ($tokens[$i + 2][0] ?? null) === ';' && $functions[$i] !== 0) {
+            $signals[] = $i + 1;
+        }
+
+        // An interrupt cuts the path at the end of its statement, not at the
+        // keyword: die(json_encode(['success' => true])) *is* the signal, and
+        // taking the keyword's position would make every such response cut
+        // itself off before it could be reached.
+        if (in_array($token[0], [T_EXIT, T_RETURN, T_THROW, T_BREAK, T_CONTINUE, T_GOTO], true)) {
+            $depth = 0;
+            $end = $i;
+
+            for ($k = $i; $k < $count; $k++) {
+                $type = $tokens[$k][0];
+
+                if ($type === '(' || $type === '[' || $type === '{') {
+                    $depth++;
+                } elseif ($type === ')' || $type === ']' || $type === '}') {
+                    $depth--;
+                } elseif ($type === ';' && $depth <= 0) {
+                    $end = $k;
+
+                    break;
+                }
+
+                $end = $k;
+            }
+
+            $interrupts[] = $end;
+        }
+    }
+
+    $findings = [];
+
+    foreach ($writes as $write) {
+        $path = $paths[$write['index']];
+        $function = $functions[$write['index']];
+        $asked = false;
+
+        foreach ($changes as $change) {
+            if ($change > $write['index'] && $functions[$change] === $function
+                && write_audit_path_prefix($paths[$change], $path)) {
+                $asked = true;
+
+                break;
+            }
+        }
+
+        if ($asked) {
+            continue;
+        }
+
+        foreach ($signals as $signal) {
+            if ($signal <= $write['index'] || $functions[$signal] !== $function) {
+                continue;
+            }
+
+            if (!write_audit_path_prefix($paths[$signal], $path)
+                && !write_audit_path_prefix($path, $paths[$signal])) {
+                continue;
+            }
+
+            $cut = false;
+
+            foreach ($interrupts as $interrupt) {
+                if ($interrupt > $write['index'] && $interrupt < $signal
+                    && write_audit_path_prefix($paths[$interrupt], $path)) {
+                    $cut = true;
+
+                    break;
+                }
+            }
+
+            if ($cut) {
+                continue;
+            }
+
+            $findings[] = ['line' => $write['line'], 'signal' => $tokens[$signal][2],
+                'why' => $write['why']];
+
+            break;
+        }
+    }
+
+    return $findings;
+}
+
 function write_audit_scan($source)
 {
     $tokens = write_audit_tokens($source);
@@ -327,7 +878,8 @@ function write_audit_scan($source)
 
     sort($unchecked);
 
-    return ['discarded' => $discarded, 'unchecked' => $unchecked, 'writes' => $uncheckedWrites];
+    return ['discarded' => $discarded, 'unchecked' => $unchecked, 'writes' => $uncheckedWrites,
+        'unreported' => write_audit_unreported($tokens)];
 }
 
 /**
@@ -350,10 +902,11 @@ function write_audit_measure($root)
         $scan = write_audit_scan($source);
         $discarded = count($scan['discarded']);
         $unchecked = count($scan['unchecked']);
+        $unreported = count($scan['unreported']);
 
-        if ($discarded + $unchecked > 0) {
+        if ($discarded + $unchecked + $unreported > 0) {
             $measured[$path] = ['discarded' => $discarded, 'unchecked' => $unchecked,
-                'writes' => $scan['writes']];
+                'unreported' => $unreported, 'writes' => $scan['writes']];
         }
     }
 
@@ -370,23 +923,32 @@ function write_audit_render($measured)
 {
     $discarded = 0;
     $unchecked = 0;
+    $unreported = 0;
 
     foreach ($measured as $counts) {
         $discarded += $counts['discarded'];
         $unchecked += $counts['unchecked'];
+        $unreported += $counts['unreported'];
     }
 
     $out = "# Unchecked write paths — generated by dev/write-audit.php --update\n#\n"
-        . "# One line per file: <path><TAB><discarded results><TAB><unchecked prepares>.\n#\n"
-        . "# Issue #87. Neither number may rise and no file may join this list; both\n"
+        . "# One line per file: <path><TAB><discarded results><TAB><unchecked prepares>\n"
+        . "# <TAB><unreported writes>.\n#\n"
+        . "# Issue #87. No number may rise and no file may join this list; all three\n"
         . "# may fall, and every honest write shrinks it. When the file is empty the\n"
         . "# shape that produced four defects across three releases is gone.\n#\n"
+        . "# The third number is issue #139: a write whose result nobody read,\n"
+        . "# followed on the same branch by a response claiming success. It is the\n"
+        . "# smallest of the three and the one that names real defects rather than\n"
+        . "# risky shapes — every entry is a place that tells somebody it worked\n"
+        . "# without having asked.\n#\n"
         . "# Do not edit by hand — run dev/write-audit.php --update and commit the diff.\n#\n"
         . '# ' . count($measured) . ' file(s), ' . $discarded . ' discarded result(s), '
-        . $unchecked . " unchecked prepare(s).\n\n";
+        . $unchecked . ' unchecked prepare(s), ' . $unreported . " unreported write(s).\n\n";
 
     foreach ($measured as $path => $counts) {
-        $out .= $path . "\t" . $counts['discarded'] . "\t" . $counts['unchecked'] . "\n";
+        $out .= $path . "\t" . $counts['discarded'] . "\t" . $counts['unchecked']
+            . "\t" . $counts['unreported'] . "\n";
     }
 
     return $out;
@@ -413,11 +975,12 @@ function write_audit_read_baseline($path)
 
         $parts = explode("\t", $line);
 
-        if (count($parts) !== 3) {
+        if (count($parts) !== 4) {
             continue;
         }
 
-        $baseline[$parts[0]] = ['discarded' => (int) $parts[1], 'unchecked' => (int) $parts[2]];
+        $baseline[$parts[0]] = ['discarded' => (int) $parts[1], 'unchecked' => (int) $parts[2],
+            'unreported' => (int) $parts[3]];
     }
 
     return $baseline;
@@ -437,13 +1000,15 @@ function write_audit_compare($measured, $baseline)
 
     foreach ($measured as $path => $counts) {
         if (!isset($baseline[$path])) {
-            $regressions[] = sprintf('%s is not in the baseline (%d discarded, %d unchecked)',
-                $path, $counts['discarded'], $counts['unchecked']);
+            $regressions[] = sprintf(
+                '%s is not in the baseline (%d discarded, %d unchecked, %d unreported)',
+                $path, $counts['discarded'], $counts['unchecked'], $counts['unreported']);
 
             continue;
         }
 
-        foreach (['discarded' => 'discarded result', 'unchecked' => 'unchecked prepare'] as $key => $label) {
+        foreach (['discarded' => 'discarded result', 'unchecked' => 'unchecked prepare',
+                'unreported' => 'unreported write'] as $key => $label) {
             $was = $baseline[$path][$key];
             $now = $counts[$key];
 
@@ -505,15 +1070,17 @@ foreach (array_slice($argv, 1) as $argument) {
 
 
 $measured = write_audit_measure($root);
-$totals = ['files' => count($measured), 'discarded' => 0, 'unchecked' => 0];
+$totals = ['files' => count($measured), 'discarded' => 0, 'unchecked' => 0, 'unreported' => 0];
 
 foreach ($measured as $counts) {
     $totals['discarded'] += $counts['discarded'];
     $totals['unchecked'] += $counts['unchecked'];
+    $totals['unreported'] += $counts['unreported'];
 }
 
-$summary = sprintf('%d discarded result(s) and %d unchecked prepare(s) in %d file(s)',
-    $totals['discarded'], $totals['unchecked'], $totals['files']);
+$summary = sprintf('%d discarded result(s), %d unchecked prepare(s) and %d unreported write(s) '
+    . 'in %d file(s)',
+    $totals['discarded'], $totals['unchecked'], $totals['unreported'], $totals['files']);
 
 if ($mode === 'report') {
     $writes = 0;
@@ -532,7 +1099,8 @@ if ($mode === 'report') {
     });
 
     foreach ($rows as $path => $counts) {
-        printf("  %4d discarded  %4d unchecked  %s\n", $counts['discarded'], $counts['unchecked'], $path);
+        printf("  %4d discarded  %4d unchecked  %4d unreported  %s\n",
+            $counts['discarded'], $counts['unchecked'], $counts['unreported'], $path);
     }
 
     exit(0);
