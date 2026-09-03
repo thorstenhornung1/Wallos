@@ -239,6 +239,42 @@ podman exec wallos-dev php /var/www/html/dev/stress-verify.php > after.txt
 diff before.txt after.txt   # only the driver name on the first line may differ
 ```
 
+### The shadow migration
+
+```sh
+dev/shadow-migrate.sh /path/to/copy-of-production.db
+dev/shadow-migrate.sh --pg-image docker.io/library/postgres:18-alpine copy.db
+```
+
+The whole upgrade path in one command, against a copy of a database that
+actually grew: the fork's migration chain, then `dev/migrate-to-pgsql.php` into
+a PostgreSQL container the script starts and removes itself, then a row count
+taken on both sides and compared, then a boot of the real image against the
+migrated database. One line per step at the end, non-zero exit on any failure,
+and nothing left running afterwards — it is built to be a nightly job.
+
+It exists because the upgrade path is recorded as untested in three independent
+places, always for the same reason: a fresh installation records every migration
+as applied in the moment it creates the schema, and a fresh PostgreSQL
+installation installs a baseline that records them without running them. So no
+CI run on either backend says anything about what the chain does to a schema
+that grew. Migration 000016 is what that costs — it recorded itself as applied
+on every installation ever made without doing its work, and 000065 removed the
+leftover table nine years later.
+
+The file it is given is never touched: everything happens on a copy in a scratch
+directory, and the last step compares the original's checksum with the one taken
+before the run. Give it a copy anyway, because a database that is being written
+to cannot be copied safely at all — `dev/snapshot.sh` is the tool for taking one.
+
+Nothing in it is a warning. A migration that reports failure, a table that
+arrives with fewer rows than it left with, a container that does not answer on
+`health.php`: each ends the run with a non-zero status and a line naming the
+cause. `--skip-orphans` is deliberately not passed through — rows a real
+migration would leave behind have to be somebody's decision, not a silent
+subtraction. `dev/snapshot.sh --rehearse` is the exploratory tool that does pass
+it through.
+
 ### Tearing down
 
 ```sh
