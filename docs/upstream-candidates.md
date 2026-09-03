@@ -148,6 +148,12 @@ Every one of them carries, without exception:
 * **no fork issue numbers, versions or migration numbers in the prose.** He
   publishes our comments verbatim.
 
+**Never `git add -A` on an upstream branch.** It carries *upstream's*
+`.gitignore`, not this fork's, so everything this fork ignores is fair game
+there: `dev/secrets/` went into a commit that way on 2026-09-03 and had to be
+taken back out before the branch was pushed. The values were placeholders, so
+nothing leaked, and the next ones might not be. Add named paths.
+
 ### 1. `registration.php` — finish the XSS fix he started
 
 Ready: `upstream-fix/registration-theme-xss`, +4/−3.
@@ -161,8 +167,16 @@ after two silent merges.
 
 ### 2. The payment-method logo failure — `Closes #1185`
 
-`endpoints/payments/add.php:220`, `api/payment_methods/set_payment_methods.php:286`
-and `:395`. ~+30, three call sites.
+**Built 2026-09-03: `upstream-fix/payment-logo-result`**, +177/−6 over three
+files including its test.
+
+`endpoints/payments/add.php`, `api/payment_methods/set_payment_methods.php`
+(add and edit). The shape turned out cleaner than the survey suggested: the
+helper exists in **four** copies, and the two subscription copies already
+answer `['success' => bool, 'filename'|'message']` and are checked at the call
+site. Only the two payment copies were inconsistent — one of them returning
+three different types from one function. So the PR is "make these two match the
+two you already wrote correctly", which needs no argument at all.
 
 **#1185 is open, reported 2026-08-30 by a user**: "Unknown error, please try
 again" when adding AMEX, logo found, nothing in the log. This is that. On
@@ -177,7 +191,8 @@ abstract.
 
 ### 3. `endpoints/user/enable_totp.php` — the account nobody can reach again
 
-+60/−17, one file. The heaviest single finding in the tree.
+**Built 2026-09-03: `upstream-fix/enable-totp`**, +152/−17 with its test. The
+heaviest single finding in the tree.
 
 DELETE, INSERT and `UPDATE user SET totp_enabled = 1`, none of them checked, no
 transaction, then a hardcoded `success: true` with ten backup codes. If the
@@ -202,11 +217,17 @@ back in has been spent.
 
 ### 5. Account deletion — the twelve tables nobody removes
 
-`endpoints/settings/deleteaccount.php` and `endpoints/admin/deleteuser.php`,
-two files, mechanical.
+**Built 2026-09-03: `upstream-fix/delete-account-coverage`**, +132 across the
+two files plus its test.
 
-Both delete 19 tables; upstream has 38, and twelve user-bound ones are never
-touched — `login_tokens` and `password_resets` among them. Upstream's `user`
+`endpoints/settings/deleteaccount.php` and `endpoints/admin/deleteuser.php`,
+mechanical.
+
+The figures were checked against the built schema rather than by parsing the
+source, which is how the count settled: 38 tables, **31** carry a `user_id`,
+both paths delete 19. A first attempt at parsing `CREATE TABLE` out of the
+migrations answered 12 and 9 — wrong twice, and wrong in a way that looked
+plausible. Twelve user-bound tables are never touched — `login_tokens` and `password_resets` among them. Upstream's `user`
 table has no `AUTOINCREMENT`, so SQLite hands a deleted id straight back out:
 delete the newest account, create another, and it inherits the leftovers. That
 is what turns twelve tidy-up lines into a security argument.
