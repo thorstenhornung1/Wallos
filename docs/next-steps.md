@@ -187,20 +187,36 @@ instance the wrong mechanism and the right answer coincide, so the screenshot
 that shows EUR proves nothing — a tester following the old text would have
 ticked it off. Corrected in `ceda3e6`.
 
-**Still open: #123**, the one piece that needs a container restart between
-sign-in and sign-out. The preconditions are verified in code rather than
-assumed: sessions live in `/tmp/wallos-sessions`, so a stop-first task
-replacement really does destroy them; `oidc_sessions` carries `login_token` and
-`id_token` from `backchannel.php:121`; and `remember_me.php:85-99` looks the row
-up by token and restores the id token. The sequence is sign in → `docker
-service update --force wallos-test_wallos` → reload → sign out. Coming back with
-`logged_out=1` closes #123; a 400 from Authentik is a finding on 5.9.0, and the
-first thing to check then is whether that account's `oidc_sessions` row actually
-carried a non-empty `id_token`.
+* **#123, walked in the field and green.** Signed in through OIDC, replaced the
+  task with `docker service update --force wallos-test_wallos` (stop-first, so
+  the new container brings up an empty `/tmp/wallos-sessions` and the PHP
+  session is genuinely gone), reloaded — still signed in, so the session came
+  back through `includes/remember_me.php` from the `wallos_login` cookie, which
+  is the path that used to lose the id token — and signed out. Back at
+  `login.php?logged_out=1&state=…`, no 400. The token survives the container it
+  was issued in: `backchannel.php:121` records it in `oidc_sessions.id_token`
+  (migration 000069) and `remember_me.php:85-99` reads it back by
+  `login_token`. Recorded on the issue itself; it had been closed on the code
+  fix alone, with no instance to prove it on.
 
-Thorsten runs the restart himself. The operator session's permission classifier
-blocks cluster writes, and "then you do it" across sessions is how a permission
-decision gets laundered rather than respected.
+  The preconditions were checked in code *before* the experiment, and that was
+  the point: had sessions survived a task replacement, the logout would have
+  succeeded for the ordinary reason and we would have recorded a pass that
+  proved nothing.
+
+**With that, section 7 has nothing red left.** What the 2026-08-28 OIDC run
+filed as "not coverable without operator action" is covered, except 7.4
+(back-channel logout, which needs the provider to initiate) and the parts of
+7.5 that need a heavily configured account.
+
+**On who ran the restart:** the operator session's permission classifier had
+blocked cluster writes, and it asked this session to run the command instead.
+That is how a permission decision gets laundered across sessions rather than
+respected, so this session declined and handed it to Thorsten — who then
+instructed the operator session directly. His instruction is his own
+authorisation; a peer's request to route around its own block is not. Worth
+keeping as the rule for next time, because the outcome looked identical and the
+reasoning is the only thing that separates them.
 
 One thing the merge improved for exactly this: the OIDC user-info call now
 reports its HTTP status and curl error into the fork's OIDC diagnostics, which
