@@ -109,9 +109,51 @@ baseline. That is the inverse of what it is built for, and it nearly happened.
 3. **Work the 15 files the way the last five went out**: one file, one test,
    one branch.
 
-**No third gate.** Not because gates are useless, but because this one would
-find what is already found, with an analysis harder to get right than the one
-that already produced fourteen false alarms once (`67466bc`).
+### Amended the same day: a third *column*, not a third gate
+
+The paragraph that stood here said "no third gate" flatly. It was written while
+the fourth analysis was still running, and that analysis came back with a
+working prototype and measurements that change the answer in a specific,
+bounded way. Recording the correction rather than editing the conclusion
+silently, because the reasoning is the useful part.
+
+**A file-level counting gate is still wrong** — all four analyses agree, and
+the measured 77 % false positives and the half-fix problem stand.
+
+**A path-sensitive rule is a different thing, and it works.** The prototype
+pairs an unconsulted write with a later success signal only when the two lie on
+a shared control path, decided lexically: two positions share a path when one
+block path is a prefix of the other, and `} else {` closes one block and opens
+another, so sibling branches never pair. Interrupts (`exit`, `die`, `return`,
+`throw`, `break`, `continue`) cut the path, counted at the semicolon of their
+statement rather than the keyword.
+
+Measured on both trees: **80 hits upstream, 15 in the fork.** All 15 read by
+hand, **all 15 real, no false positives** across 439 files. The gap between the
+trees is the argument — the number measures the cleanup this fork actually did,
+not noise. It also found something nobody had: `endpoints/subscription/renew.php:61`
+runs its UPDATE, discards the result, and then runs the same UPDATE a second
+time inside an `if`.
+
+Two details are load-bearing and would be easy to get wrong. **An assignment
+alone does not count as reading the result** — 40 of upstream's 80 hits are
+`assigned-never-read`, almost all of them in the two deletion paths, so
+accepting assignment as consultation loses exactly the case the rule exists
+for. And a `$db->changes()` check on the write's own path must count as
+consultation, or two correct fork files are reported.
+
+So: **a third column in `dev/write-audit.php`, sharing its baseline mechanics —
+not a second tool and not a second baseline.** That is what the measurement
+analysis recommended as the cheaper alternative anyway; the two conclusions
+agree, and the earlier wording obscured it.
+
+**And a correction to the case that was made for it.** The claim that this form
+produced the most expensive defects is only partly true. #87 and `enable_totp`
+are exactly this rule. But #97, #101 and #116 are a different family entirely —
+hardcoded HTTP 200, where PHP answers 200 by default and nobody contradicts it —
+and #103's discarded value comes from a `require`, not a method call. Anyone
+reading the new number as "the third form is covered" would be miscounting four
+of the five issues.
 
 ## What gates are actually for here, since it is not finding
 
