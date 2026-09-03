@@ -152,20 +152,59 @@ improved during the merge), write audit at baseline.
 5. **Milestone J stays parked** until PostgreSQL can be ported upstream —
    Thorsten's explicit call.
 
-**One loose end outside the repo, unchanged:** the OIDC QA roundtrip (B3) on
-the test instance is credential-blocked — two "Invalid password" rejections of
-a value whose transmission is proven byte-exact (sha256 prefix afd21957; the
-operator session holds the credential file). Authentik is healthy again.
-Waiting on Thorsten's own private-window counter-probe as user `oidc qa user`;
-the likely cause is the password being set on a different Authentik object
-than the one the login form matches. `require_email_verified` is active and
-waits as the next hurdle. Coordination runs via the operator session
-("diagnose-belegparser-llm-config"), which owns the test instance.
+## B3, the OIDC roundtrip — mostly closed on 2026-09-03
+
+It was never unblocked; it was **routed around**. The `oidc qa user` credential
+stayed unavailable (the operator session does not hand out secrets, by project
+rule), and the way through was that any Authentik account with application
+access and a verified email does the job. Thorsten signed in as
+`thorsten.hornung`. The account was **auto-provisioned** rather than linked to
+an existing one — the username is Authentik's `preferred_username` and the
+names come from the `name` claim — so the standard-user path is what got
+tested, which is what B3 wanted anyway.
+
+The lesson worth keeping: a blocked credential is not always a blocked test.
+The old QA user is still worth repairing (read the real `username` attribute in
+Authentik's Directory → Users and set the password there, which also settles
+the "wrong object" hypothesis), but nothing waits on it.
+
+**Green, live, on 5.9.0:**
+
+* the sign-in itself, `require_email_verified` included
+* **7.3, the RP-initiated logout** — the end-session request with
+  `id_token_hint` was accepted and came back as
+  `login.php?logged_out=1&state=…`. No 400.
+* **the role model** — the Admin page is not reachable for the provisioned
+  account. That the OIDC path grants no admin role was a test in the repo and
+  is now an observation on a running instance.
+* **#34/#35 re-confirmed** — the account came up in German.
+
+**What it found:** `docs/test-instance.md` §7.2 listed #40 ("an auto-created
+user always gets EUR") alongside #34/#35 as fixed in 5.6.0 and then declared
+nothing in the section a current limitation. Only the language half was ever
+fixed; `oidc_create_user.php` still hardcodes `$main_currency_id = 1`. On a EUR
+instance the wrong mechanism and the right answer coincide, so the screenshot
+that shows EUR proves nothing — a tester following the old text would have
+ticked it off. Corrected in `ceda3e6`.
+
+**Still open: #123**, the one piece that needs a container restart between
+sign-in and sign-out. The preconditions are verified in code rather than
+assumed: sessions live in `/tmp/wallos-sessions`, so a stop-first task
+replacement really does destroy them; `oidc_sessions` carries `login_token` and
+`id_token` from `backchannel.php:121`; and `remember_me.php:85-99` looks the row
+up by token and restores the id token. The sequence is sign in → `docker
+service update --force wallos-test_wallos` → reload → sign out. Coming back with
+`logged_out=1` closes #123; a 400 from Authentik is a finding on 5.9.0, and the
+first thing to check then is whether that account's `oidc_sessions` row actually
+carried a non-empty `id_token`.
+
+Thorsten runs the restart himself. The operator session's permission classifier
+blocks cluster writes, and "then you do it" across sessions is how a permission
+decision gets laundered rather than respected.
 
 One thing the merge improved for exactly this: the OIDC user-info call now
 reports its HTTP status and curl error into the fork's OIDC diagnostics, which
-had them for the token exchange only. If B3 gets past the password and fails
-later, the log will say why.
+had them for the token exchange only.
 
 ## Where this stood after 2026-09-02, before the merge
 
