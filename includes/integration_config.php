@@ -1082,6 +1082,108 @@ function wallos_ntfy_public_payload($config)
 }
 
 /* -------------------------------------------------------------------------
+   Gotify (issue #15)
+   ------------------------------------------------------------------------- */
+
+/**
+ * Instance Gotify configuration: the shared server URL only.
+ *
+ * The application token is deliberately not an instance value. It identifies a
+ * message source, and sharing one across unrelated users would make every
+ * user's messages appear through the same Gotify application, so the token
+ * stays per user in both modes.
+ *
+ * @param WallosDatabase $db
+ * @return array Result structure with url.
+ */
+function wallos_build_instance_gotify_config($db)
+{
+    $config = wallos_config_result();
+    $config['mode'] = 'instance';
+
+    $instance = wallos_get_instance_settings($db, 'gotify');
+
+    if (wallos_env_has('WALLOS_GOTIFY_BASE_URL')) {
+        wallos_config_set($config, 'url', trim((string) wallos_env('WALLOS_GOTIFY_BASE_URL')),
+            'environment', 'WALLOS_GOTIFY_BASE_URL');
+    } elseif (!empty($instance['base_url'])) {
+        wallos_config_set($config, 'url', (string) $instance['base_url'], 'admin');
+    } else {
+        wallos_config_set($config, 'url', '', 'default');
+    }
+
+    return $config;
+}
+
+/**
+ * Effective Gotify configuration for one user: the instance host with the
+ * user's own application token, or a full custom host. The token is always the
+ * user's own.
+ *
+ * @param array $instanceConfig Result of wallos_get_instance_gotify_config().
+ * @param array $row            The user's gotify_notifications row, or [].
+ * @return array Result structure with url, token, enabled, ignore_ssl and deliverable.
+ */
+function wallos_effective_gotify_config($instanceConfig, $row)
+{
+    $row = $row ?: [];
+
+    $legacyMode = trim((string) ($row['url'] ?? '')) !== '' ? 'custom' : 'instance';
+    $mode = wallos_normalize_mode($row['url_mode'] ?? $legacyMode);
+
+    if ($mode === 'custom') {
+        $config = wallos_config_result();
+        $config['mode'] = 'custom';
+        wallos_config_set($config, 'url', (string) ($row['url'] ?? ''), 'user');
+    } else {
+        $config = $instanceConfig;
+        $config['mode'] = 'instance';
+    }
+
+    // The application token is personal and always the user's own.
+    wallos_config_set($config, 'token', (string) ($row['token'] ?? ''), 'user');
+    $config['values']['enabled'] = (int) ($row['enabled'] ?? 0);
+    $config['values']['ignore_ssl'] = (int) ($row['ignore_ssl'] ?? 0);
+
+    wallos_finalize_notification_config($config, ['url', 'token'],
+        'The Gotify server or application token is not configured.');
+
+    return $config;
+}
+
+/**
+ * @param WallosDatabase $db
+ * @param int            $userId
+ * @return array Result structure.
+ */
+function wallos_build_effective_gotify_config($db, $userId)
+{
+    $row = wallos_config_user_row($db, 'gotify_notifications', $userId);
+
+    return wallos_effective_gotify_config(wallos_get_instance_gotify_config($db), $row);
+}
+
+/**
+ * API and template representation. The application token is a credential and is
+ * reported as a status, never as a value.
+ *
+ * @param array $config
+ * @return array
+ */
+function wallos_gotify_public_payload($config)
+{
+    return [
+        'mode' => $config['mode'],
+        'enabled' => (int) ($config['values']['enabled'] ?? 0),
+        'url' => (string) ($config['values']['url'] ?? ''),
+        'ignore_ssl' => (int) ($config['values']['ignore_ssl'] ?? 0),
+        'token' => wallos_secret_status($config, 'token'),
+        'deliverable' => (bool) ($config['values']['deliverable'] ?? false),
+        'valid' => (bool) $config['valid'],
+    ];
+}
+
+/* -------------------------------------------------------------------------
    Memoized entry points
 
    Resolution is deterministic within one request or job, so each of these is
@@ -1223,6 +1325,27 @@ function wallos_get_effective_ntfy_config($db, $userId)
 {
     return wallos_config_cached($db, 'ntfy:' . (int) $userId,
         fn() => wallos_build_effective_ntfy_config($db, $userId));
+}
+
+/**
+ * @param WallosDatabase $db
+ * @return array Result structure.
+ */
+function wallos_get_instance_gotify_config($db)
+{
+    return wallos_config_cached($db, 'gotify:instance',
+        fn() => wallos_build_instance_gotify_config($db));
+}
+
+/**
+ * @param WallosDatabase $db
+ * @param int            $userId
+ * @return array Result structure.
+ */
+function wallos_get_effective_gotify_config($db, $userId)
+{
+    return wallos_config_cached($db, 'gotify:' . (int) $userId,
+        fn() => wallos_build_effective_gotify_config($db, $userId));
 }
 
 /* -------------------------------------------------------------------------

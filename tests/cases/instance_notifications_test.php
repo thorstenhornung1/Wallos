@@ -335,3 +335,91 @@ wallos_test('the ntfy payload never renders the shared auth headers', function (
 
     $db->close();
 });
+
+/* -------------------------------------------------------------------------
+   Gotify (issue #15)
+   ------------------------------------------------------------------------- */
+
+wallos_test('one instance Gotify host serves several users, each with their own app token', function () {
+    $db = wallos_test_open_database();
+    wallos_test_create_user($db, 1, 'alice');
+    wallos_test_create_user($db, 2, 'bob');
+
+    wallos_set_instance_setting($db, 'gotify', 'base_url', 'https://gotify.example');
+    $db->exec("INSERT INTO gotify_notifications (enabled, url_mode, token, user_id)
+               VALUES (1, 'instance', 'alice-app-token', 1)");
+    $db->exec("INSERT INTO gotify_notifications (enabled, url_mode, token, user_id)
+               VALUES (1, 'instance', 'bob-app-token', 2)");
+
+    $alice = wallos_get_effective_gotify_config($db, 1);
+    $bob = wallos_get_effective_gotify_config($db, 2);
+
+    assert_same('https://gotify.example', $alice['values']['url'], 'alice uses the instance host');
+    assert_same('https://gotify.example', $bob['values']['url'], 'so does bob');
+    assert_same('alice-app-token', $alice['values']['token'], 'alice keeps her own application token');
+    assert_same('bob-app-token', $bob['values']['token'], "and never sends through bob's application");
+    assert_true($alice['values']['deliverable'], 'host plus app token means deliverable');
+
+    $db->close();
+});
+
+wallos_test('a Gotify user without an app token is not deliverable', function () {
+    $db = wallos_test_open_database();
+    wallos_test_create_user($db, 1, 'alice');
+
+    wallos_set_instance_setting($db, 'gotify', 'base_url', 'https://gotify.example');
+    $db->exec("INSERT INTO gotify_notifications (enabled, url_mode, token, user_id)
+               VALUES (1, 'instance', '', 1)");
+
+    $config = wallos_get_effective_gotify_config($db, 1);
+
+    assert_true(!$config['values']['deliverable'], 'the app token is required even when the host is inherited');
+    assert_true(!$config['valid'], 'and the configuration is reported invalid');
+
+    $db->close();
+});
+
+wallos_test('an existing custom Gotify host keeps working', function () {
+    $db = wallos_test_open_database();
+    wallos_test_create_user($db, 1, 'alice');
+
+    wallos_set_instance_setting($db, 'gotify', 'base_url', 'https://gotify.example');
+    $db->exec("INSERT INTO gotify_notifications (enabled, url_mode, url, token, user_id)
+               VALUES (1, 'custom', 'https://my.gotify', 'my-app-token', 1)");
+
+    $config = wallos_get_effective_gotify_config($db, 1);
+
+    assert_same('custom', $config['mode'], 'the user runs their own host');
+    assert_same('https://my.gotify', $config['values']['url'], 'their host is used, not the instance one');
+    assert_same('my-app-token', $config['values']['token'], 'their app token is kept');
+    assert_true($config['values']['deliverable'], 'a full custom config is deliverable');
+
+    $db->close();
+});
+
+wallos_test('a pre-migration Gotify row with a host is treated as custom', function () {
+    $config = wallos_effective_gotify_config(wallos_config_result(),
+        ['url' => 'https://legacy.gotify', 'token' => 'legacy-app-token', 'enabled' => 1]);
+
+    assert_same('custom', $config['mode'], 'a stored host without a mode column means a custom host');
+    assert_same('https://legacy.gotify', $config['values']['url'], 'the stored host is used');
+    assert_true($config['values']['deliverable'], 'the legacy configuration still delivers');
+});
+
+wallos_test('the Gotify payload reports status but never the app token', function () {
+    $db = wallos_test_open_database();
+    wallos_test_create_user($db, 1, 'alice');
+
+    putenv('WALLOS_GOTIFY_BASE_URL=https://gotify.example');
+    $db->exec("INSERT INTO gotify_notifications (enabled, url_mode, token, user_id)
+               VALUES (1, 'instance', 'super-secret-app-token', 1)");
+
+    $payload = wallos_gotify_public_payload(wallos_get_effective_gotify_config($db, 1));
+    $encoded = json_encode($payload);
+
+    assert_not_contains('super-secret-app-token', $encoded, 'the application token is never returned as a value');
+    assert_same(true, $payload['token']['configured'], 'its presence is reported');
+    assert_same('https://gotify.example', $payload['url'], 'the shared host URL is not a secret and is shown');
+
+    $db->close();
+});

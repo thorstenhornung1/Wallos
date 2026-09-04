@@ -484,11 +484,15 @@ if ($budgetPeriodAnchorDate === '1970-01-01' || !preg_match('/^\d{4}-\d{2}-\d{2}
     $result = $stmt->execute();
 
     $rowCount = 0;
+    $notificationsGotify['url_mode'] = 'instance';
     while ($row = $result->fetchArray(SQLITE3_ASSOC)) {
         $notificationsGotify['enabled'] = $row['enabled'];
         $notificationsGotify['url'] = $row['url'];
         $notificationsGotify['token'] = $row['token'];
         $notificationsGotify['ignore_ssl'] = $row['ignore_ssl'];
+        $notificationsGotify['url_mode'] = wallos_normalize_mode(
+            $row['url_mode'] ?? (trim((string) $row['url']) !== '' ? 'custom' : 'instance')
+        );
         $rowCount++;
     }
 
@@ -498,6 +502,11 @@ if ($budgetPeriodAnchorDate === '1970-01-01' || !preg_match('/^\d{4}-\d{2}-\d{2}
         $notificationsGotify['token'] = "";
         $notificationsGotify['ignore_ssl'] = 0;
     }
+
+    // The instance server host is resolved server side; the application token
+    // always stays with the user.
+    $instanceGotify = wallos_get_instance_gotify_config($db);
+    $usesInstanceGotify = $notificationsGotify['url_mode'] === 'instance';
 
     ?>
 
@@ -705,9 +714,42 @@ if ($budgetPeriodAnchorDate === '1970-01-01' || !preg_match('/^\d{4}-\d{2}-\d{2}
                             <?= $notificationsGotify['enabled'] ? "checked" : "" ?>>
                         <label for="gotifyenabled" class="capitalize"><?= translate('enabled', $i18n) ?></label>
                     </div>
+                    <label for="gotifymodeinstance"><?= translate('gotify_server', $i18n) ?></label>
+                    <div class="form-group-inline">
+                        <div>
+                            <input type="radio" name="gotifymode" id="gotifymodeinstance" value="instance"
+                                onchange="toggleGotifyMode()" <?= $usesInstanceGotify ? "checked" : "" ?> />
+                            <label for="gotifymodeinstance"><?= translate('use_instance_server', $i18n) ?></label>
+                        </div>
+                        <div>
+                            <input type="radio" name="gotifymode" id="gotifymodecustom" value="custom"
+                                onchange="toggleGotifyMode()" <?= $usesInstanceGotify ? "" : "checked" ?> />
+                            <label for="gotifymodecustom"><?= translate('use_custom_server', $i18n) ?></label>
+                        </div>
+                    </div>
+                    <div class="settings-notes" id="instanceGotifyInfo" <?= $usesInstanceGotify ? "" : 'style="display:none"' ?>>
+                        <?php if (trim((string) $instanceGotify['values']['url']) !== ''): ?>
+                            <p>
+                                <i class="fa-solid fa-circle-info"></i>
+                                <?= translate('gotify_server', $i18n) ?>:
+                                <span><?= htmlspecialchars($instanceGotify['values']['url']) ?></span>
+                            </p>
+                            <p>
+                                <i class="fa-solid fa-circle-info"></i>
+                                <?= translate('gotify_token_stays_yours', $i18n) ?>
+                            </p>
+                        <?php else: ?>
+                            <p>
+                                <i class="fa-solid fa-triangle-exclamation"></i>
+                                <?= translate('instance_gotify_not_configured', $i18n) ?>
+                            </p>
+                        <?php endif; ?>
+                    </div>
+                    <div id="customGotifyFields" <?= $usesInstanceGotify ? 'style="display:none"' : "" ?>>
                     <div class="form-group-inline">
                         <input type="text" name="gotifyurl" id="gotifyurl" autocomplete="off"
                             placeholder="<?= translate('url', $i18n) ?>" value="<?= htmlspecialchars($notificationsGotify['url']) ?>" />
+                    </div>
                     </div>
                     <div class="form-group-inline">
                         <input type="text" name="gotifytoken" id="gotifytoken" autocomplete="off"

@@ -151,18 +151,11 @@ if ($_SERVER["REQUEST_METHOD"] === "POST" || $_SERVER["REQUEST_METHOD"] === "GET
         $notification_settings['discord_notifications'] = $discord_notifications;
     }
 
-    $query = "SELECT * FROM gotify_notifications WHERE user_id = :userId";
-    $stmt = $db->prepare($query);
-    $stmt->bindValue(':userId', $userId);
-    $result = $stmt->execute();
-    $gotify_notifications = $result->fetchArray(SQLITE3_ASSOC);
-    if ($gotify_notifications) {
-        unset($gotify_notifications['user_id']);
-        if (isset($gotify_notifications['token'])) {
-            $gotify_notifications['token'] = "********";
-        }
-        $notification_settings['gotify_notifications'] = $gotify_notifications;
-    }
+    // Resolved instance/custom view. The application token is a credential and
+    // is reported as a status, never as a value.
+    $notification_settings['gotify_notifications'] = wallos_gotify_public_payload(
+        wallos_get_effective_gotify_config($db, $userId)
+    );
 
     // Resolved instance/custom view. The auth headers may carry authorization
     // material and are reported as a status, never rendered into the page.

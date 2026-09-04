@@ -292,21 +292,41 @@ function saveNotificationsMattermostButton() {
     makeFetchCall('endpoints/notifications/savemattermostnotifications.php', data, button);
 }
 
+function getGotifyMode() {
+    const selected = document.querySelector('input[name="gotifymode"]:checked');
+    return selected ? selected.value : "custom";
+}
+
+// The instance server host is resolved server side, so the URL is not sent when
+// it is selected. The application token always goes: it stays with the user.
+function toggleGotifyMode() {
+    const usesInstance = getGotifyMode() === "instance";
+    const instanceInfo = document.getElementById("instanceGotifyInfo");
+    const customFields = document.getElementById("customGotifyFields");
+
+    if (instanceInfo) {
+      instanceInfo.style.display = usesInstance ? "" : "none";
+    }
+    if (customFields) {
+      customFields.style.display = usesInstance ? "none" : "";
+    }
+}
+
 function saveNotificationsGotifyButton() {
     const button = document.getElementById("saveNotificationsGotify");
     button.disabled = true;
-  
-    const enabled = document.getElementById("gotifyenabled").checked ? 1 : 0;
-    const gotify_url = document.getElementById("gotifyurl").value;
-    const token = document.getElementById("gotifytoken").value;
-    const ignore_ssl = document.getElementById("gotifyignoressl").checked ? 1 : 0;
-  
+
+    const mode = getGotifyMode();
     const data = {
-      enabled: enabled,
-      gotify_url: gotify_url,
-      token: token,
-      ignore_ssl: ignore_ssl
+      enabled: document.getElementById("gotifyenabled").checked ? 1 : 0,
+      token: document.getElementById("gotifytoken").value,
+      ignore_ssl: document.getElementById("gotifyignoressl").checked ? 1 : 0,
+      mode: mode
     };
+
+    if (mode === "custom") {
+      data.gotify_url = document.getElementById("gotifyurl").value;
+    }
 
     makeFetchCall('endpoints/notifications/savegotifynotifications.php', data, button);
 }
@@ -315,18 +335,18 @@ function saveNotificationsGotifyButton() {
 function testNotificationsGotifyButton() {
     const button = document.getElementById("testNotificationsGotify");
     button.disabled = true;
-  
-    const enabled = document.getElementById("gotifyenabled").checked ? 1 : 0;
-    const gotify_url = document.getElementById("gotifyurl").value;
-    const token = document.getElementById("gotifytoken").value;
-    const ignore_ssl = document.getElementById("gotifyignoressl").checked ? 1 : 0;
-  
+
+    const mode = getGotifyMode();
     const data = {
-      enabled: enabled,
-      gotify_url: gotify_url,
-      token: token,
-      ignore_ssl: ignore_ssl
+      enabled: document.getElementById("gotifyenabled").checked ? 1 : 0,
+      token: document.getElementById("gotifytoken").value,
+      ignore_ssl: document.getElementById("gotifyignoressl").checked ? 1 : 0,
+      mode: mode
     };
+
+    if (mode === "custom") {
+      data.gotify_url = document.getElementById("gotifyurl").value;
+    }
 
     makeFetchCall('endpoints/notifications/testgotifynotifications.php', data, button);
 }

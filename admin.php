@@ -50,6 +50,7 @@ $pushoverConfiguration = wallos_get_instance_pushover_config($db);
 $pushoverTokenStatus = wallos_secret_status($pushoverConfiguration, 'token');
 $ntfyConfiguration = wallos_get_instance_ntfy_config($db);
 $ntfyHeadersStatus = wallos_secret_status($ntfyConfiguration, 'headers');
+$gotifyConfiguration = wallos_get_instance_gotify_config($db);
 $languageConfiguration = wallos_get_instance_language_config($db);
 
 function oidc_input_attrs($field, $managedFields)
@@ -734,6 +735,21 @@ $loginDisabledAllowed = $userCount == 1 && $settings['registrations_open'] == 0;
                 </div>
             <?php endif; ?>
 
+            <div class="form-group">
+                <label for="instanceGotifyBaseUrl"><?= translate('gotify_server', $i18n) ?></label>
+            </div>
+            <div class="form-group-inline">
+                <input type="text" id="instanceGotifyBaseUrl" autocomplete="off" placeholder="<?= translate('url', $i18n) ?>"
+                    value="<?= htmlspecialchars($gotifyConfiguration['values']['url']) ?>"
+                    <?= wallos_managed_input_attrs($gotifyConfiguration, 'url') ?> />
+            </div>
+            <div class="settings-notes">
+                <p>
+                    <i class="fa-solid fa-circle-info"></i>
+                    <?= translate('gotify_instance_token_info', $i18n) ?>
+                </p>
+            </div>
+
             <div class="buttons">
                 <input type="submit" class="thin mobile-grow" value="<?= translate('save', $i18n) ?>"
                     id="saveInstanceIntegrations" onClick="saveInstanceIntegrationsButton()" />
@@ -748,6 +764,7 @@ $loginDisabledAllowed = $userCount == 1 && $settings['registrations_open'] == 0;
                 <?= wallos_render_managed_notes($telegramConfiguration, $i18n) ?>
                 <?= wallos_render_managed_notes($pushoverConfiguration, $i18n) ?>
                 <?= wallos_render_managed_notes($ntfyConfiguration, $i18n) ?>
+                <?= wallos_render_managed_notes($gotifyConfiguration, $i18n) ?>
             </div>
         </div>
     </section>

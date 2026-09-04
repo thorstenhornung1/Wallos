@@ -13,6 +13,7 @@ $aiConfiguration = wallos_get_instance_ai_config($db);
 $telegramConfiguration = wallos_get_instance_telegram_config($db);
 $pushoverConfiguration = wallos_get_instance_pushover_config($db);
 $ntfyConfiguration = wallos_get_instance_ntfy_config($db);
+$gotifyConfiguration = wallos_get_instance_gotify_config($db);
 
 $currencyProvider = trim((string) ($data['currency_provider'] ?? ''));
 $currencyApiKey = trim((string) ($data['currency_api_key'] ?? ''));
@@ -24,6 +25,7 @@ $telegramBotToken = trim((string) ($data['telegram_bot_token'] ?? ''));
 $pushoverAppToken = trim((string) ($data['pushover_app_token'] ?? ''));
 $ntfyBaseUrl = trim((string) ($data['ntfy_base_url'] ?? ''));
 $ntfyHeaders = trim((string) ($data['ntfy_headers'] ?? ''));
+$gotifyBaseUrl = trim((string) ($data['gotify_base_url'] ?? ''));
 
 if ($currencyProvider !== '' && wallos_parse_currency_provider($currencyProvider) === null) {
     die(json_encode([
@@ -66,6 +68,22 @@ if ($ntfyBaseUrl !== '' && empty($ntfyConfiguration['managed']['host'])) {
         !isset($parsedNtfyUrl['scheme']) ||
         !in_array(strtolower($parsedNtfyUrl['scheme']), ['http', 'https']) ||
         !filter_var($ntfyBaseUrl, FILTER_VALIDATE_URL)
+    ) {
+        die(json_encode([
+            "success" => false,
+            "message" => translate('invalid_host', $i18n)
+        ]));
+    }
+}
+
+// The Gotify server URL is validated for scheme here; the delivery request is
+// SSRF-checked where it is made — the per-user save and the notification cron.
+if ($gotifyBaseUrl !== '' && empty($gotifyConfiguration['managed']['url'])) {
+    $parsedGotifyUrl = parse_url($gotifyBaseUrl);
+    if (
+        !isset($parsedGotifyUrl['scheme']) ||
+        !in_array(strtolower($parsedGotifyUrl['scheme']), ['http', 'https']) ||
+        !filter_var($gotifyBaseUrl, FILTER_VALIDATE_URL)
     ) {
         die(json_encode([
             "success" => false,
@@ -142,6 +160,11 @@ if (empty($ntfyConfiguration['managed']['headers'])) {
     } elseif ($ntfyHeaders !== '') {
         wallos_set_instance_setting($db, 'ntfy', 'headers', $ntfyHeaders, true);
     }
+}
+
+// The Gotify server URL is not a secret and is stored as given.
+if (empty($gotifyConfiguration['managed']['url'])) {
+    wallos_set_instance_setting($db, 'gotify', 'base_url', $gotifyBaseUrl);
 }
 
 echo json_encode([

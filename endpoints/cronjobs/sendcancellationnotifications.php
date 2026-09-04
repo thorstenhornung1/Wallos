@@ -61,11 +61,17 @@ while ($userToNotify = $usersToNotify->fetchArray(SQLITE3_ASSOC)) {
 
     $gotify = [];
 
-    if ($row = $notificationSettings['gotify'][$userId] ?? null) {
-        $gotifyNotificationsEnabled = $row['enabled'];
-        $gotify['serverUrl'] = $row["url"];
-        $gotify['appToken'] = $row["token"];
-        $gotify['ignore_ssl'] = $row["ignore_ssl"];
+    // Instance server host plus this user's own application token, which is
+    // never shared across users.
+    $gotifyConfig = wallos_effective_gotify_config(
+        wallos_get_instance_gotify_config($db),
+        $notificationSettings['gotify'][$userId] ?? []
+    );
+    if (!empty($gotifyConfig['values']['enabled'])) {
+        $gotifyNotificationsEnabled = $gotifyConfig['values']['deliverable'];
+        $gotify['serverUrl'] = $gotifyConfig['values']['url'];
+        $gotify['appToken'] = $gotifyConfig['values']['token'];
+        $gotify['ignore_ssl'] = $gotifyConfig['values']['ignore_ssl'];
     }
 
     // Instance bot token plus this user's own chat id; see the same block in

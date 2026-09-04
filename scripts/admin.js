@@ -106,7 +106,8 @@ function saveInstanceIntegrationsButton() {
     pushover_app_token_remove: readCheckboxValue("instancePushoverAppTokenRemove"),
     ntfy_base_url: readFieldValue("instanceNtfyBaseUrl"),
     ntfy_headers: readFieldValue("instanceNtfyHeaders"),
-    ntfy_headers_remove: readCheckboxValue("instanceNtfyHeadersRemove")
+    ntfy_headers_remove: readCheckboxValue("instanceNtfyHeadersRemove"),
+    gotify_base_url: readFieldValue("instanceGotifyBaseUrl")
   };
 
   makeFetchCall('endpoints/admin/saveintegrationsettings.php', data, button);
