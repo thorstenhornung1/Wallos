@@ -1,5 +1,36 @@
 # Changelog
 
+## [5.11.1](https://github.com/thorstenhornung1/Wallos/releases/tag/v5.11.1) (2026-09-04)
+
+### Security
+
+* **auth:** a "remember me" cookie is checked against its token again when
+  password login is disabled. It was not.
+
+  `restoreSessionFromRememberMeCookie()` dropped the token condition whenever
+  `admin.login_disabled` was set, looking up `login_tokens` by `user_id`
+  alone. Both halves of the `wallos_login` cookie are sent by the client:
+  the username says who the bearer claims to be, and only the token says they
+  may. Without the token in the query, any row belonging to that account
+  satisfied the lookup.
+
+  **Disabling password login is a hardening step** — the one an administrator
+  takes when an identity provider is meant to be the only way in. So the
+  setting that closes an installation was the setting that opened it. An
+  installation that never turned it on was never affected; both of ours had it
+  off, which was checked before this was written rather than assumed.
+
+  The fix is that there is no branch: the token is always part of the lookup.
+  The test asserts both values of the flag, because a fix that only worked
+  while the flag was off would look identical on a default installation. It
+  also asserts that a genuine cookie still restores, since a lookup that
+  refuses everybody would pass the first half and lock every remembered
+  session out.
+
+  This code is upstream's and unchanged from it, so any Wallos installation
+  with password login disabled is affected. Reporting it there is a separate
+  decision and is not made by this release.
+
 ## [5.11.0](https://github.com/thorstenhornung1/Wallos/releases/tag/v5.11.0) (2026-09-04)
 
 ### Added

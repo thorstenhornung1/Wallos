@@ -5,6 +5,31 @@ open or a decision somebody would otherwise have to rediscover. What is already
 done lives in `CHANGELOG.md`; what is broken lives in the issue tracker. This
 file is the part that is in neither.
 
+## Embargoed — do not push until coordinated disclosure (decided 2026-09-04)
+
+There is a prepared security fix that is **held on the branch
+`security/remember-me-token` and must not reach any public remote** until
+upstream has addressed it or Thorsten's report has been acknowledged. `main`
+is deliberately clean of it so it can carry other work without leaking this.
+
+It is a fix to an authentication defect that this fork shares with
+`ellite/Wallos` unchanged, so publishing our diff would disclose an unpatched
+vulnerability in upstream's code. The mechanism, the measurement, and the
+maintainer email are **not in this repository** — they are in the iCloud file
+`wallos-security-email.md`, which is where the specifics stay. Thorsten sends
+that email himself; nothing has been sent.
+
+**The daily task:** check whether `ellite/Wallos` `main` has changed
+`includes/remember_me.php` (or otherwise addressed it). When it has — or when
+the maintainer acknowledges — the hold is over: the branch can be released,
+and at that point decide whether the public changelog entry stays terse or is
+expanded. Until then, released state stays at 5.11.0 in public; 5.11.1 exists
+only on the held branch.
+
+Checked so far:
+* 2026-09-04 — filed and held. Upstream unchanged. Both of our instances have
+  `login_disabled = 0`, so neither is currently exposed.
+
 ## The state right now
 
 Released: **5.9.0** (2026-08-31, as authorised),

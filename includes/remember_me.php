@@ -43,21 +43,36 @@ function restoreSessionFromRememberMeCookie($db)
     $userId = $userData['id'];
     $main_currency = $userData['main_currency'];
 
-    $adminQuery = "SELECT login_disabled FROM admin";
-    $adminResult = $db->query($adminQuery);
-    $adminRow = $adminResult->fetchArray(SQLITE3_ASSOC);
+    // The token is what the cookie proves. Both halves of the cookie are sent
+    // by the client and neither is trustworthy on its own: the username says
+    // who the bearer claims to be, and only the token says they may.
+    //
+    // This used to drop the token condition whenever the administrator had
+    // disabled password login, matching on user_id alone — so any row in
+    // login_tokens for that account satisfied the lookup, whatever the cookie
+    // said. Disabling password login is a hardening step, usually taken when
+    // an identity provider is the only intended way in, which made the setting
+    // that tightens an installation the one that opened it.
+    //
+    // There is no case where the token may be skipped. If a caller ever needs
+    // "is this account remembered at all", that is a different question and
+    // needs its own function rather than a branch in this one.
+    $sql = "SELECT * FROM login_tokens WHERE user_id = :userId AND token = :token";
+    $stmt = $db->prepare($sql);
 
-    if ($adminRow['login_disabled'] == 1) {
-        $sql = "SELECT * FROM login_tokens WHERE user_id = :userId";
-        $stmt = $db->prepare($sql);
-        $stmt->bindParam(':userId', $userId, SQLITE3_TEXT);
-    } else {
-        $sql = "SELECT * FROM login_tokens WHERE user_id = :userId AND token = :token";
-        $stmt = $db->prepare($sql);
-        $stmt->bindParam(':userId', $userId, SQLITE3_TEXT);
-        $stmt->bindParam(':token', $token, SQLITE3_TEXT);
+    if ($stmt === false) {
+        return false;
     }
+
+    $stmt->bindValue(':userId', (int) $userId);
+    $stmt->bindValue(':token', $token, SQLITE3_TEXT);
+
     $result = $stmt->execute();
+
+    if ($result === false) {
+        return false;
+    }
+
     $row = $result->fetchArray(SQLITE3_ASSOC);
 
     if ($row == false) {

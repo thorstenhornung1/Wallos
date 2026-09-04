@@ -15,7 +15,7 @@
 #
 # Do not edit by hand — run dev/write-audit.php --update and commit the diff.
 #
-# 116 file(s), 23 discarded result(s), 305 unchecked prepare(s), 15 unreported write(s).
+# 115 file(s), 23 discarded result(s), 302 unchecked prepare(s), 15 unreported write(s).
 
 admin.php	0	4	0
 api/admin/get_admin_settings.php	0	1	0
@@ -117,7 +117,6 @@ includes/list_subscriptions.php	0	1	0
 includes/oidc/oidc_create_user.php	2	0	0
 includes/oidc/oidc_login.php	1	2	0
 includes/oidc_settings.php	1	0	0
-includes/remember_me.php	0	3	0
 includes/ssrf_helper.php	0	1	0
 includes/stats_calculations.php	0	10	0
 includes/stats_extra_calculations.php	0	1	0

@@ -232,3 +232,60 @@ wallos_test('every login path names the token it issued in the session', functio
             $path . ' names the issued token in the session, so logout can revoke it');
     }
 });
+
+wallos_test('a remember-me cookie is refused when its token is wrong, login disabled or not', function () {
+    // The cookie is `username|token|main_currency` and every part of it is sent
+    // by the client. The username says who the bearer claims to be; only the
+    // token says they may.
+    //
+    // This lookup used to drop the token condition whenever the administrator
+    // had disabled password login, matching on user_id alone. Disabling
+    // password login is a hardening step — usually taken when an identity
+    // provider is meant to be the only way in — so the setting that tightens an
+    // installation was the one that loosened it.
+    //
+    // Both values of the flag are asserted, because a fix that only worked
+    // while the flag was off would look identical on a default installation.
+    $db = wallos_test_open_database();
+    wallos_test_create_user($db, 1, 'alice');
+
+    $stmt = $db->prepare('INSERT INTO login_tokens (user_id, token) VALUES (1, :token)');
+    $stmt->bindValue(':token', 'the-real-token');
+    assert_true($stmt->execute() !== false, 'alice has a remembered session');
+
+    foreach ([0, 1] as $loginDisabled) {
+        $update = $db->prepare('UPDATE admin SET login_disabled = :flag WHERE id = 1');
+        $update->bindValue(':flag', $loginDisabled);
+        assert_true($update->execute() !== false, 'the flag is set to ' . $loginDisabled);
+
+        $run = function ($cookie) {
+            $script = WALLOS_TEST_TMP . '/remember-' . uniqid('', true) . '.php';
+            file_put_contents($script, "<?php\n"
+                . '$_COOKIE["wallos_login"] = ' . var_export($cookie, true) . ';' . "\n"
+                . 'require ' . var_export(WALLOS_ROOT . '/includes/database/connection.php', true) . ';' . "\n"
+                . '$db = wallos_database_connect();' . "\n"
+                . 'session_start();' . "\n"
+                . 'require ' . var_export(WALLOS_ROOT . '/includes/remember_me.php', true) . ';' . "\n"
+                . 'echo "restored=" . (restoreSessionFromRememberMeCookie($db) !== false ? "yes" : "no") . "\n";');
+
+            $output = [];
+            exec('php ' . escapeshellarg($script) . ' 2>&1', $output);
+            unlink($script);
+
+            return implode("\n", $output);
+        };
+
+        $forged = $run('alice|not-the-token|1');
+        assert_contains('restored=no', $forged,
+            'a wrong token is refused with login_disabled=' . $loginDisabled . ' (got: ' . $forged . ')');
+
+        // The other half, and the reason this is two assertions rather than
+        // one: a lookup that refuses everybody would pass the check above and
+        // lock every remembered session out instead.
+        $genuine = $run('alice|the-real-token|1');
+        assert_contains('restored=yes', $genuine,
+            'the real token still works with login_disabled=' . $loginDisabled . ' (got: ' . $genuine . ')');
+    }
+
+    $db->close();
+});
