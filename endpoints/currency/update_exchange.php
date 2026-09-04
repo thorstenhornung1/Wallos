@@ -17,6 +17,9 @@ $update = wallos_update_exchange_rates_for_user($db, $userId);
 
 $db->close();
 
+// The message on success is no longer always the same sentence: a refresh can
+// work and still leave a currency the provider does not price at its old rate,
+// and that is worth saying rather than hiding behind a fixed string.
 echo $update['success']
-    ? "Rates updated successfully!"
+    ? $update['message']
     : "Exchange rates update skipped. " . $update['message'];

@@ -37,22 +37,178 @@ if (!function_exists('wallos_provider_http_get')) {
 }
 
 /**
- * Fetches exchange rates with EUR as the base currency.
+ * The base currency a provider will actually price in.
+ *
+ * fixer's free tier prices in EUR and nothing else, so EUR is not a choice
+ * there — it is the only answer, and a caller asking for another base would
+ * otherwise be silently given EUR-based numbers under a label saying
+ * otherwise. Frankfurter prices in any of its currencies, so the user's own
+ * main currency is used and the conversion step disappears with it (#140).
+ *
+ * Normalising here rather than at each call site is what lets the run cache
+ * key on a base it can trust: two callers asking fixer for different bases are
+ * asking the same question and must share one answer, while two Frankfurter
+ * users with different main currencies are not and must not.
+ *
+ * @param array       $config   Result of wallos_get_effective_currency_config().
+ * @param string|null $wanted   The base the caller would like, if it has one.
+ * @return string Upper-case ISO code.
+ */
+function wallos_currency_request_base($config, $wanted = null)
+{
+    $provider = (int) ($config['values']['provider'] ?? 0);
+    $wanted = strtoupper(trim((string) $wanted));
+
+    if ($provider !== 2 || $wanted === '') {
+        return 'EUR';
+    }
+
+    return $wanted;
+}
+
+/**
+ * Whether a provider answers in the base it was asked for.
+ *
+ * The difference decides how a caller turns a response into stored rates: an
+ * answer already in the user's own currency is written as it stands, while an
+ * EUR-based one has to be divided through by the main currency's own rate.
+ *
+ * @param array $config Result of wallos_get_effective_currency_config().
+ * @return bool
+ */
+function wallos_currency_provider_honours_base($config)
+{
+    return (int) ($config['values']['provider'] ?? 0) === 2;
+}
+
+/**
+ * Turns Frankfurter's /v2/rates answer into the code => rate map the rest of
+ * this file speaks in.
+ *
+ * v2 answers with a flat array of records — [{"base":"EUR","quote":"USD",
+ * "rate":1.1612}, ...] — rather than the {"rates":{...}} object of the
+ * retired api.frankfurter.app, which answers 301 now.
+ *
+ * An empty array is the trap worth naming: an unknown base is not an error
+ * there, it is HTTP 200 with `[]` (measured 2026-09-04 with base=BTC). That
+ * decodes to a perfectly good array, so a caller checking only is_array()
+ * calls it a success, stores nothing, and marks the rates refreshed — after
+ * which the freshness skip hides it until tomorrow. Null here, and the caller
+ * treats it as the refusal it is.
+ *
+ * @param mixed $decoded json_decode(..., true) of the response body.
+ * @return array<string, float>|null Null when the answer is not usable.
+ */
+function wallos_frankfurter_rates($decoded)
+{
+    if (!is_array($decoded) || $decoded === []) {
+        return null;
+    }
+
+    $rates = [];
+
+    foreach ($decoded as $record) {
+        if (!is_array($record) || !isset($record['quote'], $record['rate'])) {
+            // Not the shape v2 documents. One malformed record is not a reason
+            // to discard the rest, but a body made entirely of them leaves
+            // $rates empty and is refused below.
+            continue;
+        }
+
+        $rates[strtoupper((string) $record['quote'])] = (float) $record['rate'];
+    }
+
+    return $rates === [] ? null : $rates;
+}
+
+/**
+ * The explanation Frankfurter puts in its own body.
+ *
+ * Its errors are {"status":422,"message":"invalid currency: TOOLONG"}, which
+ * is neither the {"error":{"info":...}} of fixer nor anything
+ * wallos_provider_failure_message() reads. Kept here rather than added to the
+ * shared message builder so that not one word of what fixer reports changes.
+ *
+ * @param mixed $decoded json_decode(..., true) of the response body.
+ * @return string Empty when the body says nothing useful.
+ */
+function wallos_frankfurter_detail($decoded)
+{
+    if (!is_array($decoded) || !isset($decoded['message']) || !is_string($decoded['message'])) {
+        return '';
+    }
+
+    return trim($decoded['message']);
+}
+
+/**
+ * The currency codes safe to put in a Frankfurter request, and the ones left
+ * behind.
+ *
+ * Measured 2026-09-04: a single malformed code answers 422 and takes the whole
+ * request with it — `quotes=USD,TOOLONG` returns nothing at all, not USD. A
+ * currency in Wallos is three free-text fields, so an invented code is
+ * accepted and stored (#133); in the shared union request (#9) that one user's
+ * "Lunarium" would stop every other user's rates. So the malformed codes are
+ * held back and named, rather than being allowed to refuse the request for
+ * everybody.
+ *
+ * A well-formed code the provider does not price — BTC, ETH; there is no
+ * cryptocurrency in either scope of /v2/currencies — is a different matter and
+ * is not filtered here: it is simply absent from the answer, and the caller
+ * reports it by comparing what it asked for with what came back.
+ *
+ * @param string[] $codes
+ * @return array{0: string[], 1: string[]} Accepted codes, then rejected ones.
+ */
+function wallos_frankfurter_partition_codes($codes)
+{
+    $accepted = [];
+    $rejected = [];
+
+    foreach ($codes as $code) {
+        if (preg_match('/^[A-Za-z]{3}$/', (string) $code)) {
+            $accepted[] = strtoupper((string) $code);
+        } else {
+            $rejected[] = (string) $code;
+        }
+    }
+
+    return [$accepted, $rejected];
+}
+
+/**
+ * Fetches exchange rates, in EUR or in the base the provider was asked for.
  *
  * The transport flag says whether this answer cost a request over the wire —
  * false for a refused config and for answers served from the per-run cache.
  * Call sites count provider consumption by it (#106), so a cached answer
  * must never carry the mark of the request it reuses.
  *
- * @param array  $config Result of wallos_get_effective_currency_config().
- * @param string $codes  Comma separated currency codes.
- * @return array{success: bool, rates: array, usage: array{limit: int|null, used: int|null}, message: string, transport: bool}
+ * The base is part of the answer, not just of the request: a caller cannot
+ * read the rates correctly without knowing what they are relative to, and the
+ * one that assumes is the one that stores GBP-per-EUR as GBP-per-USD.
+ *
+ * @param array       $config Result of wallos_get_effective_currency_config().
+ * @param string      $codes  Comma separated currency codes.
+ * @param string|null $base   Wanted base; ignored by providers that price in EUR only.
+ * @return array{success: bool, rates: array, base: string, unpriced: string[], usage: array{limit: int|null, used: int|null}, message: string, transport: bool}
  */
-function wallos_fetch_exchange_rates($config, $codes)
+function wallos_fetch_exchange_rates($config, $codes, $base = null)
 {
+    $base = wallos_currency_request_base($config, $base);
+
     $failure = [
         'success' => false,
         'rates' => [],
+        // What the rates would have been relative to. Present on a failure as
+        // well, because a caller reporting one still wants to name the base it
+        // asked about.
+        'base' => $base,
+        // Codes the caller asked for that this answer does not price. A
+        // provider that drops them in silence is the one outcome a user cannot
+        // tell from a rate that simply did not move.
+        'unpriced' => [],
         'usage' => ['limit' => null, 'used' => null],
         'message' => '',
         'transport' => false,
@@ -83,7 +239,18 @@ function wallos_fetch_exchange_rates($config, $codes)
     // simply not looked at.
     static $cache = [];
     $requested = array_filter(array_map('trim', explode(',', $codes)));
-    $credential = $provider . '|' . $apiKey;
+
+    // The base belongs in this key, not just the credential. A cached answer
+    // is only reusable by a caller asking the same question, and since #140
+    // the base is part of the question: under a key of provider|api_key a USD
+    // user is served the EUR user's answer, and the second request never
+    // happens. Written and watched to fail before it was written: with the
+    // base left out, two users with different main currencies cost one call
+    // instead of two, both got bases=EUR, and the USD user's GBP came out at
+    // 0.740656 where the provider's own USD-based figure is 0.74065 — the
+    // division downstream corrects most of a wrong base, which is exactly what
+    // makes this the kind of defect that survives review.
+    $credential = $provider . '|' . $apiKey . '|' . $base;
 
     foreach ($cache as $entry) {
         if ($entry['credential'] === $credential
@@ -92,7 +259,32 @@ function wallos_fetch_exchange_rates($config, $codes)
         }
     }
 
-    if ($provider === 1) {
+    // Codes the request will not carry, reported alongside the ones the
+    // provider simply did not price. Only the Frankfurter arm fills this;
+    // fixer's behaviour with a malformed code is its own business and is not
+    // being changed here.
+    $malformed = [];
+
+    if ($provider === 2) {
+        // No key, no header, and https — there is nothing to authenticate and
+        // so nothing that could excuse the plaintext the direct-fixer URLs in
+        // this repo still use.
+        list($askFor, $malformed) = wallos_frankfurter_partition_codes($requested);
+
+        $apiUrl = 'https://api.frankfurter.dev/v2/rates?base=' . rawurlencode($base)
+            . '&quotes=' . rawurlencode(implode(',', $askFor));
+        $context = stream_context_create([
+            'http' => [
+                'method' => 'GET',
+                // Same reason as the arms below: without it a 422 arrives as
+                // false and is indistinguishable from the network being down
+                // (#101).
+                'ignore_errors' => true,
+            ],
+        ]);
+        $http = wallos_provider_http_get($apiUrl, $context);
+        $response = $http['body'];
+    } elseif ($provider === 1) {
         $apiUrl = "https://api.apilayer.com/fixer/latest?base=EUR&symbols=" . $codes;
         $context = stream_context_create([
             'http' => [
@@ -154,10 +346,36 @@ function wallos_fetch_exchange_rates($config, $codes)
 
     $apiData = json_decode($response, true);
 
-    if (!is_array($apiData) || !isset($apiData['rates'])) {
+    // Each provider says "here are your rates" in its own shape, and the two
+    // shapes have no key in common: fixer answers {"rates":{"USD":1.16}},
+    // Frankfurter a flat array of records. Null from either means the answer
+    // is not usable, whatever the status line said.
+    if ($provider === 2) {
+        $parsed = wallos_frankfurter_rates($apiData);
+    } else {
+        $parsed = (is_array($apiData) && isset($apiData['rates'])) ? $apiData['rates'] : null;
+    }
+
+    if ($parsed === null) {
         $failure['usage'] = $usage;
         $failure['status'] = $status;
         $failure['message'] = wallos_provider_failure_message($status, $apiData);
+
+        if ($provider === 2) {
+            // A 200 with an empty body is Frankfurter's answer to a base it
+            // does not know (measured with base=BTC). The shared message
+            // builder can only call that "returned an error", which sends the
+            // reader looking for an outage instead of at the one currency that
+            // caused it.
+            $detail = wallos_frankfurter_detail($apiData);
+
+            if ($status !== null && $status < 400 && $detail === '') {
+                $failure['message'] = 'The currency provider does not price ' . $base
+                    . ' as a base currency.';
+            } elseif ($detail !== '') {
+                $failure['message'] .= ' It said: ' . $detail;
+            }
+        }
 
         // A key the provider just rejected is rejected for every account
         // sharing it in this run. Before this, a run over N accounts with an
@@ -173,9 +391,21 @@ function wallos_fetch_exchange_rates($config, $codes)
         return $failure;
     }
 
+    // What was asked for and did not come back. Frankfurter drops a code it
+    // does not price in silence — there is no cryptocurrency in either scope
+    // of its catalogue, so BTC and ETH leave exactly this trace and no other
+    // (measured 2026-09-04). Named rather than counted, because "one currency
+    // was not priced" does not tell anyone which subscription is now wrong.
+    $unpriced = array_values(array_unique(array_merge(
+        $malformed,
+        array_diff(array_map('strtoupper', $requested), array_keys($parsed))
+    )));
+
     $fresh = [
         'success' => true,
-        'rates' => $apiData['rates'],
+        'rates' => $parsed,
+        'base' => $base,
+        'unpriced' => $unpriced,
         'usage' => $usage,
         'message' => '',
         'transport' => false,
@@ -226,7 +456,12 @@ function wallos_fetch_currency_symbols($config)
     $apiKey = (string) $config['values']['api_key'];
     $provider = (int) $config['values']['provider'];
 
-    if ($provider === 1) {
+    if ($provider === 2) {
+        $context = stream_context_create([
+            'http' => ['method' => 'GET', 'ignore_errors' => true],
+        ]);
+        $http = wallos_provider_http_get('https://api.frankfurter.dev/v2/currencies', $context);
+    } elseif ($provider === 1) {
         $context = stream_context_create([
             'http' => [
                 'method' => 'GET',
@@ -255,14 +490,64 @@ function wallos_fetch_currency_symbols($config)
     }
 
     $answer = json_decode($http['body'], true);
+    $symbols = [];
+
+    if ($provider === 2) {
+        // /v2/currencies answers with records rather than fixer's
+        // {"symbols":{...}} object: iso_code, iso_numeric, name, symbol,
+        // start_date, end_date. Only the first two fields are read here —
+        // this function answers "will the provider price this code", and the
+        // dates answer a different question badly. On an active currency
+        // end_date is the last date a rate was published (it sat at 2026-09-02
+        // to 09-04 across the catalogue, varying by source), so it is a
+        // freshness marker wearing a lifecycle date's clothes; only on the 36
+        // withdrawn entries under ?scope=all is it a real withdrawal date.
+        //
+        // The default scope is asked for deliberately: 165 active currencies,
+        // which is the set that can be priced today. ?scope=all adds 201-165
+        // entries that cannot be.
+        if (!is_array($answer) || $answer === []) {
+            $failure['message'] = wallos_provider_failure_message($status, $answer);
+            $detail = wallos_frankfurter_detail($answer);
+
+            if ($detail !== '') {
+                $failure['message'] .= ' It said: ' . $detail;
+            }
+
+            return $failure;
+        }
+
+        foreach ($answer as $record) {
+            if (!is_array($record) || !isset($record['iso_code'])) {
+                continue;
+            }
+
+            $symbols[strtoupper((string) $record['iso_code'])] =
+                (string) ($record['name'] ?? $record['iso_code']);
+        }
+
+        if ($symbols === []) {
+            $failure['message'] = wallos_provider_failure_message($status, $answer);
+
+            return $failure;
+        }
+
+        ksort($symbols);
+
+        return [
+            'success' => true,
+            'symbols' => $symbols,
+            'usage' => ['limit' => null, 'used' => null],
+            'message' => '',
+            'transport' => true,
+        ];
+    }
 
     if (!is_array($answer) || !isset($answer['symbols']) || !is_array($answer['symbols'])) {
         $failure['message'] = wallos_provider_failure_message($status, $answer);
 
         return $failure;
     }
-
-    $symbols = [];
 
     foreach ($answer['symbols'] as $code => $name) {
         $symbols[strtoupper((string) $code)] = (string) $name;
@@ -292,14 +577,21 @@ function wallos_fetch_currency_symbols($config)
  * #117 rule carried forward — symbols nobody due needs are quota spent on
  * nothing.
  *
+ * Since #140 the group is the credential AND the base. fixer prices in EUR
+ * for everybody, so that stays one group and one request. Frankfurter prices
+ * in the user's own main currency, so it is one request per distinct main
+ * currency — more calls than before against a provider that meters none of
+ * them, and in exchange every user's rates come back already in their own
+ * currency. Grouping them together instead would spend one call and answer
+ * most of them in somebody else's base.
+ *
  * @param SQLite3 $db
  * @param int[]   $userIds Every account the caller is about to refresh.
  * @param bool    $force   Include accounts already refreshed today.
  */
 function wallos_prewarm_shared_exchange_rates($db, $userIds, $force = false)
 {
-    $due = [];
-    $config = null;
+    $groups = [];
 
     foreach ($userIds as $userId) {
         if (!$force && wallos_exchange_rates_fresh($db, $userId)) {
@@ -312,46 +604,96 @@ function wallos_prewarm_shared_exchange_rates($db, $userIds, $force = false)
             continue;
         }
 
-        $due[] = (int) $userId;
-        $config = $candidate;
+        // The base this user's own refresh will ask for, so that the answer
+        // fetched here is the one their update finds in the run cache.
+        $mainCurrencyCode = wallos_user_main_currency_code($db, $userId);
+
+        // A user whose main currency cannot be read has no base to be grouped
+        // under, and folding them into EUR would put them in a group whose
+        // answer they can never use. Their own update reports the missing main
+        // currency, which is the honest place for it. Only asked of providers
+        // that price per base — under fixer everyone is in the EUR group
+        // whatever their main currency is, exactly as before.
+        if ($mainCurrencyCode === null && wallos_currency_provider_honours_base($candidate)) {
+            continue;
+        }
+
+        $base = wallos_currency_request_base($candidate, $mainCurrencyCode);
+
+        if (!isset($groups[$base])) {
+            $groups[$base] = ['config' => $candidate, 'users' => []];
+        }
+
+        $groups[$base]['users'][] = (int) $userId;
     }
 
-    // One due user's own fetch already is the union; only two or more share.
-    if (count($due) < 2) {
-        return;
-    }
+    foreach ($groups as $base => $group) {
+        // One due user's own fetch already is the union; only two or more share.
+        if (count($group['users']) < 2) {
+            continue;
+        }
 
-    $placeholders = implode(', ', array_fill(0, count($due), '?'));
-    $stmt = $db->prepare('SELECT DISTINCT code FROM currencies WHERE user_id IN ('
-        . $placeholders . ') ORDER BY code');
+        $placeholders = implode(', ', array_fill(0, count($group['users']), '?'));
+        $stmt = $db->prepare('SELECT DISTINCT code FROM currencies WHERE user_id IN ('
+            . $placeholders . ') ORDER BY code');
+
+        if ($stmt === false) {
+            continue;
+        }
+
+        foreach ($group['users'] as $index => $userId) {
+            $stmt->bindValue($index + 1, $userId, SQLITE3_INTEGER);
+        }
+
+        $result = $stmt->execute();
+        $codes = [];
+        while ($result !== false && $row = $result->fetchArray(SQLITE3_ASSOC)) {
+            $codes[] = $row['code'];
+        }
+
+        if ($codes === []) {
+            continue;
+        }
+
+        $rates = wallos_fetch_exchange_rates($group['config'], implode(',', $codes), $base);
+
+        // The union request is a real provider call like any other: counted
+        // (#106), and its quota headers recorded, whatever the per-user updates
+        // after it do.
+        if (!empty($rates['transport'])) {
+            wallos_count_currency_call($db, $group['config'], $group['users'][0]);
+            wallos_store_currency_usage($db, $group['config'], $group['users'][0], $rates['usage']);
+        }
+    }
+}
+
+/**
+ * One user's main currency code, or null when it cannot be read.
+ *
+ * Its own function because two places need the same answer now: the per-user
+ * update, which converts against it, and the prewarm, which groups by it. A
+ * second copy of the join is a second chance for the two to disagree about
+ * which base a user belongs to — and disagreeing means the prewarm fetches a
+ * base nobody then asks for, so every user pays for a call and makes their
+ * own as well.
+ *
+ * @param SQLite3 $db
+ * @param int     $userId
+ * @return string|null
+ */
+function wallos_user_main_currency_code($db, $userId)
+{
+    $stmt = $db->prepare('SELECT c.code FROM "user" u LEFT JOIN currencies c ON u.main_currency = c.id WHERE u.id = :userId');
 
     if ($stmt === false) {
-        return;
+        return null;
     }
 
-    foreach ($due as $index => $userId) {
-        $stmt->bindValue($index + 1, $userId, SQLITE3_INTEGER);
-    }
-
+    $stmt->bindValue(':userId', $userId, SQLITE3_INTEGER);
     $result = $stmt->execute();
-    $codes = [];
-    while ($result !== false && $row = $result->fetchArray(SQLITE3_ASSOC)) {
-        $codes[] = $row['code'];
-    }
+    $row = $result ? $result->fetchArray(SQLITE3_ASSOC) : false;
 
-    if ($codes === []) {
-        return;
-    }
-
-    $rates = wallos_fetch_exchange_rates($config, implode(',', $codes));
-
-    // The union request is a real provider call like any other: counted
-    // (#106), and its quota headers recorded, whatever the per-user updates
-    // after it do.
-    if (!empty($rates['transport'])) {
-        wallos_count_currency_call($db, $config, $due[0]);
-        wallos_store_currency_usage($db, $config, $due[0], $rates['usage']);
-    }
+    return ($row && !empty($row['code'])) ? (string) $row['code'] : null;
 }
 
 /**
@@ -537,17 +879,19 @@ function wallos_update_exchange_rates_for_user($db, $userId)
         return ['success' => false, 'message' => 'No currencies configured.'];
     }
 
-    $stmt = $db->prepare('SELECT c.code FROM "user" u LEFT JOIN currencies c ON u.main_currency = c.id WHERE u.id = :userId');
-    $stmt->bindValue(':userId', $userId, SQLITE3_INTEGER);
-    $result = $stmt->execute();
-    $row = $result ? $result->fetchArray(SQLITE3_ASSOC) : false;
-    $mainCurrencyCode = $row ? $row['code'] : null;
+    // The same answer the prewarm grouped this user by; see
+    // wallos_user_main_currency_code() for why it is not asked twice.
+    $mainCurrencyCode = wallos_user_main_currency_code($db, $userId);
 
     if (empty($mainCurrencyCode)) {
         return ['success' => false, 'message' => 'Main currency is not set.'];
     }
 
-    $rates = wallos_fetch_exchange_rates($config, $codes);
+    // The user's own currency, for a provider that will price in it. fixer
+    // prices in EUR whatever is asked, and wallos_currency_request_base() is
+    // what decides which of those two this is.
+    $rates = wallos_fetch_exchange_rates($config, $codes,
+        wallos_currency_request_base($config, $mainCurrencyCode));
 
     // Counted per request that went over the wire, not per account: the
     // per-run cache answers repeat asks without spending quota, and the
@@ -562,11 +906,21 @@ function wallos_update_exchange_rates_for_user($db, $userId)
         return ['success' => false, 'message' => $rates['message']];
     }
 
-    if (!isset($rates['rates'][$mainCurrencyCode]) || !$rates['rates'][$mainCurrencyCode]) {
-        return ['success' => false, 'message' => 'The provider did not return a rate for the main currency.'];
-    }
+    // What the answer is relative to, taken from the answer rather than from
+    // what this call asked for — the two differ whenever the run cache serves
+    // an earlier request, and reading rates against the wrong base is how a
+    // GBP-per-EUR figure gets stored as GBP-per-USD.
+    $answerBase = strtoupper((string) ($rates['base'] ?? 'EUR'));
 
-    $mainCurrencyToEUR = $rates['rates'][$mainCurrencyCode];
+    if ($answerBase === strtoupper((string) $mainCurrencyCode)) {
+        // Already priced in the user's own currency: no conversion, and no
+        // rounding step to go with it.
+        $divisor = 1.0;
+    } elseif (!isset($rates['rates'][$mainCurrencyCode]) || !$rates['rates'][$mainCurrencyCode]) {
+        return ['success' => false, 'message' => 'The provider did not return a rate for the main currency.'];
+    } else {
+        $divisor = $rates['rates'][$mainCurrencyCode];
+    }
 
     // One user's rates and their refresh date are one unit of work. Rates are
     // only comparable when they share a conversion base, so a refresh that
@@ -576,7 +930,11 @@ function wallos_update_exchange_rates_for_user($db, $userId)
     $updateStmt = $db->prepare('UPDATE currencies SET rate = :rate WHERE code = :code AND user_id = :userId');
 
     foreach ($rates['rates'] as $currencyCode => $rate) {
-        $exchangeRate = $currencyCode === $mainCurrencyCode ? 1.0 : $rate / $mainCurrencyToEUR;
+        // The main currency is 1.0 by definition, and that stays a local rule
+        // rather than a number read out of the response. Frankfurter does
+        // answer 1.0 for a base asked about itself, so the two agree today;
+        // agreeing today is not the same as being safe to depend on.
+        $exchangeRate = $currencyCode === $mainCurrencyCode ? 1.0 : $rate / $divisor;
 
         $updateStmt->bindValue(':rate', $exchangeRate, SQLITE3_TEXT);
         $updateStmt->bindValue(':code', $currencyCode, SQLITE3_TEXT);
@@ -632,6 +990,26 @@ function wallos_update_exchange_rates_for_user($db, $userId)
     }
 
     $db->exec('COMMIT');
+
+    // Named on the way out, because the alternative is a rate that quietly
+    // stops moving: a code the provider does not price is not an error and
+    // does not fail the refresh, but it is the one outcome that looks
+    // identical to a currency whose rate simply did not change. Intersected
+    // with this user's own codes — a covering answer from the run cache
+    // carries the whole group's misses, and naming somebody else's currency
+    // at this user would be worse than saying nothing.
+    $mine = array_map('strtoupper', array_filter(array_map('trim', explode(',', $codes))));
+    $unpriced = array_values(array_intersect($mine, $rates['unpriced'] ?? []));
+
+    if ($unpriced !== []) {
+        sort($unpriced);
+
+        return [
+            'success' => true,
+            'message' => 'Rates updated successfully! The provider does not price '
+                . implode(', ', $unpriced) . '; the previous rate was kept.',
+        ];
+    }
 
     return ['success' => true, 'message' => 'Rates updated successfully!'];
 }

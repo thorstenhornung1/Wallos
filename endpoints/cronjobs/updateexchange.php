@@ -84,7 +84,13 @@ foreach ($userRows as $userToUpdateExchange) {
 
     if ($update['success']) {
         wallos_cron_count('updated');
-        echo "Rates updated successfully!<br />";
+        // The job's own words, not a fixed string: a refresh can succeed and
+        // still have left a currency at its old rate, because the provider
+        // does not price it. Frankfurter has no cryptocurrency at all, so a
+        // household that tracks one gets a run that worked and a BTC figure
+        // that did not move — and printing "Rates updated successfully!" over
+        // that is how it stays unnoticed.
+        echo $update['message'] . "<br />";
     } else {
         wallos_cron_problem('exchange rates for user ' . $userId . ' were not updated: '
             . $update['message']);

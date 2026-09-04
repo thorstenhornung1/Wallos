@@ -337,7 +337,7 @@ function wallos_smtp_config_from_input($data)
 
 /**
  * Maps the provider spellings accepted in the environment onto the provider ids
- * Wallos stores (0 = fixer.io, 1 = apilayer.com).
+ * Wallos stores (0 = fixer.io, 1 = apilayer.com, 2 = frankfurter.dev).
  *
  * @param mixed $value
  * @return int|null
@@ -354,7 +354,29 @@ function wallos_parse_currency_provider($value)
         return 1;
     }
 
+    if (in_array($normalized, ['2', 'frankfurter', 'frankfurter.dev'], true)) {
+        return 2;
+    }
+
     return null;
+}
+
+/**
+ * Whether a provider is one an API key has to be configured for.
+ *
+ * The question every validity check below used to answer by assuming yes.
+ * Frankfurter publishes the European Central Bank's reference rates and asks
+ * for no account at all, so an empty key is not a half-finished configuration
+ * there — it is the whole of one. Getting this wrong is not a visible error:
+ * the config is marked invalid, the scheduled job reports "No currency
+ * provider configured" and exits zero, and the rates simply stop moving (#140).
+ *
+ * @param mixed $provider Provider id.
+ * @return bool
+ */
+function wallos_currency_provider_needs_key($provider)
+{
+    return (int) $provider !== 2;
 }
 
 /**
@@ -372,7 +394,8 @@ function wallos_build_instance_currency_config($db)
         $provider = wallos_parse_currency_provider(wallos_env('WALLOS_CURRENCY_PROVIDER'));
         if ($provider === null) {
             $config['valid'] = false;
-            wallos_config_add_note($config, 'Unsupported value in WALLOS_CURRENCY_PROVIDER. Use fixer or apilayer.');
+            wallos_config_add_note($config,
+                'Unsupported value in WALLOS_CURRENCY_PROVIDER. Use fixer, apilayer or frankfurter.');
             $provider = 0;
         }
         wallos_config_set($config, 'provider', $provider, 'environment', 'WALLOS_CURRENCY_PROVIDER');
@@ -387,7 +410,8 @@ function wallos_build_instance_currency_config($db)
         wallos_config_set($config, 'api_key', $apiKey, $apiKey !== '' ? 'admin' : 'default');
     }
 
-    if (trim((string) $config['values']['api_key']) === '') {
+    if (wallos_currency_provider_needs_key($config['values']['provider'])
+        && trim((string) $config['values']['api_key']) === '') {
         $config['valid'] = false;
         wallos_config_add_note($config, 'Instance currency provider API key is not configured.');
     }
@@ -428,7 +452,8 @@ function wallos_build_effective_currency_config($db, $userId)
     wallos_config_set($config, 'provider', (int) ($row['provider'] ?? 0), 'user');
     wallos_config_set($config, 'api_key', (string) ($row['api_key'] ?? ''), 'user');
 
-    if (trim((string) $config['values']['api_key']) === '') {
+    if (wallos_currency_provider_needs_key($config['values']['provider'])
+        && trim((string) $config['values']['api_key']) === '') {
         $config['valid'] = false;
         wallos_config_add_note($config, 'Custom currency provider API key is not configured.');
     }
@@ -459,7 +484,7 @@ function wallos_currency_config_from_input($provider, $apiKey)
     wallos_config_set($config, 'provider', $parsedProvider, 'user');
     wallos_config_set($config, 'api_key', trim((string) $apiKey), 'user');
 
-    if ($config['values']['api_key'] === '') {
+    if (wallos_currency_provider_needs_key($parsedProvider) && $config['values']['api_key'] === '') {
         $config['valid'] = false;
         wallos_config_add_note($config, 'Custom currency provider API key is not configured.');
     }
