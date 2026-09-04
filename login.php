@@ -159,11 +159,17 @@ if ($oidcEnabled) {
     $_SESSION['oidc_state'] = $state;
 
     // Build the OIDC authorization URL
+    //
+    // The scope list is the configured one plus offline_access, which is what
+    // asks the provider for a refresh token. Without it Wallos is handed one
+    // access token, it expires in minutes, and the provider quietly stops being
+    // able to end the session — for the remaining thirty days of it (#144).
+    require_once __DIR__ . '/includes/oidc/refresh.php';
     $params = http_build_query([
         'response_type' => 'code',
         'client_id' => $oidcSettings['client_id'],
         'redirect_uri' => $oidcSettings['redirect_url'],
-        'scope' => $oidcSettings['scopes'],
+        'scope' => wallos_oidc_authorization_scopes($oidcSettings['scopes']),
         'state' => $state,
     ]);
 
