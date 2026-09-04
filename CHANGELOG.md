@@ -1,5 +1,40 @@
 # Changelog
 
+## [5.10.3](https://github.com/thorstenhornung1/Wallos/releases/tag/v5.10.3) (2026-09-04)
+
+### Fixed
+
+* **currency:** the provider probe asks a control question first, and says
+  "inconclusive" instead of inventing an answer.
+
+  5.10.2 shipped it with the defect it was written to prevent. On the first
+  instance it ran on, the provider refused because the **monthly quota was
+  exhausted** — it would have refused any request at all — and the probe
+  recorded that as *"refused the whole request over one unknown symbol"* and
+  stored the verdict. A stored verdict stops it asking again, so a confidently
+  wrong answer would have stood permanently, to a question that was never put.
+
+  It now asks for `EUR,USD` first and only then for `EUR,USD,ZQX`. If the
+  control is refused, the refusal is about the credential and nothing is
+  recorded, so the next start asks again. If the control is priced and the
+  probe is refused for a credential-level reason — a quota reached between the
+  two, a rate limit, the provider falling over — that is inconclusive too. Only
+  a refusal that arrives *with* the unknown symbol and not without it is
+  evidence about symbols.
+
+  The control goes first for a second reason: a refusal is cached for the rest
+  of the run and served to any request whose symbols it covers, so asking for
+  the smaller list afterwards would be answered from the cache and prove
+  nothing.
+
+  Two requests instead of one, once per installation, and only where a provider
+  is configured. That is the price of the difference between a measurement and
+  a guess.
+
+* **currency:** the rate fetch reports the provider's HTTP status alongside its
+  message, so a caller can tell a refusal that belongs to the credential from
+  one that belongs to the symbols without matching on prose.
+
 ## [5.10.2](https://github.com/thorstenhornung1/Wallos/releases/tag/v5.10.2) (2026-09-04)
 
 **Deploying this release runs the test. Nothing else is required of anybody.**

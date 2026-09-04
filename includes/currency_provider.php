@@ -56,6 +56,11 @@ function wallos_fetch_exchange_rates($config, $codes)
         'usage' => ['limit' => null, 'used' => null],
         'message' => '',
         'transport' => false,
+        // The provider's own status, so a caller can tell a refusal that
+        // belongs to the credential — a quota, a rejected key, an outage —
+        // from one that belongs to the symbols it asked for. The message says
+        // the same thing in prose, and prose is not something to branch on.
+        'status' => null,
     ];
 
     if (empty($config['valid'])) {
@@ -134,6 +139,7 @@ function wallos_fetch_exchange_rates($config, $codes)
 
     if ($response === false) {
         $failure['usage'] = $usage;
+        $failure['status'] = $status;
         $failure['message'] = wallos_provider_failure_message($status, null);
 
         // Cached like a success: a provider that was unreachable a moment ago
@@ -150,6 +156,7 @@ function wallos_fetch_exchange_rates($config, $codes)
 
     if (!is_array($apiData) || !isset($apiData['rates'])) {
         $failure['usage'] = $usage;
+        $failure['status'] = $status;
         $failure['message'] = wallos_provider_failure_message($status, $apiData);
 
         // A key the provider just rejected is rejected for every account
@@ -172,6 +179,7 @@ function wallos_fetch_exchange_rates($config, $codes)
         'usage' => $usage,
         'message' => '',
         'transport' => false,
+        'status' => $status,
     ];
 
     $cache[] = ['credential' => $credential, 'codes' => $requested, 'result' => $fresh];

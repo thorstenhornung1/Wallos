@@ -66,18 +66,94 @@ if (empty($config['valid'])) {
     return;
 }
 
+/**
+ * Records a provider request the way every other one is recorded (#106).
+ *
+ * The user id is unused for an instance credential and passed as zero rather
+ * than borrowing somebody's account for the bookkeeping.
+ *
+ * @param object  $db  the boundary connection; not named after one backend
+ * @param array   $config
+ * @param array   $answer
+ */
+function wallos_probe_account($db, $config, $answer)
+{
+    if (empty($answer['transport'])) {
+        return;
+    }
+
+    wallos_count_currency_call($db, $config, 0);
+    wallos_store_currency_usage($db, $config, 0, $answer['usage']);
+}
+
+/**
+ * Whether a refusal belongs to the credential rather than to the symbols.
+ *
+ * A quota, a rejected key, an outage or a fault of the provider's own would
+ * have refused any request at all, so such an answer says nothing about
+ * unknown symbols. fixer signals an unknown code with error 202 over HTTP 200,
+ * which is exactly the case this leaves alone.
+ *
+ * @param array $answer
+ * @return bool
+ */
+function wallos_probe_refusal_is_about_the_key($answer)
+{
+    $status = $answer['status'] ?? null;
+
+    return $status === null || $status === 401 || $status === 403
+        || $status === 429 || $status >= 500;
+}
+
+// The control, and it goes first for a reason beyond method: a refusal is
+// cached for the rest of the run and served to any request whose symbols it
+// covers (#117), so asking for the smaller list afterwards would be answered
+// from the cache and prove nothing. Asked first, it is a real request, and the
+// probe below is a superset of it and so is a real request too.
+$control = wallos_fetch_exchange_rates($config, 'EUR,USD');
+wallos_probe_account($db, $config, $control);
+
+if (!$control['success']) {
+    // Nothing is learned and nothing is written down. A stored verdict stops
+    // this asking again, so storing one now would cement an answer to a
+    // question that was never put — which is how the first version of this
+    // probe reported a monthly quota as proof that unknown symbols take a
+    // request down.
+    $detail = 'inconclusive: the provider refused a request with no unknown '
+        . 'symbol in it, so its refusal is about the credential rather than '
+        . 'the symbols. Nothing was recorded; this asks again on the next '
+        . 'start. It said: ' . $control['message'];
+
+    wallos_cron_count('inconclusive');
+    error_log('[Wallos provider probe] INCONCLUSIVE: ' . $detail);
+    wallos_cron_done($detail);
+    $db->close();
+
+    return;
+}
+
 // Two real codes so the answer is about the unknown one rather than about an
 // empty request, and the unknown one last so it cannot be mistaken for the
 // base currency.
-$codes = 'EUR,USD,' . WALLOS_PROBE_CODE;
-$answer = wallos_fetch_exchange_rates($config, $codes);
+$answer = wallos_fetch_exchange_rates($config, 'EUR,USD,' . WALLOS_PROBE_CODE);
+wallos_probe_account($db, $config, $answer);
 
-if (!empty($answer['transport'])) {
-    // A real provider request like any other, counted like any other (#106).
-    // The user id is unused for an instance credential and passed as zero
-    // rather than borrowing somebody's account for the bookkeeping.
-    wallos_count_currency_call($db, $config, 0);
-    wallos_store_currency_usage($db, $config, 0, $answer['usage']);
+if (!$answer['success'] && wallos_probe_refusal_is_about_the_key($answer)) {
+    // The control worked and this did not, but the reason is one that would
+    // have refused anything — a quota reached between the two requests, a
+    // rate limit, the provider falling over. Still not an answer about
+    // symbols.
+    $detail = 'inconclusive: the control request succeeded but the probe was '
+        . 'refused for a reason that is not about the symbols. Nothing was '
+        . 'recorded; this asks again on the next start. It said: '
+        . $answer['message'];
+
+    wallos_cron_count('inconclusive');
+    error_log('[Wallos provider probe] INCONCLUSIVE: ' . $detail);
+    wallos_cron_done($detail);
+    $db->close();
+
+    return;
 }
 
 if ($answer['success']) {
@@ -94,10 +170,14 @@ if ($answer['success']) {
             . 'invented code stays at its seeded rate instead of stopping the '
             . 'refresh (issue 135 is latent, issue 133 is the live one)';
 } else {
+    // The control was priced and this was not, and the refusal is not one of
+    // the credential-level kinds. The unknown symbol is the only difference
+    // between the two requests.
     $verdict = 'refused';
-    $detail = 'the provider refused the whole request over one unknown symbol, '
-        . 'so one account can stop rate refreshes for every account sharing the '
-        . 'credential (issue 135 is reachable): ' . $answer['message'];
+    $detail = 'the same request succeeded without the unknown symbol and was '
+        . 'refused with it, so one account can stop rate refreshes for every '
+        . 'account sharing the credential (issue 135 is reachable): '
+        . $answer['message'];
 }
 
 wallos_set_instance_setting($db, 'currency', 'probe_verdict', $verdict);
