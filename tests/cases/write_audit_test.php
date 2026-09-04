@@ -121,6 +121,51 @@ wallos_test('prose about execute() is not a call to it', function () {
     assert_same(0, count($comments['discarded']), 'comments and strings are not code');
 });
 
+wallos_test('the query is followed to where it was written', function () {
+    // Almost no call passes a literal: this codebase writes $sql = "..." and
+    // then prepares $sql. A classifier that reads only the first token inside
+    // prepare() answers "unknown" for nearly all of them, and unknown counts as
+    // a write — safe for the ratchet, and the wrong number for a decision. It
+    // had the report claiming almost every unchecked prepare changes data when
+    // most of them only read.
+    $reading = write_audit_scan_snippet('
+        $sql = "SELECT * FROM subscriptions WHERE user_id = :id";
+        $statement = $db->prepare($sql);
+        $statement->bindValue(":id", 1);
+    ');
+
+    assert_same(0, $reading['writes'], 'a SELECT reached through a variable only reads');
+
+    $writing = write_audit_scan_snippet('
+        $sql = "UPDATE subscriptions SET name = :name WHERE id = :id";
+        $statement = $db->prepare($sql);
+        $statement->bindValue(":id", 1);
+    ');
+
+    assert_same(1, $writing['writes'], 'and an UPDATE reached the same way still counts');
+
+    // Concatenation is the ordinary shape for a query with a variable column
+    // list, so the classification cannot depend on the whole query being one
+    // literal.
+    $assembled = write_audit_scan_snippet('
+        $sql = "UPDATE settings SET " . implode(", ", $fields) . " WHERE user_id = :id";
+        $statement = $db->prepare($sql);
+        $statement->bindValue(":id", 1);
+    ');
+
+    assert_same(1, $assembled['writes'], 'the first literal of the query is enough');
+
+    // Unknown still counts as a write. The direction matters: this number
+    // decides nothing on its own, but guessing "read" for something unreadable
+    // would understate the one thing issue #87 is about.
+    $unknown = write_audit_scan_snippet('
+        $statement = $db->prepare(build_query($table));
+        $statement->bindValue(":id", 1);
+    ');
+
+    assert_same(1, $unknown['writes'], 'a query this cannot read is assumed to write');
+});
+
 wallos_test('a write nobody read, and a response that says it worked', function () {
     $found = write_audit_scan_snippet('
         $statement = $db->prepare("DELETE FROM css WHERE user_id = 1");

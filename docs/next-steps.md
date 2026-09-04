@@ -400,10 +400,23 @@ warning threshold should sit. The issue stays open for exactly that.
 ### 4. The parts of closed-enough issues that are still open
 
 * **#87** — 23 discarded write results and 305 unchecked prepares remain, from
-  66 and 368. The ratchet holds the number. The open design question is whether
-  the boundary should offer a write returning rows-affected-or-null; nearly all
-  of the remainder carry a statement that changes data, which is the number to
-  decide against.
+  66 and 368, and since 2026-09-04 a third number: **15 unreported writes**, a
+  write nobody read followed on the same branch by a response claiming success.
+  The ratchet holds all three.
+
+  The open design question is whether the boundary should offer a write
+  returning rows-affected-or-null. **The number to decide against is not 305.**
+  This entry used to say "nearly all of the remainder carry a statement that
+  changes data", which came from the audit's own classifier — and that
+  classifier could not follow `$sql = "..."; $db->prepare($sql)`, which is 282
+  of 459 call sites here. It answered "unknown" for almost all of them, and
+  unknown counted as a write. Corrected: **94 of the 305 carry a write, 211
+  only read.** Two independent measurements agree on that figure.
+
+  A SELECT whose prepare is unchecked is a different and milder defect: on PHP
+  8.3 `false->bindValue()` is a fatal, so it crashes loudly rather than
+  reporting a success that did not happen. The 15 are the number issue #87 is
+  actually about.
 
 ### 5. Milestone K is closed (2026-08-30)
 

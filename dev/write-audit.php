@@ -208,10 +208,25 @@ function write_audit_starts_statement($token, array $tokens = [], $index = -1)
  * @param array|null $token the first token inside prepare(
  * @return bool
  */
-function write_audit_statement_writes($token)
+function write_audit_statement_writes($token, array $sqlKinds = [])
 {
     if ($token === null) {
         return true;
+    }
+
+    // The query is almost never a literal in the call. This codebase writes
+    // $sql = "..."; $db->prepare($sql); — 282 of 459 call sites — so a
+    // classifier that only reads the first token inside prepare() answers
+    // "unknown" for nearly all of them, and unknown counts as a write.
+    //
+    // That is the right direction for a ratchet and the wrong number for a
+    // decision. It made the report claim almost every unchecked prepare
+    // carries a statement that changes data, when following the assignment
+    // says most of them only read. The figure was being used to argue issue
+    // #87's open design question, which is what a wrong number is dangerous
+    // for.
+    if ($token[0] === T_VARIABLE) {
+        return $sqlKinds[$token[1]] ?? true;
     }
 
     if ($token[0] !== T_CONSTANT_ENCAPSED_STRING) {
@@ -786,8 +801,20 @@ function write_audit_scan($source)
     $discarded = [];
     $prepared = [];
 
+    $sqlKinds = [];
+
     for ($i = 0; $i < $count; $i++) {
         $token = $tokens[$i];
+
+        // $sql = "UPDATE ..." — the first literal of the right-hand side, so a
+        // query assembled by concatenation is still classified. A name once
+        // seen holding a write keeps that answer, or a query built in two
+        // branches is read as whichever branch happens to come last.
+        if ($token[0] === T_VARIABLE && ($tokens[$i + 1][0] ?? null) === '='
+            && ($tokens[$i + 2][0] ?? null) === T_CONSTANT_ENCAPSED_STRING
+            && ($sqlKinds[$token[1]] ?? false) !== true) {
+            $sqlKinds[$token[1]] = write_audit_statement_writes($tokens[$i + 2]);
+        }
 
         if ($token[0] !== T_OBJECT_OPERATOR) {
             continue;
@@ -833,7 +860,7 @@ function write_audit_scan($source)
             if ($assignment !== null && $assignment[0] === '='
                 && $variable !== null && $variable[0] === T_VARIABLE) {
                 $prepared[$variable[1]][] = ['line' => $name[2],
-                    'writes' => write_audit_statement_writes($tokens[$i + 3] ?? null)];
+                    'writes' => write_audit_statement_writes($tokens[$i + 3] ?? null, $sqlKinds)];
             }
         }
     }
