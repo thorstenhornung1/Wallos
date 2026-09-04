@@ -4,7 +4,9 @@ This API Endpoint accepts POST requests only.
 It receives the following parameters:
 - api_key: the API key of the user (for Wallos authentication).
 - fixer_api_key: the Fixer.io or APILayer API key to save (optional; if empty/omitted, clears the key).
-- provider: the provider type (optional; '0' for Fixer.io, '1' for APILayer.com, defaults to '0').
+  Not read for provider '2', which has no key.
+- provider: the provider type (optional; '0' for Fixer.io, '1' for APILayer.com,
+  '2' for Frankfurter.dev, defaults to '0').
 
 It returns a JSON object with the following properties:
 - success: whether the request was successful (boolean).
@@ -64,15 +66,72 @@ $userId = $user['id'];
 $fixerApiKey = isset($_POST['fixer_api_key']) ? trim($_POST['fixer_api_key']) : '';
 $provider = $_POST['provider'] ?? '0';
 
-if (!in_array($provider, ['0', '1', 0, 1], true)) {
+if (!in_array($provider, ['0', '1', '2', 0, 1, 2], true)) {
     echo json_encode([
         'success' => false,
         'title' => 'Invalid provider',
-        'message' => 'Provider must be 0 (Fixer.io) or 1 (APILayer.com).'
+        'message' => 'Provider must be 0 (Fixer.io), 1 (APILayer.com) or 2 (Frankfurter.dev).'
     ]);
     exit;
 }
 $provider = intval($provider);
+
+// Frankfurter needs no account and no key, so there is no credential to
+// validate and an empty key is the whole of a configuration rather than a
+// half-finished one — which is why this comes before the empty-key branch
+// below, whose job is to clear a credential that does exist (#140).
+//
+// provider_mode is written explicitly. It defaults to 'instance' (migration
+// 000055), and a row saying "use Frankfurter" under a mode that means "use
+// whatever the instance is configured with" would be stored, reported as
+// saved, and then ignored.
+if ($provider === 2) {
+    $removeStmt = $db->prepare("DELETE FROM fixer WHERE user_id = :userId");
+    $removed = false;
+
+    if ($removeStmt !== false) {
+        $removeStmt->bindValue(':userId', $userId, SQLITE3_INTEGER);
+        $removed = $removeStmt->execute() !== false;
+    }
+
+    if (!$removed) {
+        error_log('Wallos set_fixer: could not remove the previous provider key for user '
+            . $userId . ': ' . $db->lastErrorMsg());
+
+        echo json_encode([
+            'success' => false,
+            'title' => 'Database error',
+            'message' => 'The previous provider key could not be replaced.',
+        ]);
+
+        $db->close();
+        exit;
+    }
+
+    $insertStmt = $db->prepare("INSERT INTO fixer (api_key, provider, provider_mode, user_id)
+                                VALUES ('', 2, 'custom', :userId)");
+    $stored = false;
+
+    if ($insertStmt !== false) {
+        $insertStmt->bindValue(':userId', $userId, SQLITE3_INTEGER);
+        $stored = $insertStmt->execute() !== false;
+    }
+
+    echo json_encode($stored
+        ? [
+            'success' => true,
+            'title' => 'Currency provider updated',
+            'message' => 'Frankfurter is selected. It needs no API key.',
+        ]
+        : [
+            'success' => false,
+            'title' => 'Database error',
+            'message' => 'Failed to save the currency provider.',
+        ]);
+
+    $db->close();
+    exit;
+}
 
 // If key is empty, clear the settings
 if ($fixerApiKey === '') {
