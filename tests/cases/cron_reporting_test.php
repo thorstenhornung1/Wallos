@@ -459,6 +459,33 @@ wallos_test('every job the page describes actually opens a run', function () {
     }
 });
 
+wallos_test('a temporary crontab line is removed by the release that says so', function () {
+    // 5.10.1 carries one extra rate refresh, at 08:30 on 4 September, so that
+    // the provider test runs on the day it was decided. It is deliberate, it is
+    // dated, and its removal is written into the line itself — which is worth
+    // nothing unless something checks.
+    //
+    // So this is the check: the marker may exist only while the version is the
+    // one that shipped it. The first bump past 5.10.1 fails here until the line
+    // is gone, which turns "remember to take it out" into a failing test.
+    $marker = 'REMOVE IN 5.10.2';
+    $crontab = file_get_contents(WALLOS_ROOT . '/cronjobs');
+
+    if (strpos($crontab, $marker) === false) {
+        // Already removed, which is the state this case is steering towards.
+        assert_true(true, 'no temporary crontab line is present');
+
+        return;
+    }
+
+    $version = file_get_contents(WALLOS_ROOT . '/includes/version.php');
+
+    assert_contains('"v5.10.1"', $version,
+        'the temporary 08:30 run is still in the crontab, so the version must '
+        . 'still be the one that shipped it — remove the line marked "'
+        . $marker . '" before releasing anything else');
+});
+
 wallos_test('every scheduled job asks for its exit status', function () {
     $lines = preg_split('/\R/', file_get_contents(WALLOS_ROOT . '/cronjobs'));
     $jobLines = 0;

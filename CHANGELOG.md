@@ -1,5 +1,32 @@
 # Changelog
 
+## [5.10.1](https://github.com/thorstenhornung1/Wallos/releases/tag/v5.10.1) (2026-09-04)
+
+**A dated, temporary change. 5.10.2 takes it back out.**
+
+### Added
+
+* **cron:** one extra exchange rate refresh, at 08:30 on 4 September only.
+
+  It exists to run a provider test on the day it was decided rather than the
+  morning after. An invented currency code is added to one account, and this
+  run answers a question the rate endpoint cannot: whether the provider drops
+  an unknown symbol quietly or refuses the whole request. The second would mean
+  one account's typo stops rate refreshes for every account sharing the
+  instance credential; the first would confirm the quieter case — a rate of 1
+  that nothing on screen tells apart from a correct number.
+
+  It has to be a scheduled run rather than a hand-triggered one. The daily job
+  skips any account already refreshed today, so anything started after 02:00
+  skips them all, and forcing past that exercises a different path than the one
+  under test.
+
+  **Upgrading past this release removes it, and a test enforces that.**
+  `tests/cases/cron_reporting_test.php` fails the moment the version moves off
+  5.10.1 while the line is still in the crontab, naming the marker to delete.
+  A temporary change whose removal depends on somebody remembering is not
+  temporary; this one is a failing test instead.
+
 ## [5.10.0](https://github.com/thorstenhornung1/Wallos/releases/tag/v5.10.0) (2026-09-04)
 
 A minor bump rather than a patch, and for one reason: **who may reach a private
