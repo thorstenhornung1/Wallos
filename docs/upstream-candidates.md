@@ -180,6 +180,22 @@ there: `dev/secrets/` went into a commit that way on 2026-09-03 and had to be
 taken back out before the branch was pushed. The values were placeholders, so
 nothing leaked, and the next ones might not be. Add named paths.
 
+It happened a second time the next morning, on
+`upstream-fix/skip-fresh-rates`, and that time the agent worktrees under
+`.claude/` came along too — after this note was written, by the person who
+wrote it. A rule that lives only in a document is a rule that gets broken while
+concentrating on something else. Until something enforces it, the habit that
+actually works is to name the files:
+
+```sh
+git add includes/foo.php tests/cases/foo_test.php
+git diff --stat upstream/main     # before pushing, every time
+```
+
+That `--stat` is the cheap catch. A branch touching more files than the change
+touches is either this mistake or the line-ending one below, and both are
+obvious in one line of output.
+
 ### 1. `registration.php` — finish the XSS fix he started
 
 Ready: `upstream-fix/registration-theme-xss`, +4/−3.
