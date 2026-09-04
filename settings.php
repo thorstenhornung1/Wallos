@@ -1321,11 +1321,33 @@ if ($budgetPeriodAnchorDate === '1970-01-01' || !preg_match('/^\d{4}-\d{2}-\d{2}
                 // own count of the requests it sent, the date the rates last
                 // refreshed, and — plainly — that the quota is gone, apply
                 // wherever they are true (#106).
+                //
+                // The two warning lines escalate before the quota is gone, off
+                // the figure already fetched and never a fresh request: running
+                // low at 75%, nearly gone at 90%. A stalled-refresh line and a
+                // daily-limit line make the two ways a refresh stops legible
+                // apart from each other and from "everything is fine" (#106).
                 ?>
                 <div class="settings-notes">
+                    <p id="fixerUsageHighWarning" style="display: none;">
+                        <i class="fa-solid fa-triangle-exclamation"></i>
+                        <?= translate('currency_quota_high_warning', $i18n) ?>
+                    </p>
+                    <p id="fixerUsageWarning" style="display: none;">
+                        <i class="fa-solid fa-circle-info"></i>
+                        <?= translate('currency_quota_warning', $i18n) ?>
+                    </p>
                     <p id="fixerUsageExhausted" style="display: none;">
                         <i class="fa-solid fa-triangle-exclamation"></i>
                         <?= translate('currency_quota_exhausted', $i18n) ?>
+                    </p>
+                    <p id="fixerUsageDailyReached" style="display: none;">
+                        <i class="fa-solid fa-triangle-exclamation"></i>
+                        <?= translate('currency_daily_limit_reached', $i18n) ?>
+                    </p>
+                    <p id="fixerUsageStalled" style="display: none;">
+                        <i class="fa-solid fa-triangle-exclamation"></i>
+                        <?= translate('currency_refresh_stalled', $i18n) ?>
                     </p>
                     <p id="fixerUsageUnknown" style="display: none;">
                         <i class="fa-solid fa-circle-info"></i>
@@ -1334,6 +1356,9 @@ if ($budgetPeriodAnchorDate === '1970-01-01' || !preg_match('/^\d{4}-\d{2}-\d{2}
                     <p id="fixerUsageNone" style="display: none;">
                         <i class="fa-solid fa-circle-info"></i>
                         <?= translate('currency_provider_without_quota', $i18n) ?>
+                    </p>
+                    <p id="fixerUsageDaily" style="display: none;">
+                        <?= translate('currency_daily_requests_used', $i18n) ?>: <span id="fixerUsageDailyCount"></span>
                     </p>
                     <p id="fixerUsageLocal" style="display: none;">
                         <?= translate('currency_requests_sent', $i18n) ?>: <span id="fixerUsageLocalCount"></span>

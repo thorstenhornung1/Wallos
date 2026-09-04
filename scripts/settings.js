@@ -1233,15 +1233,30 @@ function loadFixerUsage() {
       const hasQuota = data.has_quota !== false;
       const reportsQuota = !!data.provider_reports;
       const quotaKnown = reportsQuota && !!data.total;
+      const exhausted = !!data.exhausted;
+
+      // The escalation, computed from the figure already fetched — never a
+      // fresh request (#106). Running low at 75%, nearly gone at 90%, gone at
+      // the limit. It stays "normal" when there is no figure, which keeps
+      // Frankfurter (no quota) and direct fixer (no headers) untouched.
+      let level = "normal";
 
       if (quotaKnown) {
         const percent = Math.min(100, Math.round((data.used / data.total) * 100));
         document.getElementById("fixerUsageCount").textContent = `${data.used} / ${data.total}`;
 
+        if (exhausted) {
+          level = "exhausted";
+        } else if (percent >= 90) {
+          level = "high";
+        } else if (percent >= 75) {
+          level = "warn";
+        }
+
         const fill = document.getElementById("fixerUsageFill");
         fill.style.width = percent + "%";
-        fill.classList.toggle("warn", percent >= 80 && percent < 95);
-        fill.classList.toggle("danger", percent >= 95);
+        fill.classList.toggle("warn", level === "warn");
+        fill.classList.toggle("danger", level === "high" || level === "exhausted");
 
         label.style.display = "";
         track.style.display = "";
@@ -1254,9 +1269,27 @@ function loadFixerUsage() {
         track.style.display = "none";
       }
 
-      showLine("fixerUsageExhausted", !!data.exhausted);
+      showLine("fixerUsageWarning", level === "warn");
+      showLine("fixerUsageHighWarning", level === "high");
+      showLine("fixerUsageExhausted", exhausted);
       showLine("fixerUsageUnknown", hasQuota && !quotaKnown);
       showLine("fixerUsageNone", !hasQuota);
+
+      // The daily limit is a state of its own: a day's limit reached clears by
+      // tomorrow's cron, where an exhausted month does not (#106). Shown only
+      // when the provider reported a daily figure.
+      const dailyKnown = data.total_day !== null && data.total_day !== undefined;
+      if (dailyKnown) {
+        document.getElementById("fixerUsageDailyCount").textContent = `${data.used_day} / ${data.total_day}`;
+      }
+      showLine("fixerUsageDaily", dailyKnown);
+      showLine("fixerUsageDailyReached", !!data.daily_limit_reached);
+
+      // A refresh that stopped is legible on its own, distinct from a healthy
+      // page; the lines above name the reason when it is a quota or a daily
+      // limit. A rejected key is the one reason not derivable from stored data
+      // without per-user failure storage, which #106 left deferred.
+      showLine("fixerUsageStalled", !!data.rates_stale);
 
       const hasLocalCount = data.local_calls !== null && data.local_calls !== undefined;
       if (hasLocalCount) {

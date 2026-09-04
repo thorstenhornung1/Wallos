@@ -192,7 +192,7 @@ function wallos_frankfurter_partition_codes($codes)
  * @param array       $config Result of wallos_get_effective_currency_config().
  * @param string      $codes  Comma separated currency codes.
  * @param string|null $base   Wanted base; ignored by providers that price in EUR only.
- * @return array{success: bool, rates: array, base: string, unpriced: string[], usage: array{limit: int|null, used: int|null}, message: string, transport: bool}
+ * @return array{success: bool, rates: array, base: string, unpriced: string[], usage: array{limit: int|null, used: int|null, limit_day: int|null, used_day: int|null}, message: string, transport: bool}
  */
 function wallos_fetch_exchange_rates($config, $codes, $base = null)
 {
@@ -209,7 +209,11 @@ function wallos_fetch_exchange_rates($config, $codes, $base = null)
         // provider that drops them in silence is the one outcome a user cannot
         // tell from a rate that simply did not move.
         'unpriced' => [],
-        'usage' => ['limit' => null, 'used' => null],
+        // The monthly pair apilayer reports, and the daily pair beside it. A
+        // daily limit reached is not a monthly quota exhausted — the first
+        // clears by tomorrow's cron, the second does not — so the two are
+        // carried apart (#106).
+        'usage' => ['limit' => null, 'used' => null, 'limit_day' => null, 'used_day' => null],
         'message' => '',
         'transport' => false,
         // The provider's own status, so a caller can tell a refusal that
@@ -227,7 +231,7 @@ function wallos_fetch_exchange_rates($config, $codes, $base = null)
 
     $apiKey = (string) $config['values']['api_key'];
     $provider = (int) $config['values']['provider'];
-    $usage = ['limit' => null, 'used' => null];
+    $usage = ['limit' => null, 'used' => null, 'limit_day' => null, 'used_day' => null];
 
     // One shared credential should not spend one provider request per user.
     // Within a run, an earlier answer serves any request whose codes it
@@ -299,20 +303,35 @@ function wallos_fetch_exchange_rates($config, $codes, $base = null)
         $http = wallos_provider_http_get($apiUrl, $context);
         $response = $http['body'];
 
-        // apilayer reports the monthly quota in its response headers; keep it so
-        // the usage bar does not cost an extra API request.
+        // apilayer reports the quota in its response headers; keep it so the
+        // usage bar does not cost an extra API request. Both the monthly and
+        // the daily pair arrive on the same response, so capturing the daily
+        // one alongside the monthly one is free — and worth it, because the
+        // two are different situations (#106): a daily limit reached resolves
+        // by tomorrow's cron, an exhausted month does not.
         if (is_array($http['headers'])) {
             $limit = null;
             $remaining = null;
+            $limitDay = null;
+            $remainingDay = null;
             foreach ($http['headers'] as $header) {
                 if (stripos($header, 'x-ratelimit-limit-month:') === 0) {
                     $limit = (int) trim(substr($header, strlen('x-ratelimit-limit-month:')));
                 } elseif (stripos($header, 'x-ratelimit-remaining-month:') === 0) {
                     $remaining = (int) trim(substr($header, strlen('x-ratelimit-remaining-month:')));
+                } elseif (stripos($header, 'x-ratelimit-limit-day:') === 0) {
+                    $limitDay = (int) trim(substr($header, strlen('x-ratelimit-limit-day:')));
+                } elseif (stripos($header, 'x-ratelimit-remaining-day:') === 0) {
+                    $remainingDay = (int) trim(substr($header, strlen('x-ratelimit-remaining-day:')));
                 }
             }
             if ($limit !== null && $remaining !== null) {
-                $usage = ['limit' => $limit, 'used' => $limit - $remaining];
+                $usage['limit'] = $limit;
+                $usage['used'] = $limit - $remaining;
+            }
+            if ($limitDay !== null && $remainingDay !== null) {
+                $usage['limit_day'] = $limitDay;
+                $usage['used_day'] = $limitDay - $remainingDay;
             }
         }
     } else {
@@ -895,12 +914,16 @@ function wallos_update_exchange_rates_for_user($db, $userId)
 
     // Counted per request that went over the wire, not per account: the
     // per-run cache answers repeat asks without spending quota, and the
-    // counter has to agree with what the provider saw (#106).
+    // counter has to agree with what the provider saw (#106). The usage stamp
+    // follows the same rule: a cached answer (transport === false) carries the
+    // figures of the request it reuses, so storing them would re-stamp "last
+    // checked" to now for a figure this process obtained earlier — the
+    // stale-figure-looks-current failure #106 is named for. Only stamp when
+    // this call actually received a response.
     if (!empty($rates['transport'])) {
         wallos_count_currency_call($db, $config, $userId);
+        wallos_store_currency_usage($db, $config, $userId, $rates['usage']);
     }
-
-    wallos_store_currency_usage($db, $config, $userId, $rates['usage']);
 
     if (!$rates['success']) {
         return ['success' => false, 'message' => $rates['message']];
@@ -1026,13 +1049,21 @@ function wallos_update_exchange_rates_for_user($db, $userId)
  * @param SQLite3 $db
  * @param array   $config Result of wallos_get_effective_currency_config().
  * @param int     $userId
- * @param array   $usage  ['limit' => int|null, 'used' => int|null]
+ * @param array   $usage  ['limit' => int|null, 'used' => int|null, 'limit_day' => int|null, 'used_day' => int|null]
  */
 function wallos_store_currency_usage($db, $config, $userId, $usage)
 {
     if ($usage['limit'] === null || $usage['used'] === null) {
         return;
     }
+
+    // The daily pair, when the provider sent it. Stored beside the monthly one
+    // and under the same timestamp — it rode in on the same response — so the
+    // settings page can tell a day's limit from a month's quota (#106). Absent
+    // (a provider that reports no daily headers) it is simply not written,
+    // rather than clobbering an earlier figure with null.
+    $usedDay = $usage['used_day'] ?? null;
+    $limitDay = $usage['limit_day'] ?? null;
 
     $updatedAt = date('Y-m-d H:i:s');
 
@@ -1041,6 +1072,11 @@ function wallos_store_currency_usage($db, $config, $userId, $usage)
         wallos_set_instance_setting($db, 'currency', 'usage_limit', (string) $usage['limit']);
         wallos_set_instance_setting($db, 'currency', 'usage_updated_at', $updatedAt);
 
+        if ($usedDay !== null && $limitDay !== null) {
+            wallos_set_instance_setting($db, 'currency', 'usage_used_day', (string) $usedDay);
+            wallos_set_instance_setting($db, 'currency', 'usage_limit_day', (string) $limitDay);
+        }
+
         return;
     }
 
@@ -1048,7 +1084,17 @@ function wallos_store_currency_usage($db, $config, $userId, $usage)
         return;
     }
 
-    $stmt = $db->prepare('UPDATE fixer SET usage_used = :used, usage_limit = :limit, usage_updated_at = :updatedAt WHERE user_id = :userId');
+    // Day columns arrived in migration 000075; a database from before it keeps
+    // storing the month alone rather than failing on a column that is not there.
+    $storeDay = $usedDay !== null && $limitDay !== null
+        && $db->columnExists('fixer', 'usage_used_day')
+        && $db->columnExists('fixer', 'usage_limit_day');
+
+    $sql = $storeDay
+        ? 'UPDATE fixer SET usage_used = :used, usage_limit = :limit, usage_used_day = :usedDay, usage_limit_day = :limitDay, usage_updated_at = :updatedAt WHERE user_id = :userId'
+        : 'UPDATE fixer SET usage_used = :used, usage_limit = :limit, usage_updated_at = :updatedAt WHERE user_id = :userId';
+
+    $stmt = $db->prepare($sql);
 
     if ($stmt === false) {
         error_log('Wallos: could not record provider quota for user ' . $userId . ': '
@@ -1061,6 +1107,14 @@ function wallos_store_currency_usage($db, $config, $userId, $usage)
     $stmt->bindValue(':limit', $usage['limit'], SQLITE3_INTEGER);
     $stmt->bindValue(':updatedAt', $updatedAt, SQLITE3_TEXT);
     $stmt->bindValue(':userId', $userId, SQLITE3_INTEGER);
+
+    if ($storeDay) {
+        // Bare integer casts rather than the typed bind constants: new code
+        // keeps the boundary the audit is shrinking as narrow as it can
+        // (#20, #41).
+        $stmt->bindValue(':usedDay', (int) $usedDay);
+        $stmt->bindValue(':limitDay', (int) $limitDay);
+    }
 
     // Quota is what the settings page shows to explain why refreshes stopped
     // working. A number that silently stayed where it was is worse than none.
