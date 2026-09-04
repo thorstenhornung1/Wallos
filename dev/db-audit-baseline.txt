@@ -11,7 +11,7 @@
 #
 # Do not edit by hand — run dev/db-audit.sh --update and commit the diff.
 #
-# total: 1569 matches in 239 file(s)
+# total: 1568 matches in 239 file(s)
 admin.php	5
 api/admin/get_admin_settings.php	1
 api/admin/set_admin_settings.php	2
@@ -138,7 +138,7 @@ includes/list_subscriptions.php	2
 includes/mailer.php	2
 includes/notification_settings.php	4
 includes/oidc/admin_role_sync.php	1
-includes/oidc/backchannel.php	14
+includes/oidc/backchannel.php	13
 includes/oidc/diagnostics.php	2
 includes/oidc/handle_oidc_callback.php	8
 includes/oidc/oidc_create_user.php	18

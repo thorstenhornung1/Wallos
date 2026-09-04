@@ -526,18 +526,12 @@ wallos_test('the single-user no-login mode cannot be enabled while OIDC is enabl
     // Enabling the no-login mode with OIDC on is refused; with OIDC off it is
     // allowed — the positive control, or the guard would just be "refuse always".
     //
-    // Driven through the whole api/admin/set_admin_settings.php endpoint, which
-    // reads its settings with `SELECT * FROM 'admin'` — a single-quoted
-    // identifier that is a string literal, and a syntax error, on PostgreSQL.
-    // That is a pre-existing incompatibility in the endpoint, unrelated to the
-    // guard this case checks and to Part B, so the case runs where the endpoint
-    // runs: SQLite. The guard itself (a comparison of the OIDC configuration)
-    // is backend-agnostic.
-    if (wallos_test_skip_unless_sqlite(
-        "drives set_admin_settings.php, whose pre-existing SELECT * FROM 'admin' is not valid on PostgreSQL")) {
-        return;
-    }
-
+    // Driven through the whole api/admin/set_admin_settings.php endpoint. It used
+    // to read its settings with `SELECT * FROM 'admin'` — a single-quoted string
+    // literal that is a syntax error on PostgreSQL (#147) — so this case had to
+    // stand aside there. That is fixed now (the endpoint quotes "admin"), so the
+    // case runs on both backends: the guard itself is a comparison of the OIDC
+    // configuration and was always backend-agnostic.
     $db = wallos_test_open_database();
     wallos_test_create_user($db, 1, 'alice');
 
