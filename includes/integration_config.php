@@ -697,6 +697,493 @@ function wallos_ai_settings_from_config($config)
 }
 
 /* -------------------------------------------------------------------------
+   Shared notification integrations
+
+   The same instance/custom split milestone B applied to SMTP, currency and AI,
+   now for the notification providers where one half of the credential belongs
+   to the administrator and the other half is a personal destination:
+
+       Telegram   instance bot token          + per-user chat id
+       Pushover   instance application token   + per-user user key
+       ntfy       instance server + auth       + per-user topic
+       Gotify     instance host               + per-user app token
+
+   The instance half resolves exactly like the milestone B secrets — an
+   environment secret or file wins, then the admin database, then nothing — and
+   is never written back to the per-user row. The personal half always stays
+   with the user, so one account's identifier can never reach another's
+   delivery. An effective config additionally carries "enabled" (the user's own
+   flag) and "deliverable" (both halves present), because a usable credential is
+   not the same as a notification the user asked to receive.
+   ------------------------------------------------------------------------- */
+
+/**
+ * Reads one per-user notification row.
+ *
+ * Bound as an integer and fetched without naming a fetch constant, so the
+ * effective resolvers below add nothing to the SQLite boundary this file is
+ * already measured against. The table name is a literal from this file, never a
+ * request value.
+ *
+ * @param WallosDatabase $db
+ * @param string         $table
+ * @param int            $userId
+ * @return array Empty when there is no row.
+ */
+function wallos_config_user_row($db, $table, $userId)
+{
+    $stmt = $db->prepare('SELECT * FROM ' . $table . ' WHERE user_id = :userId LIMIT 1');
+    if ($stmt === false) {
+        return [];
+    }
+
+    $stmt->bindValue(':userId', (int) $userId);
+    $result = $stmt->execute();
+    $row = $result === false ? false : $result->fetchArray();
+
+    return $row ?: [];
+}
+
+/* -------------------------------------------------------------------------
+   Telegram (issue #12)
+   ------------------------------------------------------------------------- */
+
+/**
+ * Instance Telegram configuration: the shared bot token only.
+ *
+ * @param WallosDatabase $db
+ * @return array Result structure with bot_token.
+ */
+function wallos_build_instance_telegram_config($db)
+{
+    $config = wallos_config_result();
+    $config['mode'] = 'instance';
+
+    $instance = wallos_get_instance_settings($db, 'telegram');
+
+    if (!wallos_apply_env_secret($config, 'bot_token', 'WALLOS_TELEGRAM_BOT_TOKEN')) {
+        $botToken = (string) ($instance['bot_token'] ?? '');
+        wallos_config_set($config, 'bot_token', $botToken, $botToken !== '' ? 'admin' : 'default');
+    }
+
+    return $config;
+}
+
+/**
+ * Effective Telegram configuration for one user, from the instance bot token
+ * and the user's own row.
+ *
+ * The pure part of the resolver: the notification cron has already loaded every
+ * row in one query, so it merges here rather than querying again per user.
+ *
+ * @param array $instanceConfig Result of wallos_get_instance_telegram_config().
+ * @param array $row            The user's telegram_notifications row, or [].
+ * @return array Result structure with bot_token, chat_id, enabled and deliverable.
+ */
+function wallos_effective_telegram_config($instanceConfig, $row)
+{
+    $row = $row ?: [];
+
+    // Without the mode column — a database part-way through the migration — a
+    // stored bot token is what marks the row as a custom bot.
+    $legacyMode = trim((string) ($row['bot_token'] ?? '')) !== '' ? 'custom' : 'instance';
+    $mode = wallos_normalize_mode($row['bot_token_mode'] ?? $legacyMode);
+
+    if ($mode === 'custom') {
+        $config = wallos_config_result();
+        $config['mode'] = 'custom';
+        wallos_config_set($config, 'bot_token', (string) ($row['bot_token'] ?? ''), 'user');
+    } else {
+        $config = $instanceConfig;
+        $config['mode'] = 'instance';
+    }
+
+    // The chat id is personal and always the user's own.
+    wallos_config_set($config, 'chat_id', (string) ($row['chat_id'] ?? ''), 'user');
+    $config['values']['enabled'] = (int) ($row['enabled'] ?? 0);
+
+    wallos_finalize_notification_config($config, ['bot_token', 'chat_id'],
+        'The Telegram bot token or chat id is not configured.');
+
+    return $config;
+}
+
+/**
+ * @param WallosDatabase $db
+ * @param int            $userId
+ * @return array Result structure.
+ */
+function wallos_build_effective_telegram_config($db, $userId)
+{
+    $row = wallos_config_user_row($db, 'telegram_notifications', $userId);
+
+    return wallos_effective_telegram_config(wallos_get_instance_telegram_config($db), $row);
+}
+
+/**
+ * API and template representation. The bot token is a credential and never
+ * leaves the server as a value — only its presence and owner are reported.
+ *
+ * @param array $config
+ * @return array
+ */
+function wallos_telegram_public_payload($config)
+{
+    return [
+        'mode' => $config['mode'],
+        'enabled' => (int) ($config['values']['enabled'] ?? 0),
+        'chat_id' => (string) ($config['values']['chat_id'] ?? ''),
+        'bot_token' => wallos_secret_status($config, 'bot_token'),
+        'deliverable' => (bool) ($config['values']['deliverable'] ?? false),
+        'valid' => (bool) $config['valid'],
+    ];
+}
+
+/**
+ * Marks an effective notification config deliverable only when every field it
+ * needs is present, and invalid with a note otherwise. Shared by every provider
+ * so "usable" means the same thing everywhere.
+ *
+ * @param array    $config   Result structure, modified in place.
+ * @param string[] $required Fields that must all be non-empty.
+ * @param string   $note
+ */
+function wallos_finalize_notification_config(&$config, array $required, $note)
+{
+    $deliverable = true;
+    foreach ($required as $field) {
+        if (trim((string) ($config['values'][$field] ?? '')) === '') {
+            $deliverable = false;
+            break;
+        }
+    }
+
+    $config['values']['deliverable'] = $deliverable;
+
+    if (!$deliverable) {
+        $config['valid'] = false;
+        wallos_config_add_note($config, $note);
+    }
+}
+
+/* -------------------------------------------------------------------------
+   Pushover (issue #13)
+   ------------------------------------------------------------------------- */
+
+/**
+ * Instance Pushover configuration: the shared application token only.
+ *
+ * @param WallosDatabase $db
+ * @return array Result structure with token.
+ */
+function wallos_build_instance_pushover_config($db)
+{
+    $config = wallos_config_result();
+    $config['mode'] = 'instance';
+
+    $instance = wallos_get_instance_settings($db, 'pushover');
+
+    if (!wallos_apply_env_secret($config, 'token', 'WALLOS_PUSHOVER_APP_TOKEN')) {
+        $token = (string) ($instance['app_token'] ?? '');
+        wallos_config_set($config, 'token', $token, $token !== '' ? 'admin' : 'default');
+    }
+
+    return $config;
+}
+
+/**
+ * Effective Pushover configuration for one user, from the instance application
+ * token and the user's own row. The user key is personal and always the user's.
+ *
+ * @param array $instanceConfig Result of wallos_get_instance_pushover_config().
+ * @param array $row            The user's pushover_notifications row, or [].
+ * @return array Result structure with token, user_key, enabled and deliverable.
+ */
+function wallos_effective_pushover_config($instanceConfig, $row)
+{
+    $row = $row ?: [];
+
+    $legacyMode = trim((string) ($row['token'] ?? '')) !== '' ? 'custom' : 'instance';
+    $mode = wallos_normalize_mode($row['token_mode'] ?? $legacyMode);
+
+    if ($mode === 'custom') {
+        $config = wallos_config_result();
+        $config['mode'] = 'custom';
+        wallos_config_set($config, 'token', (string) ($row['token'] ?? ''), 'user');
+    } else {
+        $config = $instanceConfig;
+        $config['mode'] = 'instance';
+    }
+
+    wallos_config_set($config, 'user_key', (string) ($row['user_key'] ?? ''), 'user');
+    $config['values']['enabled'] = (int) ($row['enabled'] ?? 0);
+
+    wallos_finalize_notification_config($config, ['token', 'user_key'],
+        'The Pushover application token or user key is not configured.');
+
+    return $config;
+}
+
+/**
+ * @param WallosDatabase $db
+ * @param int            $userId
+ * @return array Result structure.
+ */
+function wallos_build_effective_pushover_config($db, $userId)
+{
+    $row = wallos_config_user_row($db, 'pushover_notifications', $userId);
+
+    return wallos_effective_pushover_config(wallos_get_instance_pushover_config($db), $row);
+}
+
+/**
+ * API and template representation. The application token is a credential and is
+ * reported as a status, never as a value.
+ *
+ * @param array $config
+ * @return array
+ */
+function wallos_pushover_public_payload($config)
+{
+    return [
+        'mode' => $config['mode'],
+        'enabled' => (int) ($config['values']['enabled'] ?? 0),
+        'user_key' => (string) ($config['values']['user_key'] ?? ''),
+        'token' => wallos_secret_status($config, 'token'),
+        'deliverable' => (bool) ($config['values']['deliverable'] ?? false),
+        'valid' => (bool) $config['valid'],
+    ];
+}
+
+/* -------------------------------------------------------------------------
+   ntfy (issue #14)
+   ------------------------------------------------------------------------- */
+
+/**
+ * Instance ntfy configuration: the shared server URL and the optional shared
+ * authentication headers.
+ *
+ * The server URL is not a secret and resolves like any host based instance
+ * value. The headers are treated as a secret because they may carry
+ * authorization material, so they follow the environment secret path and are
+ * never rendered.
+ *
+ * @param WallosDatabase $db
+ * @return array Result structure with host and headers.
+ */
+function wallos_build_instance_ntfy_config($db)
+{
+    $config = wallos_config_result();
+    $config['mode'] = 'instance';
+
+    $instance = wallos_get_instance_settings($db, 'ntfy');
+
+    if (wallos_env_has('WALLOS_NTFY_BASE_URL')) {
+        wallos_config_set($config, 'host', trim((string) wallos_env('WALLOS_NTFY_BASE_URL')),
+            'environment', 'WALLOS_NTFY_BASE_URL');
+    } elseif (!empty($instance['base_url'])) {
+        wallos_config_set($config, 'host', (string) $instance['base_url'], 'admin');
+    } else {
+        wallos_config_set($config, 'host', '', 'default');
+    }
+
+    if (!wallos_apply_env_secret($config, 'headers', 'WALLOS_NTFY_HEADERS')) {
+        $headers = (string) ($instance['headers'] ?? '');
+        wallos_config_set($config, 'headers', $headers, $headers !== '' ? 'admin' : 'default');
+    }
+
+    return $config;
+}
+
+/**
+ * Effective ntfy configuration for one user: the instance server with the
+ * user's own topic, or a full custom server. The authentication headers are
+ * instance-managed, replaced by a per-user override when the user set one, or
+ * absent — auth_source records which.
+ *
+ * @param array $instanceConfig Result of wallos_get_instance_ntfy_config().
+ * @param array $row            The user's ntfy_notifications row, or [].
+ * @return array Result structure with host, topic, headers, auth_source, enabled,
+ *               ignore_ssl and deliverable.
+ */
+function wallos_effective_ntfy_config($instanceConfig, $row)
+{
+    $row = $row ?: [];
+
+    $legacyMode = trim((string) ($row['host'] ?? '')) !== '' ? 'custom' : 'instance';
+    $mode = wallos_normalize_mode($row['server_mode'] ?? $legacyMode);
+
+    $userHeaders = (string) ($row['headers'] ?? '');
+
+    if ($mode === 'custom') {
+        $config = wallos_config_result();
+        $config['mode'] = 'custom';
+        wallos_config_set($config, 'host', (string) ($row['host'] ?? ''), 'user');
+        wallos_config_set($config, 'headers', $userHeaders, 'user');
+        $config['values']['auth_source'] = trim($userHeaders) !== '' ? 'custom' : 'none';
+    } else {
+        $config = $instanceConfig;
+        $config['mode'] = 'instance';
+
+        // The instance server, with a per-user header override when the user set
+        // one. This is where the three-way "instance / custom / absent" answer
+        // the UI needs is decided.
+        if (trim($userHeaders) !== '') {
+            wallos_config_set($config, 'headers', $userHeaders, 'user');
+            $config['values']['auth_source'] = 'custom';
+        } else {
+            $config['values']['auth_source'] =
+                trim((string) ($config['values']['headers'] ?? '')) !== '' ? 'instance' : 'none';
+        }
+    }
+
+    wallos_config_set($config, 'topic', (string) ($row['topic'] ?? ''), 'user');
+    $config['values']['enabled'] = (int) ($row['enabled'] ?? 0);
+    $config['values']['ignore_ssl'] = (int) ($row['ignore_ssl'] ?? 0);
+
+    wallos_finalize_notification_config($config, ['host', 'topic'],
+        'The ntfy server or topic is not configured.');
+
+    return $config;
+}
+
+/**
+ * @param WallosDatabase $db
+ * @param int            $userId
+ * @return array Result structure.
+ */
+function wallos_build_effective_ntfy_config($db, $userId)
+{
+    $row = wallos_config_user_row($db, 'ntfy_notifications', $userId);
+
+    return wallos_effective_ntfy_config(wallos_get_instance_ntfy_config($db), $row);
+}
+
+/**
+ * API and template representation. The authentication headers may carry
+ * authorization material and are reported as a status, never rendered.
+ *
+ * @param array $config
+ * @return array
+ */
+function wallos_ntfy_public_payload($config)
+{
+    return [
+        'mode' => $config['mode'],
+        'enabled' => (int) ($config['values']['enabled'] ?? 0),
+        'host' => (string) ($config['values']['host'] ?? ''),
+        'topic' => (string) ($config['values']['topic'] ?? ''),
+        'ignore_ssl' => (int) ($config['values']['ignore_ssl'] ?? 0),
+        'headers' => wallos_secret_status($config, 'headers'),
+        'auth_source' => (string) ($config['values']['auth_source'] ?? 'none'),
+        'deliverable' => (bool) ($config['values']['deliverable'] ?? false),
+        'valid' => (bool) $config['valid'],
+    ];
+}
+
+/* -------------------------------------------------------------------------
+   Gotify (issue #15)
+   ------------------------------------------------------------------------- */
+
+/**
+ * Instance Gotify configuration: the shared server URL only.
+ *
+ * The application token is deliberately not an instance value. It identifies a
+ * message source, and sharing one across unrelated users would make every
+ * user's messages appear through the same Gotify application, so the token
+ * stays per user in both modes.
+ *
+ * @param WallosDatabase $db
+ * @return array Result structure with url.
+ */
+function wallos_build_instance_gotify_config($db)
+{
+    $config = wallos_config_result();
+    $config['mode'] = 'instance';
+
+    $instance = wallos_get_instance_settings($db, 'gotify');
+
+    if (wallos_env_has('WALLOS_GOTIFY_BASE_URL')) {
+        wallos_config_set($config, 'url', trim((string) wallos_env('WALLOS_GOTIFY_BASE_URL')),
+            'environment', 'WALLOS_GOTIFY_BASE_URL');
+    } elseif (!empty($instance['base_url'])) {
+        wallos_config_set($config, 'url', (string) $instance['base_url'], 'admin');
+    } else {
+        wallos_config_set($config, 'url', '', 'default');
+    }
+
+    return $config;
+}
+
+/**
+ * Effective Gotify configuration for one user: the instance host with the
+ * user's own application token, or a full custom host. The token is always the
+ * user's own.
+ *
+ * @param array $instanceConfig Result of wallos_get_instance_gotify_config().
+ * @param array $row            The user's gotify_notifications row, or [].
+ * @return array Result structure with url, token, enabled, ignore_ssl and deliverable.
+ */
+function wallos_effective_gotify_config($instanceConfig, $row)
+{
+    $row = $row ?: [];
+
+    $legacyMode = trim((string) ($row['url'] ?? '')) !== '' ? 'custom' : 'instance';
+    $mode = wallos_normalize_mode($row['url_mode'] ?? $legacyMode);
+
+    if ($mode === 'custom') {
+        $config = wallos_config_result();
+        $config['mode'] = 'custom';
+        wallos_config_set($config, 'url', (string) ($row['url'] ?? ''), 'user');
+    } else {
+        $config = $instanceConfig;
+        $config['mode'] = 'instance';
+    }
+
+    // The application token is personal and always the user's own.
+    wallos_config_set($config, 'token', (string) ($row['token'] ?? ''), 'user');
+    $config['values']['enabled'] = (int) ($row['enabled'] ?? 0);
+    $config['values']['ignore_ssl'] = (int) ($row['ignore_ssl'] ?? 0);
+
+    wallos_finalize_notification_config($config, ['url', 'token'],
+        'The Gotify server or application token is not configured.');
+
+    return $config;
+}
+
+/**
+ * @param WallosDatabase $db
+ * @param int            $userId
+ * @return array Result structure.
+ */
+function wallos_build_effective_gotify_config($db, $userId)
+{
+    $row = wallos_config_user_row($db, 'gotify_notifications', $userId);
+
+    return wallos_effective_gotify_config(wallos_get_instance_gotify_config($db), $row);
+}
+
+/**
+ * API and template representation. The application token is a credential and is
+ * reported as a status, never as a value.
+ *
+ * @param array $config
+ * @return array
+ */
+function wallos_gotify_public_payload($config)
+{
+    return [
+        'mode' => $config['mode'],
+        'enabled' => (int) ($config['values']['enabled'] ?? 0),
+        'url' => (string) ($config['values']['url'] ?? ''),
+        'ignore_ssl' => (int) ($config['values']['ignore_ssl'] ?? 0),
+        'token' => wallos_secret_status($config, 'token'),
+        'deliverable' => (bool) ($config['values']['deliverable'] ?? false),
+        'valid' => (bool) $config['valid'],
+    ];
+}
+
+/* -------------------------------------------------------------------------
    Memoized entry points
 
    Resolution is deterministic within one request or job, so each of these is
@@ -775,6 +1262,90 @@ function wallos_get_effective_ai_config($db, $userId)
 {
     return wallos_config_cached($db, 'ai:' . (int) $userId,
         fn() => wallos_build_effective_ai_config($db, $userId));
+}
+
+/**
+ * @param WallosDatabase $db
+ * @return array Result structure.
+ */
+function wallos_get_instance_telegram_config($db)
+{
+    return wallos_config_cached($db, 'telegram:instance',
+        fn() => wallos_build_instance_telegram_config($db));
+}
+
+/**
+ * @param WallosDatabase $db
+ * @param int            $userId
+ * @return array Result structure.
+ */
+function wallos_get_effective_telegram_config($db, $userId)
+{
+    return wallos_config_cached($db, 'telegram:' . (int) $userId,
+        fn() => wallos_build_effective_telegram_config($db, $userId));
+}
+
+/**
+ * @param WallosDatabase $db
+ * @return array Result structure.
+ */
+function wallos_get_instance_pushover_config($db)
+{
+    return wallos_config_cached($db, 'pushover:instance',
+        fn() => wallos_build_instance_pushover_config($db));
+}
+
+/**
+ * @param WallosDatabase $db
+ * @param int            $userId
+ * @return array Result structure.
+ */
+function wallos_get_effective_pushover_config($db, $userId)
+{
+    return wallos_config_cached($db, 'pushover:' . (int) $userId,
+        fn() => wallos_build_effective_pushover_config($db, $userId));
+}
+
+/**
+ * @param WallosDatabase $db
+ * @return array Result structure.
+ */
+function wallos_get_instance_ntfy_config($db)
+{
+    return wallos_config_cached($db, 'ntfy:instance',
+        fn() => wallos_build_instance_ntfy_config($db));
+}
+
+/**
+ * @param WallosDatabase $db
+ * @param int            $userId
+ * @return array Result structure.
+ */
+function wallos_get_effective_ntfy_config($db, $userId)
+{
+    return wallos_config_cached($db, 'ntfy:' . (int) $userId,
+        fn() => wallos_build_effective_ntfy_config($db, $userId));
+}
+
+/**
+ * @param WallosDatabase $db
+ * @return array Result structure.
+ */
+function wallos_get_instance_gotify_config($db)
+{
+    return wallos_config_cached($db, 'gotify:instance',
+        fn() => wallos_build_instance_gotify_config($db));
+}
+
+/**
+ * @param WallosDatabase $db
+ * @param int            $userId
+ * @return array Result structure.
+ */
+function wallos_get_effective_gotify_config($db, $userId)
+{
+    return wallos_config_cached($db, 'gotify:' . (int) $userId,
+        fn() => wallos_build_effective_gotify_config($db, $userId));
 }
 
 /* -------------------------------------------------------------------------

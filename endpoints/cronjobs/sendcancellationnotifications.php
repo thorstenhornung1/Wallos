@@ -61,31 +61,54 @@ while ($userToNotify = $usersToNotify->fetchArray(SQLITE3_ASSOC)) {
 
     $gotify = [];
 
-    if ($row = $notificationSettings['gotify'][$userId] ?? null) {
-        $gotifyNotificationsEnabled = $row['enabled'];
-        $gotify['serverUrl'] = $row["url"];
-        $gotify['appToken'] = $row["token"];
-        $gotify['ignore_ssl'] = $row["ignore_ssl"];
+    // Instance server host plus this user's own application token, which is
+    // never shared across users.
+    $gotifyConfig = wallos_effective_gotify_config(
+        wallos_get_instance_gotify_config($db),
+        $notificationSettings['gotify'][$userId] ?? []
+    );
+    if (!empty($gotifyConfig['values']['enabled'])) {
+        $gotifyNotificationsEnabled = $gotifyConfig['values']['deliverable'];
+        $gotify['serverUrl'] = $gotifyConfig['values']['url'];
+        $gotify['appToken'] = $gotifyConfig['values']['token'];
+        $gotify['ignore_ssl'] = $gotifyConfig['values']['ignore_ssl'];
     }
 
-    if ($row = $notificationSettings['telegram'][$userId] ?? null) {
-        $telegramNotificationsEnabled = $row['enabled'];
-        $telegram['botToken'] = $row["bot_token"];
-        $telegram['chatId'] = $row["chat_id"];
+    // Instance bot token plus this user's own chat id; see the same block in
+    // sendnotifications.php.
+    $telegramConfig = wallos_effective_telegram_config(
+        wallos_get_instance_telegram_config($db),
+        $notificationSettings['telegram'][$userId] ?? []
+    );
+    if (!empty($telegramConfig['values']['enabled'])) {
+        $telegramNotificationsEnabled = $telegramConfig['values']['deliverable'];
+        $telegram['botToken'] = $telegramConfig['values']['bot_token'];
+        $telegram['chatId'] = $telegramConfig['values']['chat_id'];
     }
 
-    if ($row = $notificationSettings['pushover'][$userId] ?? null) {
-        $pushoverNotificationsEnabled = $row['enabled'];
-        $pushover['user_key'] = $row["user_key"];
-        $pushover['token'] = $row["token"];
+    // Instance application token plus this user's own user key.
+    $pushoverConfig = wallos_effective_pushover_config(
+        wallos_get_instance_pushover_config($db),
+        $notificationSettings['pushover'][$userId] ?? []
+    );
+    if (!empty($pushoverConfig['values']['enabled'])) {
+        $pushoverNotificationsEnabled = $pushoverConfig['values']['deliverable'];
+        $pushover['user_key'] = $pushoverConfig['values']['user_key'];
+        $pushover['token'] = $pushoverConfig['values']['token'];
     }
 
-    if ($row = $notificationSettings['ntfy'][$userId] ?? null) {
-        $ntfyNotificationsEnabled = $row['enabled'];
-        $ntfy['host'] = $row["host"];
-        $ntfy['topic'] = $row["topic"];
-        $ntfy['headers'] = $row["headers"];
-        $ntfy['ignore_ssl'] = $row["ignore_ssl"];
+    // Instance server (and its shared auth headers, or a per-user override) plus
+    // this user's own topic.
+    $ntfyConfig = wallos_effective_ntfy_config(
+        wallos_get_instance_ntfy_config($db),
+        $notificationSettings['ntfy'][$userId] ?? []
+    );
+    if (!empty($ntfyConfig['values']['enabled'])) {
+        $ntfyNotificationsEnabled = $ntfyConfig['values']['deliverable'];
+        $ntfy['host'] = $ntfyConfig['values']['host'];
+        $ntfy['topic'] = $ntfyConfig['values']['topic'];
+        $ntfy['headers'] = $ntfyConfig['values']['headers'];
+        $ntfy['ignore_ssl'] = $ntfyConfig['values']['ignore_ssl'];
     }
 
     $webhook = [];

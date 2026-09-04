@@ -11,7 +11,7 @@
 #
 # Do not edit by hand — run dev/db-audit.sh --update and commit the diff.
 #
-# total: 1568 matches in 239 file(s)
+# total: 1541 matches in 235 file(s)
 admin.php	5
 api/admin/get_admin_settings.php	1
 api/admin/set_admin_settings.php	2
@@ -25,7 +25,7 @@ api/fixer/get_fixer.php	2
 api/fixer/set_fixer.php	13
 api/household/get_household.php	3
 api/household/set_household.php	18
-api/notifications/get_notification_settings.php	10
+api/notifications/get_notification_settings.php	6
 api/payment_methods/get_payment_methods.php	3
 api/payment_methods/set_payment_methods.php	21
 api/settings/get_settings.php	4
@@ -75,14 +75,10 @@ endpoints/household/household.php	9
 endpoints/logos/google_search.php	2
 endpoints/notifications/savediscordnotifications.php	6
 endpoints/notifications/saveemailnotifications.php	11
-endpoints/notifications/savegotifynotifications.php	6
 endpoints/notifications/savemattermostnotifications.php	6
 endpoints/notifications/savenotificationsettings.php	4
-endpoints/notifications/saventfynotifications.php	7
-endpoints/notifications/savepushovernotifications.php	5
 endpoints/notifications/savepushplusnotifications.php	4
 endpoints/notifications/saveserverchannotifications.php	4
-endpoints/notifications/savetelegramnotifications.php	5
 endpoints/notifications/savewebhooknotifications.php	8
 endpoints/notifications/testemailnotifications.php	2
 endpoints/payments/add.php	6

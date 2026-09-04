@@ -2,82 +2,121 @@
 require_once '../../includes/connect_endpoint.php';
 require_once '../../includes/validate_endpoint.php';
 require_once '../../includes/ssrf_helper.php';
-
+require_once '../../includes/integration_config.php';
 
 $postData = file_get_contents("php://input");
 $data = json_decode($postData, true);
 
-if (
-    !isset($data["gotify_url"]) || $data["gotify_url"] == "" ||
-    !isset($data["token"]) || $data["token"] == ""
-) {
-    $response = [
+$enabled = (int) ($data["enabled"] ?? 0);
+$token = trim((string) ($data["token"] ?? ''));
+$url = trim((string) ($data["gotify_url"] ?? ''));
+$ignoreSsl = (int) ($data["ignore_ssl"] ?? 0);
+
+// Clients that predate the instance/custom choice always sent a host, so a
+// submission carrying one still means "my own server".
+$defaultMode = $url === '' ? 'instance' : 'custom';
+$mode = wallos_normalize_mode($data['mode'] ?? $defaultMode);
+
+// The application token is personal and required in either mode: it is never a
+// shared instance value.
+if ($token === '') {
+    die(json_encode([
         "success" => false,
         "message" => translate('fill_mandatory_fields', $i18n)
-    ];
-    echo json_encode($response);
-} else {
-    $enabled = $data["enabled"];
-    $url = $data["gotify_url"];
-    $token = $data["token"];
-    $ignore_ssl = $data["ignore_ssl"];
+    ]));
+}
 
-    // Validate URL scheme
-    $parsedUrl = parse_url($url);
-    if (
-        !isset($parsedUrl['scheme']) ||
-        !in_array(strtolower($parsedUrl['scheme']), ['http', 'https']) ||
-        !filter_var($url, FILTER_VALIDATE_URL)
-    ) {
+if ($mode === 'custom') {
+    if ($url === '') {
         die(json_encode([
             "success" => false,
-            "message" => translate("error", $i18n)
+            "message" => translate('fill_mandatory_fields', $i18n)
         ]));
     }
 
-    validate_webhook_url_for_ssrf($url, $db, $i18n, $userId);
+    $effectiveUrl = $url;
+} else {
+    $instanceConfig = wallos_get_instance_gotify_config($db);
 
-    $query = "SELECT COUNT(*) FROM gotify_notifications WHERE user_id = :userId";
-    $stmt = $db->prepare($query);
-    $stmt->bindParam(":userId", $userId, SQLITE3_INTEGER);
-    $result = $stmt->execute();
-
-    if ($result === false) {
-        $response = [
+    if (trim((string) $instanceConfig['values']['url']) === '') {
+        die(json_encode([
             "success" => false,
-            "message" => translate('error_saving_notifications', $i18n)
-        ];
-        echo json_encode($response);
-    } else {
-        $row = $result->fetchArray();
-        $count = $row[0];
-        if ($count == 0) {
-            $query = "INSERT INTO gotify_notifications (enabled, url, token, user_id, ignore_ssl)
-                              VALUES (:enabled, :url, :token, :userId, :ignore_ssl)";
-        } else {
-            $query = "UPDATE gotify_notifications
-                              SET enabled = :enabled, url = :url, token = :token, ignore_ssl = :ignore_ssl WHERE user_id = :userId";
-        }
-
-        $stmt = $db->prepare($query);
-        $stmt->bindValue(':enabled', $enabled, SQLITE3_INTEGER);
-        $stmt->bindValue(':url', $url, SQLITE3_TEXT);
-        $stmt->bindValue(':token', $token, SQLITE3_TEXT);
-        $stmt->bindValue(':ignore_ssl', $ignore_ssl, SQLITE3_INTEGER);
-        $stmt->bindValue(':userId', $userId, SQLITE3_INTEGER);
-
-        if ($stmt->execute()) {
-            $response = [
-                "success" => true,
-                "message" => translate('notifications_settings_saved', $i18n)
-            ];
-            echo json_encode($response);
-        } else {
-            $response = [
-                "success" => false,
-                "message" => translate('error_saving_notifications', $i18n)
-            ];
-            echo json_encode($response);
-        }
+            "message" => translate('instance_gotify_not_configured', $i18n)
+        ]));
     }
+
+    $effectiveUrl = (string) $instanceConfig['values']['url'];
+}
+
+// The effective server URL is validated the same way whichever host is in use.
+$parsedUrl = parse_url($effectiveUrl);
+if (
+    !isset($parsedUrl['scheme']) ||
+    !in_array(strtolower($parsedUrl['scheme']), ['http', 'https']) ||
+    !filter_var($effectiveUrl, FILTER_VALIDATE_URL)
+) {
+    die(json_encode([
+        "success" => false,
+        "message" => translate("error", $i18n)
+    ]));
+}
+
+validate_webhook_url_for_ssrf($effectiveUrl, $db, $i18n, $userId);
+
+$stmt = $db->prepare("SELECT COUNT(*) FROM gotify_notifications WHERE user_id = :userId");
+$stmt->bindValue(":userId", (int) $userId);
+$result = $stmt->execute();
+
+if ($result === false) {
+    die(json_encode([
+        "success" => false,
+        "message" => translate('error_saving_notifications', $i18n)
+    ]));
+}
+
+$row = $result->fetchArray();
+$exists = $row[0] > 0;
+
+if ($mode === 'custom') {
+    $query = $exists
+        ? "UPDATE gotify_notifications
+           SET enabled = :enabled, url_mode = :mode, url = :url, token = :token, ignore_ssl = :ignoreSsl
+           WHERE user_id = :userId"
+        : "INSERT INTO gotify_notifications (enabled, url_mode, url, token, ignore_ssl, user_id)
+           VALUES (:enabled, :mode, :url, :token, :ignoreSsl, :userId)";
+} else {
+    // The application token, enable flag and ignore-ssl choice are the user's;
+    // the instance host is not copied into the row, and any host the user stored
+    // before is kept so switching back does not lose it.
+    $query = $exists
+        ? "UPDATE gotify_notifications
+           SET enabled = :enabled, url_mode = :mode, token = :token, ignore_ssl = :ignoreSsl
+           WHERE user_id = :userId"
+        : "INSERT INTO gotify_notifications (enabled, url_mode, token, ignore_ssl, user_id)
+           VALUES (:enabled, :mode, :token, :ignoreSsl, :userId)";
+}
+
+$stmt = $db->prepare($query);
+$stmt->bindValue(':enabled', $enabled);
+$stmt->bindValue(':mode', $mode);
+$stmt->bindValue(':token', $token);
+$stmt->bindValue(':ignoreSsl', $ignoreSsl);
+$stmt->bindValue(':userId', (int) $userId);
+
+if ($mode === 'custom') {
+    $stmt->bindValue(':url', $url);
+}
+
+if ($stmt->execute()) {
+    wallos_reset_config_cache($db);
+
+    echo json_encode([
+        "success" => true,
+        "message" => translate('notifications_settings_saved', $i18n)
+    ]);
+} else {
+    echo json_encode([
+        "success" => false,
+        "message" => translate('error_saving_notifications', $i18n)
+    ]);
 }

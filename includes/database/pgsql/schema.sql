@@ -20,7 +20,7 @@
 --   * Every identifier is quoted, because "user" and "order" are reserved words
 --     and a keyword list kept in the generator would be wrong eventually.
 
--- 42 tables, 75 migrations recorded as applied.
+-- 42 tables, 79 migrations recorded as applied.
 
 CREATE TABLE "admin" (
     "id" SERIAL PRIMARY KEY,
@@ -174,7 +174,8 @@ CREATE TABLE "gotify_notifications" (
     "url" TEXT DEFAULT '',
     "token" TEXT DEFAULT '',
     "user_id" INTEGER DEFAULT 1,
-    "ignore_ssl" INTEGER DEFAULT 0
+    "ignore_ssl" INTEGER DEFAULT 0,
+    "url_mode" TEXT DEFAULT 'instance'
 );
 
 CREATE TABLE "household" (
@@ -234,7 +235,8 @@ CREATE TABLE "ntfy_notifications" (
     "topic" TEXT DEFAULT '',
     "headers" TEXT DEFAULT '',
     "user_id" INTEGER,
-    "ignore_ssl" INTEGER DEFAULT 0
+    "ignore_ssl" INTEGER DEFAULT 0,
+    "server_mode" TEXT DEFAULT 'instance'
 );
 
 CREATE TABLE "oauth_settings" (
@@ -305,7 +307,8 @@ CREATE TABLE "pushover_notifications" (
     "enabled" INTEGER DEFAULT 0,
     "user_key" TEXT DEFAULT '',
     "token" TEXT DEFAULT '',
-    "user_id" INTEGER DEFAULT 1
+    "user_id" INTEGER DEFAULT 1,
+    "token_mode" TEXT DEFAULT 'instance'
 );
 
 CREATE TABLE "pushplus_notifications" (
@@ -365,7 +368,8 @@ CREATE TABLE "telegram_notifications" (
     "enabled" INTEGER DEFAULT 0,
     "bot_token" TEXT DEFAULT '',
     "chat_id" TEXT DEFAULT '',
-    "user_id" INTEGER DEFAULT 1
+    "user_id" INTEGER DEFAULT 1,
+    "bot_token_mode" TEXT DEFAULT 'instance'
 );
 
 CREATE TABLE "total_yearly_cost" (
@@ -658,7 +662,11 @@ INSERT INTO "migrations" ("id", "migration") VALUES
     (72, 'migrations/000073.php'),
     (73, 'migrations/000074.php'),
     (74, 'migrations/000075.php'),
-    (75, 'migrations/000076.php');
+    (75, 'migrations/000076.php'),
+    (76, 'migrations/000077.php'),
+    (77, 'migrations/000078.php'),
+    (78, 'migrations/000079.php'),
+    (79, 'migrations/000080.php');
 
 INSERT INTO "payment_methods" ("id", "name", "icon", "enabled", "order", "user_id") VALUES
     (1, 'PayPal', 'images/uploads/icons/paypal.png', 1, 1, 1),

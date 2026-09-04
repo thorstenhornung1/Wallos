@@ -293,10 +293,14 @@ if ($budgetPeriodAnchorDate === '1970-01-01' || !preg_match('/^\d{4}-\d{2}-\d{2}
     $result = $stmt->execute();
 
     $rowCount = 0;
+    $notificationsPushover['token_mode'] = 'instance';
     while ($row = $result->fetchArray(SQLITE3_ASSOC)) {
         $notificationsPushover['enabled'] = $row['enabled'];
         $notificationsPushover['token'] = $row['token'];
         $notificationsPushover['user_key'] = $row['user_key'];
+        $notificationsPushover['token_mode'] = wallos_normalize_mode(
+            $row['token_mode'] ?? (trim((string) $row['token']) !== '' ? 'custom' : 'instance')
+        );
         $rowCount++;
     }
 
@@ -306,6 +310,12 @@ if ($budgetPeriodAnchorDate === '1970-01-01' || !preg_match('/^\d{4}-\d{2}-\d{2}
         $notificationsPushover['user_key'] = "";
     }
 
+    // The instance application token is resolved server side; only whether it
+    // exists is ever shown, never its value.
+    $instancePushover = wallos_get_instance_pushover_config($db);
+    $instancePushoverToken = wallos_secret_status($instancePushover, 'token');
+    $usesInstancePushover = $notificationsPushover['token_mode'] === 'instance';
+
     // Telegram notifications
     $sql = "SELECT * FROM telegram_notifications WHERE user_id = :userId LIMIT 1";
     $stmt = $db->prepare($sql);
@@ -313,10 +323,14 @@ if ($budgetPeriodAnchorDate === '1970-01-01' || !preg_match('/^\d{4}-\d{2}-\d{2}
     $result = $stmt->execute();
 
     $rowCount = 0;
+    $notificationsTelegram['bot_token_mode'] = 'instance';
     while ($row = $result->fetchArray(SQLITE3_ASSOC)) {
         $notificationsTelegram['enabled'] = $row['enabled'];
         $notificationsTelegram['bot_token'] = $row['bot_token'];
         $notificationsTelegram['chat_id'] = $row['chat_id'];
+        $notificationsTelegram['bot_token_mode'] = wallos_normalize_mode(
+            $row['bot_token_mode'] ?? (trim((string) $row['bot_token']) !== '' ? 'custom' : 'instance')
+        );
         $rowCount++;
     }
 
@@ -325,6 +339,12 @@ if ($budgetPeriodAnchorDate === '1970-01-01' || !preg_match('/^\d{4}-\d{2}-\d{2}
         $notificationsTelegram['bot_token'] = "";
         $notificationsTelegram['chat_id'] = "";
     }
+
+    // The instance bot token is resolved server side; only whether it exists is
+    // ever shown, never its value.
+    $instanceTelegram = wallos_get_instance_telegram_config($db);
+    $instanceTelegramToken = wallos_secret_status($instanceTelegram, 'bot_token');
+    $usesInstanceTelegram = $notificationsTelegram['bot_token_mode'] === 'instance';
 
 
     // PushPlus notifications
@@ -392,12 +412,16 @@ if ($budgetPeriodAnchorDate === '1970-01-01' || !preg_match('/^\d{4}-\d{2}-\d{2}
     $result = $stmt->execute();
 
     $rowCount = 0;
+    $notificationsNtfy['server_mode'] = 'instance';
     while ($row = $result->fetchArray(SQLITE3_ASSOC)) {
         $notificationsNtfy['enabled'] = $row['enabled'];
         $notificationsNtfy['host'] = $row['host'];
         $notificationsNtfy['topic'] = $row['topic'];
         $notificationsNtfy['headers'] = $row['headers'];
         $notificationsNtfy['ignore_ssl'] = $row['ignore_ssl'];
+        $notificationsNtfy['server_mode'] = wallos_normalize_mode(
+            $row['server_mode'] ?? (trim((string) $row['host']) !== '' ? 'custom' : 'instance')
+        );
         $rowCount++;
     }
 
@@ -408,6 +432,12 @@ if ($budgetPeriodAnchorDate === '1970-01-01' || !preg_match('/^\d{4}-\d{2}-\d{2}
         $notificationsNtfy['headers'] = "";
         $notificationsNtfy['ignore_ssl'] = 0;
     }
+
+    // The instance server and its shared auth headers are resolved server side;
+    // the headers, which may carry authorization, are never rendered.
+    $instanceNtfy = wallos_get_instance_ntfy_config($db);
+    $instanceNtfyHeaders = wallos_secret_status($instanceNtfy, 'headers');
+    $usesInstanceNtfy = $notificationsNtfy['server_mode'] === 'instance';
 
     // Webhook notifications
     $sql = "SELECT * FROM webhook_notifications WHERE user_id = :userId LIMIT 1";
@@ -454,11 +484,15 @@ if ($budgetPeriodAnchorDate === '1970-01-01' || !preg_match('/^\d{4}-\d{2}-\d{2}
     $result = $stmt->execute();
 
     $rowCount = 0;
+    $notificationsGotify['url_mode'] = 'instance';
     while ($row = $result->fetchArray(SQLITE3_ASSOC)) {
         $notificationsGotify['enabled'] = $row['enabled'];
         $notificationsGotify['url'] = $row['url'];
         $notificationsGotify['token'] = $row['token'];
         $notificationsGotify['ignore_ssl'] = $row['ignore_ssl'];
+        $notificationsGotify['url_mode'] = wallos_normalize_mode(
+            $row['url_mode'] ?? (trim((string) $row['url']) !== '' ? 'custom' : 'instance')
+        );
         $rowCount++;
     }
 
@@ -468,6 +502,11 @@ if ($budgetPeriodAnchorDate === '1970-01-01' || !preg_match('/^\d{4}-\d{2}-\d{2}
         $notificationsGotify['token'] = "";
         $notificationsGotify['ignore_ssl'] = 0;
     }
+
+    // The instance server host is resolved server side; the application token
+    // always stays with the user.
+    $instanceGotify = wallos_get_instance_gotify_config($db);
+    $usesInstanceGotify = $notificationsGotify['url_mode'] === 'instance';
 
     ?>
 
@@ -675,9 +714,42 @@ if ($budgetPeriodAnchorDate === '1970-01-01' || !preg_match('/^\d{4}-\d{2}-\d{2}
                             <?= $notificationsGotify['enabled'] ? "checked" : "" ?>>
                         <label for="gotifyenabled" class="capitalize"><?= translate('enabled', $i18n) ?></label>
                     </div>
+                    <label for="gotifymodeinstance"><?= translate('gotify_server', $i18n) ?></label>
+                    <div class="form-group-inline">
+                        <div>
+                            <input type="radio" name="gotifymode" id="gotifymodeinstance" value="instance"
+                                onchange="toggleGotifyMode()" <?= $usesInstanceGotify ? "checked" : "" ?> />
+                            <label for="gotifymodeinstance"><?= translate('use_instance_server', $i18n) ?></label>
+                        </div>
+                        <div>
+                            <input type="radio" name="gotifymode" id="gotifymodecustom" value="custom"
+                                onchange="toggleGotifyMode()" <?= $usesInstanceGotify ? "" : "checked" ?> />
+                            <label for="gotifymodecustom"><?= translate('use_custom_server', $i18n) ?></label>
+                        </div>
+                    </div>
+                    <div class="settings-notes" id="instanceGotifyInfo" <?= $usesInstanceGotify ? "" : 'style="display:none"' ?>>
+                        <?php if (trim((string) $instanceGotify['values']['url']) !== ''): ?>
+                            <p>
+                                <i class="fa-solid fa-circle-info"></i>
+                                <?= translate('gotify_server', $i18n) ?>:
+                                <span><?= htmlspecialchars($instanceGotify['values']['url']) ?></span>
+                            </p>
+                            <p>
+                                <i class="fa-solid fa-circle-info"></i>
+                                <?= translate('gotify_token_stays_yours', $i18n) ?>
+                            </p>
+                        <?php else: ?>
+                            <p>
+                                <i class="fa-solid fa-triangle-exclamation"></i>
+                                <?= translate('instance_gotify_not_configured', $i18n) ?>
+                            </p>
+                        <?php endif; ?>
+                    </div>
+                    <div id="customGotifyFields" <?= $usesInstanceGotify ? 'style="display:none"' : "" ?>>
                     <div class="form-group-inline">
                         <input type="text" name="gotifyurl" id="gotifyurl" autocomplete="off"
                             placeholder="<?= translate('url', $i18n) ?>" value="<?= htmlspecialchars($notificationsGotify['url']) ?>" />
+                    </div>
                     </div>
                     <div class="form-group-inline">
                         <input type="text" name="gotifytoken" id="gotifytoken" autocomplete="off"
@@ -711,15 +783,50 @@ if ($budgetPeriodAnchorDate === '1970-01-01' || !preg_match('/^\d{4}-\d{2}-\d{2}
                             <?= $notificationsPushover['enabled'] ? "checked" : "" ?>>
                         <label for="pushoverenabled" class="capitalize"><?= translate('enabled', $i18n) ?></label>
                     </div>
+                    <label for="pushovermodeinstance"><?= translate('pushover_application', $i18n) ?></label>
+                    <div class="form-group-inline">
+                        <div>
+                            <input type="radio" name="pushovermode" id="pushovermodeinstance" value="instance"
+                                onchange="togglePushoverMode()" <?= $usesInstancePushover ? "checked" : "" ?> />
+                            <label for="pushovermodeinstance"><?= translate('use_instance_application', $i18n) ?></label>
+                        </div>
+                        <div>
+                            <input type="radio" name="pushovermode" id="pushovermodecustom" value="custom"
+                                onchange="togglePushoverMode()" <?= $usesInstancePushover ? "" : "checked" ?> />
+                            <label for="pushovermodecustom"><?= translate('use_custom_application', $i18n) ?></label>
+                        </div>
+                    </div>
+                    <div class="settings-notes" id="instancePushoverInfo" <?= $usesInstancePushover ? "" : 'style="display:none"' ?>>
+                        <?php if ($instancePushover['valid']): ?>
+                            <p>
+                                <i class="fa-solid fa-circle-info"></i>
+                                <?= translate('pushover_application_token', $i18n) ?>:
+                                <span>
+                                    <?php if ($instancePushoverToken['managed']): ?>
+                                        <?= translate('managed_externally', $i18n) ?>
+                                    <?php else: ?>
+                                        <?= translate('configured', $i18n) ?>
+                                    <?php endif; ?>
+                                </span>
+                            </p>
+                        <?php else: ?>
+                            <p>
+                                <i class="fa-solid fa-triangle-exclamation"></i>
+                                <?= translate('instance_pushover_not_configured', $i18n) ?>
+                            </p>
+                        <?php endif; ?>
+                    </div>
                     <div class="form-group-inline">
                         <input type="text" name="pushoveruserkey" id="pushoveruserkey" autocomplete="off"
                             placeholder="<?= translate('pushover_user_key', $i18n) ?>"
                             value="<?= htmlspecialchars($notificationsPushover['user_key']) ?>" />
                     </div>
+                    <div id="customPushoverFields" <?= $usesInstancePushover ? 'style="display:none"' : "" ?>>
                     <div class="form-group-inline">
                         <input type="text" name="pushovertoken" id="pushovertoken" autocomplete="off"
                             placeholder="<?= translate('token', $i18n) ?>"
                             value="<?= htmlspecialchars($notificationsPushover['token']) ?>" />
+                    </div>
                     </div>
 
                     <div class="buttons">
@@ -744,10 +851,45 @@ if ($budgetPeriodAnchorDate === '1970-01-01' || !preg_match('/^\d{4}-\d{2}-\d{2}
                             <?= $notificationsTelegram['enabled'] ? "checked" : "" ?>>
                         <label for="telegramenabled" class="capitalize"><?= translate('enabled', $i18n) ?></label>
                     </div>
+                    <label for="telegrammodeinstance"><?= translate('telegram_bot', $i18n) ?></label>
+                    <div class="form-group-inline">
+                        <div>
+                            <input type="radio" name="telegrammode" id="telegrammodeinstance" value="instance"
+                                onchange="toggleTelegramMode()" <?= $usesInstanceTelegram ? "checked" : "" ?> />
+                            <label for="telegrammodeinstance"><?= translate('use_instance_bot', $i18n) ?></label>
+                        </div>
+                        <div>
+                            <input type="radio" name="telegrammode" id="telegrammodecustom" value="custom"
+                                onchange="toggleTelegramMode()" <?= $usesInstanceTelegram ? "" : "checked" ?> />
+                            <label for="telegrammodecustom"><?= translate('use_custom_bot', $i18n) ?></label>
+                        </div>
+                    </div>
+                    <div class="settings-notes" id="instanceTelegramInfo" <?= $usesInstanceTelegram ? "" : 'style="display:none"' ?>>
+                        <?php if ($instanceTelegram['valid']): ?>
+                            <p>
+                                <i class="fa-solid fa-circle-info"></i>
+                                <?= translate('telegram_bot_token', $i18n) ?>:
+                                <span>
+                                    <?php if ($instanceTelegramToken['managed']): ?>
+                                        <?= translate('managed_externally', $i18n) ?>
+                                    <?php else: ?>
+                                        <?= translate('configured', $i18n) ?>
+                                    <?php endif; ?>
+                                </span>
+                            </p>
+                        <?php else: ?>
+                            <p>
+                                <i class="fa-solid fa-triangle-exclamation"></i>
+                                <?= translate('instance_telegram_not_configured', $i18n) ?>
+                            </p>
+                        <?php endif; ?>
+                    </div>
+                    <div id="customTelegramFields" <?= $usesInstanceTelegram ? 'style="display:none"' : "" ?>>
                     <div class="form-group-inline">
                         <input type="text" name="telegrambottoken" id="telegrambottoken" autocomplete="off"
                             placeholder="<?= translate('telegram_bot_token', $i18n) ?>"
                             value="<?= htmlspecialchars($notificationsTelegram['bot_token'] ? $notificationsTelegram['bot_token'] : "") ?>" />
+                    </div>
                     </div>
                     <div class="form-group-inline">
                         <input type="text" name="telegramchatid" id="telegramchatid" autocomplete="off"
@@ -841,9 +983,51 @@ if ($budgetPeriodAnchorDate === '1970-01-01' || !preg_match('/^\d{4}-\d{2}-\d{2}
                         <input type="checkbox" id="ntfyenabled" name="ntfyenabled" <?= $notificationsNtfy['enabled'] ? "checked" : "" ?>>
                         <label for="ntfyenabled" class="capitalize"><?= translate('enabled', $i18n) ?></label>
                     </div>
+                    <label for="ntfymodeinstance"><?= translate('ntfy_server', $i18n) ?></label>
+                    <div class="form-group-inline">
+                        <div>
+                            <input type="radio" name="ntfymode" id="ntfymodeinstance" value="instance"
+                                onchange="toggleNtfyMode()" <?= $usesInstanceNtfy ? "checked" : "" ?> />
+                            <label for="ntfymodeinstance"><?= translate('use_instance_server', $i18n) ?></label>
+                        </div>
+                        <div>
+                            <input type="radio" name="ntfymode" id="ntfymodecustom" value="custom"
+                                onchange="toggleNtfyMode()" <?= $usesInstanceNtfy ? "" : "checked" ?> />
+                            <label for="ntfymodecustom"><?= translate('use_custom_server', $i18n) ?></label>
+                        </div>
+                    </div>
+                    <div class="settings-notes" id="instanceNtfyInfo" <?= $usesInstanceNtfy ? "" : 'style="display:none"' ?>>
+                        <?php if ($instanceNtfy['valid']): ?>
+                            <p>
+                                <i class="fa-solid fa-circle-info"></i>
+                                <?= translate('ntfy_server', $i18n) ?>:
+                                <span><?= htmlspecialchars($instanceNtfy['values']['host']) ?></span>
+                            </p>
+                            <p>
+                                <i class="fa-solid fa-circle-info"></i>
+                                <?= translate('ntfy_authentication', $i18n) ?>:
+                                <span>
+                                    <?php if ($instanceNtfyHeaders['managed']): ?>
+                                        <?= translate('managed_externally', $i18n) ?>
+                                    <?php elseif ($instanceNtfyHeaders['configured']): ?>
+                                        <?= translate('ntfy_auth_instance', $i18n) ?>
+                                    <?php else: ?>
+                                        <?= translate('ntfy_auth_absent', $i18n) ?>
+                                    <?php endif; ?>
+                                </span>
+                            </p>
+                        <?php else: ?>
+                            <p>
+                                <i class="fa-solid fa-triangle-exclamation"></i>
+                                <?= translate('instance_ntfy_not_configured', $i18n) ?>
+                            </p>
+                        <?php endif; ?>
+                    </div>
+                    <div id="customNtfyFields" <?= $usesInstanceNtfy ? 'style="display:none"' : "" ?>>
                     <div class="form-group-inline">
                         <input type="text" name="ntfyhost" id="ntfyhost" autocomplete="off"
                             placeholder="<?= translate('host', $i18n) ?>" value="<?= htmlspecialchars($notificationsNtfy['host']) ?>" />
+                    </div>
                     </div>
                     <div class="form-group-inline">
                         <input type="text" name="ntfytopic" id="ntfytopic" autocomplete="off"

@@ -168,19 +168,40 @@ function testNotificationsWebhookButton() {
     makeFetchCall('endpoints/notifications/testwebhooknotifications.php', data, button);
 }
 
+function getTelegramMode() {
+    const selected = document.querySelector('input[name="telegrammode"]:checked');
+    return selected ? selected.value : "custom";
+}
+
+// The instance bot token is resolved server side, so nothing but the mode and
+// the personal chat id is sent when the instance bot is selected.
+function toggleTelegramMode() {
+    const usesInstance = getTelegramMode() === "instance";
+    const instanceInfo = document.getElementById("instanceTelegramInfo");
+    const customFields = document.getElementById("customTelegramFields");
+
+    if (instanceInfo) {
+      instanceInfo.style.display = usesInstance ? "" : "none";
+    }
+    if (customFields) {
+      customFields.style.display = usesInstance ? "none" : "";
+    }
+}
+
 function saveNotificationsTelegramButton() {
     const button = document.getElementById("saveNotificationsTelegram");
     button.disabled = true;
-  
-    const enabled = document.getElementById("telegramenabled").checked ? 1 : 0;
-    const chat_id = document.getElementById("telegramchatid").value;
-    const bot_token = document.getElementById("telegrambottoken").value;
-  
+
+    const mode = getTelegramMode();
     const data = {
-      enabled: enabled,
-      chat_id: chat_id,
-      bot_token: bot_token
+      enabled: document.getElementById("telegramenabled").checked ? 1 : 0,
+      chat_id: document.getElementById("telegramchatid").value,
+      mode: mode
     };
+
+    if (mode === "custom") {
+      data.bot_token = document.getElementById("telegrambottoken").value;
+    }
 
     makeFetchCall('endpoints/notifications/savetelegramnotifications.php', data, button);
 }
@@ -188,16 +209,17 @@ function saveNotificationsTelegramButton() {
 function testNotificationsTelegramButton() {
     const button = document.getElementById("testNotificationsTelegram");
     button.disabled = true;
-  
-    const enabled = document.getElementById("telegramenabled").checked ? 1 : 0;
-    const bottoken = document.getElementById("telegrambottoken").value;
-    const chatid = document.getElementById("telegramchatid").value;
-  
+
+    const mode = getTelegramMode();
     const data = {
-      enabled: enabled,
-      bottoken: bottoken,
-      chatid: chatid
+      enabled: document.getElementById("telegramenabled").checked ? 1 : 0,
+      chatid: document.getElementById("telegramchatid").value,
+      mode: mode
     };
+
+    if (mode === "custom") {
+      data.bottoken = document.getElementById("telegrambottoken").value;
+    }
 
     makeFetchCall('endpoints/notifications/testtelegramnotifications.php', data, button);
 }
@@ -270,21 +292,41 @@ function saveNotificationsMattermostButton() {
     makeFetchCall('endpoints/notifications/savemattermostnotifications.php', data, button);
 }
 
+function getGotifyMode() {
+    const selected = document.querySelector('input[name="gotifymode"]:checked');
+    return selected ? selected.value : "custom";
+}
+
+// The instance server host is resolved server side, so the URL is not sent when
+// it is selected. The application token always goes: it stays with the user.
+function toggleGotifyMode() {
+    const usesInstance = getGotifyMode() === "instance";
+    const instanceInfo = document.getElementById("instanceGotifyInfo");
+    const customFields = document.getElementById("customGotifyFields");
+
+    if (instanceInfo) {
+      instanceInfo.style.display = usesInstance ? "" : "none";
+    }
+    if (customFields) {
+      customFields.style.display = usesInstance ? "none" : "";
+    }
+}
+
 function saveNotificationsGotifyButton() {
     const button = document.getElementById("saveNotificationsGotify");
     button.disabled = true;
-  
-    const enabled = document.getElementById("gotifyenabled").checked ? 1 : 0;
-    const gotify_url = document.getElementById("gotifyurl").value;
-    const token = document.getElementById("gotifytoken").value;
-    const ignore_ssl = document.getElementById("gotifyignoressl").checked ? 1 : 0;
-  
+
+    const mode = getGotifyMode();
     const data = {
-      enabled: enabled,
-      gotify_url: gotify_url,
-      token: token,
-      ignore_ssl: ignore_ssl
+      enabled: document.getElementById("gotifyenabled").checked ? 1 : 0,
+      token: document.getElementById("gotifytoken").value,
+      ignore_ssl: document.getElementById("gotifyignoressl").checked ? 1 : 0,
+      mode: mode
     };
+
+    if (mode === "custom") {
+      data.gotify_url = document.getElementById("gotifyurl").value;
+    }
 
     makeFetchCall('endpoints/notifications/savegotifynotifications.php', data, button);
 }
@@ -293,35 +335,56 @@ function saveNotificationsGotifyButton() {
 function testNotificationsGotifyButton() {
     const button = document.getElementById("testNotificationsGotify");
     button.disabled = true;
-  
-    const enabled = document.getElementById("gotifyenabled").checked ? 1 : 0;
-    const gotify_url = document.getElementById("gotifyurl").value;
-    const token = document.getElementById("gotifytoken").value;
-    const ignore_ssl = document.getElementById("gotifyignoressl").checked ? 1 : 0;
-  
+
+    const mode = getGotifyMode();
     const data = {
-      enabled: enabled,
-      gotify_url: gotify_url,
-      token: token,
-      ignore_ssl: ignore_ssl
+      enabled: document.getElementById("gotifyenabled").checked ? 1 : 0,
+      token: document.getElementById("gotifytoken").value,
+      ignore_ssl: document.getElementById("gotifyignoressl").checked ? 1 : 0,
+      mode: mode
     };
 
+    if (mode === "custom") {
+      data.gotify_url = document.getElementById("gotifyurl").value;
+    }
+
     makeFetchCall('endpoints/notifications/testgotifynotifications.php', data, button);
+}
+
+function getPushoverMode() {
+  const selected = document.querySelector('input[name="pushovermode"]:checked');
+  return selected ? selected.value : "custom";
+}
+
+// The instance application token is resolved server side, so nothing but the
+// mode and the personal user key is sent when the instance application is used.
+function togglePushoverMode() {
+  const usesInstance = getPushoverMode() === "instance";
+  const instanceInfo = document.getElementById("instancePushoverInfo");
+  const customFields = document.getElementById("customPushoverFields");
+
+  if (instanceInfo) {
+    instanceInfo.style.display = usesInstance ? "" : "none";
+  }
+  if (customFields) {
+    customFields.style.display = usesInstance ? "none" : "";
+  }
 }
 
 function saveNotificationsPushoverButton() {
   const button = document.getElementById("saveNotificationsPushover");
   button.disabled = true;
 
-  const enabled = document.getElementById("pushoverenabled").checked ? 1 : 0;
-  const user_key = document.getElementById("pushoveruserkey").value;
-  const token = document.getElementById("pushovertoken").value;
-
+  const mode = getPushoverMode();
   const data = {
-    enabled: enabled,
-    user_key: user_key,
-    token: token
+    enabled: document.getElementById("pushoverenabled").checked ? 1 : 0,
+    user_key: document.getElementById("pushoveruserkey").value,
+    mode: mode
   };
+
+  if (mode === "custom") {
+    data.token = document.getElementById("pushovertoken").value;
+  }
 
   makeFetchCall('endpoints/notifications/savepushovernotifications.php', data, button);
 }
@@ -330,15 +393,16 @@ function testNotificationsPushoverButton() {
   const button = document.getElementById("testNotificationsPushover");
   button.disabled = true;
 
-  const enabled = document.getElementById("pushoverenabled").checked ? 1 : 0;
-  const user_key = document.getElementById("pushoveruserkey").value;
-  const token = document.getElementById("pushovertoken").value;
-
+  const mode = getPushoverMode();
   const data = {
-    enabled: enabled,
-    user_key: user_key,
-    token: token
+    enabled: document.getElementById("pushoverenabled").checked ? 1 : 0,
+    user_key: document.getElementById("pushoveruserkey").value,
+    mode: mode
   };
+
+  if (mode === "custom") {
+    data.token = document.getElementById("pushovertoken").value;
+  }
 
   makeFetchCall('endpoints/notifications/testpushovernotifications.php', data, button);
 }
@@ -381,21 +445,41 @@ function testNotificationsDiscordButton() {
   makeFetchCall('endpoints/notifications/testdiscordnotifications.php', data, button);
 }
 
+function getNtfyMode() {
+  const selected = document.querySelector('input[name="ntfymode"]:checked');
+  return selected ? selected.value : "custom";
+}
+
+// The instance server is resolved server side, so the host is not sent when it
+// is selected. The topic and the optional header override always go.
+function toggleNtfyMode() {
+  const usesInstance = getNtfyMode() === "instance";
+  const instanceInfo = document.getElementById("instanceNtfyInfo");
+  const customFields = document.getElementById("customNtfyFields");
+
+  if (instanceInfo) {
+    instanceInfo.style.display = usesInstance ? "" : "none";
+  }
+  if (customFields) {
+    customFields.style.display = usesInstance ? "none" : "";
+  }
+}
+
 function testNotificationsNtfyButton() {
   const button = document.getElementById("testNotificationsNtfy");
   button.disabled = true;
 
-  const host = document.getElementById("ntfyhost").value;
-  const topic = document.getElementById("ntfytopic").value;
-  const headers = document.getElementById("ntfyheaders").value;
-  const ignore_ssl = document.getElementById("ntfyignoressl").checked ? 1 : 0;
-  
+  const mode = getNtfyMode();
   const data = {
-    host: host,
-    topic: topic,
-    headers: headers,
-    ignore_ssl: ignore_ssl
+    topic: document.getElementById("ntfytopic").value,
+    headers: document.getElementById("ntfyheaders").value,
+    ignore_ssl: document.getElementById("ntfyignoressl").checked ? 1 : 0,
+    mode: mode
   };
+
+  if (mode === "custom") {
+    data.host = document.getElementById("ntfyhost").value;
+  }
 
   makeFetchCall('endpoints/notifications/testntfynotifications.php', data, button);
 }
@@ -404,19 +488,18 @@ function saveNotificationsNtfyButton() {
   const button = document.getElementById("saveNotificationsNtfy");
   button.disabled = true;
 
-  const enabled = document.getElementById("ntfyenabled").checked ? 1 : 0;
-  const host = document.getElementById("ntfyhost").value;
-  const topic = document.getElementById("ntfytopic").value;
-  const headers = document.getElementById("ntfyheaders").value;
-  const ignore_ssl = document.getElementById("ntfyignoressl").checked ? 1 : 0;
-
+  const mode = getNtfyMode();
   const data = {
-    enabled: enabled,
-    host: host,
-    topic: topic,
-    headers: headers,
-    ignore_ssl: ignore_ssl
+    enabled: document.getElementById("ntfyenabled").checked ? 1 : 0,
+    topic: document.getElementById("ntfytopic").value,
+    headers: document.getElementById("ntfyheaders").value,
+    ignore_ssl: document.getElementById("ntfyignoressl").checked ? 1 : 0,
+    mode: mode
   };
+
+  if (mode === "custom") {
+    data.host = document.getElementById("ntfyhost").value;
+  }
 
   makeFetchCall('endpoints/notifications/saventfynotifications.php', data, button);
 }

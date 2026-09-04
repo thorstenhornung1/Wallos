@@ -2,86 +2,94 @@
 require_once '../../includes/connect_endpoint.php';
 require_once '../../includes/validate_endpoint.php';
 require_once '../../includes/ssrf_helper.php';
+require_once '../../includes/integration_config.php';
 
 $postData = file_get_contents("php://input");
 $data = json_decode($postData, true);
 
-if (
-    !isset($data["gotify_url"]) || $data["gotify_url"] == "" ||
-    !isset($data["token"]) || $data["token"] == ""
-) {
-    $response = [
+$token = trim((string) ($data["token"] ?? ''));
+$url = trim((string) ($data["gotify_url"] ?? ''));
+$ignoreSsl = (int) ($data["ignore_ssl"] ?? 0);
+
+// The test resolves the exact host production would use: the instance server
+// when the user inherits it, their own otherwise. The application token is
+// always the user's own.
+$defaultMode = $url === '' ? 'instance' : 'custom';
+$mode = wallos_normalize_mode($data['mode'] ?? $defaultMode);
+
+$config = wallos_effective_gotify_config(
+    wallos_get_instance_gotify_config($db),
+    [
+        'url_mode' => $mode,
+        'url' => $url,
+        'token' => $token,
+        'ignore_ssl' => $ignoreSsl,
+        'enabled' => 1,
+    ]
+);
+
+if (!$config['values']['deliverable']) {
+    die(json_encode([
         "success" => false,
-        "message" => translate('fill_mandatory_fields', $i18n)
-    ];
-    die(json_encode($response));
-} else {
-    // Set the message parameters
-    $title = translate('wallos_notification', $i18n);
-    $message = translate('test_notification', $i18n);
-    $priority = 5;
-
-    $url = $data["gotify_url"];
-    $token = $data["token"];
-    $ignore_ssl = $data["ignore_ssl"];
-
-    // Validate URL scheme
-    $parsedUrl = parse_url($url);
-    if (
-        !isset($parsedUrl['scheme']) ||
-        !in_array(strtolower($parsedUrl['scheme']), ['http', 'https']) ||
-        !filter_var($url, FILTER_VALIDATE_URL)
-    ) {
-        die(json_encode([
-            "success" => false,
-            "message" => translate("error", $i18n)
-        ]));
-    }
-
-    $ssrf = validate_webhook_url_for_ssrf($url, $db, $i18n, $userId);
-
-    $ch = curl_init();
-
-    // Set the URL and other options
-    curl_setopt($ch, CURLOPT_URL, rtrim($url, '/') . "/message?token=" . $token);
-    
-    curl_setopt($ch, CURLOPT_FOLLOWLOCATION, false); 
-    curl_setopt($ch, CURLOPT_RESOLVE, ["{$ssrf['host']}:{$ssrf['port']}:{$ssrf['ip']}"]);
-    curl_setopt($ch, CURLOPT_POST, 1);
-    curl_setopt($ch, CURLOPT_POSTFIELDS, http_build_query([
-        'title' => $title,
-        'message' => $message,
-        'priority' => $priority,
+        "message" => $mode === 'instance' && $token !== ''
+            ? translate('instance_gotify_not_configured', $i18n)
+            : translate('fill_mandatory_fields', $i18n)
     ]));
-    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-    curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 5);
-    curl_setopt($ch, CURLOPT_TIMEOUT, 15);
+}
 
-    if ($ignore_ssl) {
-        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
-        curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, false);
-    }
+$effectiveUrl = (string) $config['values']['url'];
 
-    // Execute the request
-    $response = curl_exec($ch);
-    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+$parsedUrl = parse_url($effectiveUrl);
+if (
+    !isset($parsedUrl['scheme']) ||
+    !in_array(strtolower($parsedUrl['scheme']), ['http', 'https']) ||
+    !filter_var($effectiveUrl, FILTER_VALIDATE_URL)
+) {
+    die(json_encode([
+        "success" => false,
+        "message" => translate("error", $i18n)
+    ]));
+}
 
-    // Close the cURL session
-    unset($ch);
+$ssrf = validate_webhook_url_for_ssrf($effectiveUrl, $db, $i18n, $userId);
 
-    // Check if the message was sent successfully
-    if ($response === false || $httpCode < 200 || $httpCode >= 300) {
-        die(json_encode([
-            "success" => false,
-            "message" => translate('notification_failed', $i18n),
-            "response" => $response,
-            "http_code" => $httpCode
-        ]));
-    } else {
-        die(json_encode([
-            "success" => true,
-            "message" => translate('notification_sent_successfuly', $i18n),
-            "response" => $response
-        ]));
-    }
+$title = translate('wallos_notification', $i18n);
+$message = translate('test_notification', $i18n);
+$priority = 5;
+
+$ch = curl_init();
+curl_setopt($ch, CURLOPT_URL, rtrim($effectiveUrl, '/') . "/message?token=" . (string) $config['values']['token']);
+curl_setopt($ch, CURLOPT_FOLLOWLOCATION, false);
+curl_setopt($ch, CURLOPT_RESOLVE, ["{$ssrf['host']}:{$ssrf['port']}:{$ssrf['ip']}"]);
+curl_setopt($ch, CURLOPT_POST, 1);
+curl_setopt($ch, CURLOPT_POSTFIELDS, http_build_query([
+    'title' => $title,
+    'message' => $message,
+    'priority' => $priority,
+]));
+curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 5);
+curl_setopt($ch, CURLOPT_TIMEOUT, 15);
+
+if ($ignoreSsl) {
+    curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+    curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, false);
+}
+
+$response = curl_exec($ch);
+$httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+
+unset($ch);
+
+if ($response === false || $httpCode < 200 || $httpCode >= 300) {
+    die(json_encode([
+        "success" => false,
+        "message" => translate('notification_failed', $i18n),
+        "http_code" => $httpCode
+    ]));
+} else {
+    die(json_encode([
+        "success" => true,
+        "message" => translate('notification_sent_successfuly', $i18n)
+    ]));
 }

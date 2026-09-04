@@ -151,57 +151,30 @@ if ($_SERVER["REQUEST_METHOD"] === "POST" || $_SERVER["REQUEST_METHOD"] === "GET
         $notification_settings['discord_notifications'] = $discord_notifications;
     }
 
-    $query = "SELECT * FROM gotify_notifications WHERE user_id = :userId";
-    $stmt = $db->prepare($query);
-    $stmt->bindValue(':userId', $userId);
-    $result = $stmt->execute();
-    $gotify_notifications = $result->fetchArray(SQLITE3_ASSOC);
-    if ($gotify_notifications) {
-        unset($gotify_notifications['user_id']);
-        if (isset($gotify_notifications['token'])) {
-            $gotify_notifications['token'] = "********";
-        }
-        $notification_settings['gotify_notifications'] = $gotify_notifications;
-    }
+    // Resolved instance/custom view. The application token is a credential and
+    // is reported as a status, never as a value.
+    $notification_settings['gotify_notifications'] = wallos_gotify_public_payload(
+        wallos_get_effective_gotify_config($db, $userId)
+    );
 
-    $query = "SELECT * FROM ntfy_notifications WHERE user_id = :userId";
-    $stmt = $db->prepare($query);
-    $stmt->bindValue(':userId', $userId);
-    $result = $stmt->execute();
-    $ntfy_notifications = $result->fetchArray(SQLITE3_ASSOC);
-    if ($ntfy_notifications) {
-        unset($ntfy_notifications['user_id']);
-        if (isset($ntfy_notifications['headers'])) {
-            $ntfy_notifications['headers'] = "********";
-        }
-        $notification_settings['ntfy_notifications'] = $ntfy_notifications;
-    }
+    // Resolved instance/custom view. The auth headers may carry authorization
+    // material and are reported as a status, never rendered into the page.
+    $notification_settings['ntfy_notifications'] = wallos_ntfy_public_payload(
+        wallos_get_effective_ntfy_config($db, $userId)
+    );
 
-    $query = "SELECT * FROM pushover_notifications WHERE user_id = :userId";
-    $stmt = $db->prepare($query);
-    $stmt->bindValue(':userId', $userId);
-    $result = $stmt->execute();
-    $pushover_notifications = $result->fetchArray(SQLITE3_ASSOC);
-    if ($pushover_notifications) {
-        unset($pushover_notifications['user_id']);
-        if (isset($pushover_notifications['token'])) {
-            $pushover_notifications['token'] = "********";
-        }
-        $notification_settings['pushover_notifications'] = $pushover_notifications;
-    }
+    // Resolved instance/custom view. The application token is a credential and
+    // is reported as a status, never as a value.
+    $notification_settings['pushover_notifications'] = wallos_pushover_public_payload(
+        wallos_get_effective_pushover_config($db, $userId)
+    );
 
-    $query = "SELECT * FROM telegram_notifications WHERE user_id = :userId";
-    $stmt = $db->prepare($query);
-    $stmt->bindValue(':userId', $userId);
-    $result = $stmt->execute();
-    $telegram_notifications = $result->fetchArray(SQLITE3_ASSOC);
-    if ($telegram_notifications) {
-        unset($telegram_notifications['user_id']);
-        if (isset($telegram_notifications['bot_token'])) {
-            $telegram_notifications['bot_token'] = "********";
-        }
-        $notification_settings['telegram_notifications'] = $telegram_notifications;
-    }
+    // Resolved instance/custom view. The bot token is a credential and is
+    // reported as a status, never as a value — the instance token in particular
+    // must never reach a user.
+    $notification_settings['telegram_notifications'] = wallos_telegram_public_payload(
+        wallos_get_effective_telegram_config($db, $userId)
+    );
 
     $query = "SELECT * FROM webhook_notifications WHERE user_id = :userId";
     $stmt = $db->prepare($query);
