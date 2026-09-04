@@ -629,3 +629,40 @@ wallos_test('every Frankfurter request goes over https', function () {
     assert_contains('https://api.frankfurter.dev', $source, 'the rate and catalogue hosts are https');
     assert_not_contains('http://api.frankfurter', $source, 'and none of them is plaintext');
 });
+
+wallos_test('choosing a keyless provider does not throw the stored key away', function () {
+    // Two endpoints save the same setting: the settings page
+    // (endpoints/currency/fixer_api_key.php) and the REST API
+    // (api/fixer/set_fixer.php). They disagreed — the page updated the row and
+    // kept the key, the API deleted the row and with it the credential, so the
+    // same product answered the same question two ways depending on which door
+    // you came through. An API user who looked at Frankfurter lost the Fixer
+    // key with no way back.
+    //
+    // Read as source rather than run, because both endpoints require a session
+    // and an authenticated user; what is asserted is the shape of the branch,
+    // which is where the defect lived.
+    $paths = [
+        'api/fixer/set_fixer.php' => 'if ($provider === 2) {',
+        'endpoints/currency/fixer_api_key.php' => 'if ($keylessProvider) {',
+    ];
+
+    foreach ($paths as $path => $opening) {
+        $source = file_get_contents(WALLOS_ROOT . '/' . $path);
+        $start = strpos($source, $opening);
+
+        assert_true($start !== false, $path . ' has a branch for a provider that needs no key');
+
+        // To the end of the branch: the next line that closes it at column one.
+        $end = strpos($source, "\n}\n", $start);
+        $branch = substr($source, $start, $end === false ? null : $end - $start);
+
+        assert_not_contains('DELETE FROM fixer', $branch,
+            $path . ' keeps the row, and the key in it, when a keyless provider is chosen');
+        assert_contains('UPDATE fixer SET provider', $branch,
+            $path . ' updates the existing row instead');
+        assert_contains("provider_mode = 'custom'", $branch,
+            $path . ' writes the mode explicitly — the column defaults to instance, '
+            . 'and a row saying "use Frankfurter" under instance mode is stored and then ignored');
+    }
+});

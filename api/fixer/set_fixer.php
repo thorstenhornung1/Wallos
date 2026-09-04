@@ -86,35 +86,38 @@ $provider = intval($provider);
 // whatever the instance is configured with" would be stored, reported as
 // saved, and then ignored.
 if ($provider === 2) {
-    $removeStmt = $db->prepare("DELETE FROM fixer WHERE user_id = :userId");
-    $removed = false;
+    // The row is updated, never replaced, so the stored Fixer key survives.
+    // Choosing a provider that needs no key must not be the way somebody
+    // loses the key they will switch back to — and the settings page has
+    // always behaved this way, so the two paths would otherwise give the same
+    // product two answers.
+    $countStmt = $db->prepare("SELECT COUNT(*) AS count FROM fixer WHERE user_id = :userId");
+    $rowExists = false;
 
-    if ($removeStmt !== false) {
-        $removeStmt->bindValue(':userId', $userId, SQLITE3_INTEGER);
-        $removed = $removeStmt->execute() !== false;
+    if ($countStmt !== false) {
+        // Cast rather than type-declared: both backends infer the type from
+        // the PHP value, and new code has no reason to widen the SQLite
+        // boundary the audit exists to shrink (#20).
+        $countStmt->bindValue(':userId', (int) $userId);
+        $countResult = $countStmt->execute();
+        $countRow = $countResult ? $countResult->fetchArray(SQLITE3_ASSOC) : false;
+        $rowExists = $countRow && $countRow['count'] > 0;
     }
 
-    if (!$removed) {
-        error_log('Wallos set_fixer: could not remove the previous provider key for user '
-            . $userId . ': ' . $db->lastErrorMsg());
-
-        echo json_encode([
-            'success' => false,
-            'title' => 'Database error',
-            'message' => 'The previous provider key could not be replaced.',
-        ]);
-
-        $db->close();
-        exit;
-    }
-
-    $insertStmt = $db->prepare("INSERT INTO fixer (api_key, provider, provider_mode, user_id)
-                                VALUES ('', 2, 'custom', :userId)");
+    $insertStmt = $db->prepare($rowExists
+        ? "UPDATE fixer SET provider = 2, provider_mode = 'custom' WHERE user_id = :userId"
+        : "INSERT INTO fixer (api_key, provider, provider_mode, user_id)
+           VALUES ('', 2, 'custom', :userId)");
     $stored = false;
 
     if ($insertStmt !== false) {
         $insertStmt->bindValue(':userId', $userId, SQLITE3_INTEGER);
         $stored = $insertStmt->execute() !== false;
+    }
+
+    if (!$stored) {
+        error_log('Wallos set_fixer: could not select Frankfurter for user '
+            . $userId . ': ' . $db->lastErrorMsg());
     }
 
     echo json_encode($stored
