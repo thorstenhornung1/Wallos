@@ -697,6 +697,176 @@ function wallos_ai_settings_from_config($config)
 }
 
 /* -------------------------------------------------------------------------
+   Shared notification integrations
+
+   The same instance/custom split milestone B applied to SMTP, currency and AI,
+   now for the notification providers where one half of the credential belongs
+   to the administrator and the other half is a personal destination:
+
+       Telegram   instance bot token          + per-user chat id
+       Pushover   instance application token   + per-user user key
+       ntfy       instance server + auth       + per-user topic
+       Gotify     instance host               + per-user app token
+
+   The instance half resolves exactly like the milestone B secrets — an
+   environment secret or file wins, then the admin database, then nothing — and
+   is never written back to the per-user row. The personal half always stays
+   with the user, so one account's identifier can never reach another's
+   delivery. An effective config additionally carries "enabled" (the user's own
+   flag) and "deliverable" (both halves present), because a usable credential is
+   not the same as a notification the user asked to receive.
+   ------------------------------------------------------------------------- */
+
+/**
+ * Reads one per-user notification row.
+ *
+ * Bound as an integer and fetched without naming a fetch constant, so the
+ * effective resolvers below add nothing to the SQLite boundary this file is
+ * already measured against. The table name is a literal from this file, never a
+ * request value.
+ *
+ * @param WallosDatabase $db
+ * @param string         $table
+ * @param int            $userId
+ * @return array Empty when there is no row.
+ */
+function wallos_config_user_row($db, $table, $userId)
+{
+    $stmt = $db->prepare('SELECT * FROM ' . $table . ' WHERE user_id = :userId LIMIT 1');
+    if ($stmt === false) {
+        return [];
+    }
+
+    $stmt->bindValue(':userId', (int) $userId);
+    $result = $stmt->execute();
+    $row = $result === false ? false : $result->fetchArray();
+
+    return $row ?: [];
+}
+
+/* -------------------------------------------------------------------------
+   Telegram (issue #12)
+   ------------------------------------------------------------------------- */
+
+/**
+ * Instance Telegram configuration: the shared bot token only.
+ *
+ * @param WallosDatabase $db
+ * @return array Result structure with bot_token.
+ */
+function wallos_build_instance_telegram_config($db)
+{
+    $config = wallos_config_result();
+    $config['mode'] = 'instance';
+
+    $instance = wallos_get_instance_settings($db, 'telegram');
+
+    if (!wallos_apply_env_secret($config, 'bot_token', 'WALLOS_TELEGRAM_BOT_TOKEN')) {
+        $botToken = (string) ($instance['bot_token'] ?? '');
+        wallos_config_set($config, 'bot_token', $botToken, $botToken !== '' ? 'admin' : 'default');
+    }
+
+    return $config;
+}
+
+/**
+ * Effective Telegram configuration for one user, from the instance bot token
+ * and the user's own row.
+ *
+ * The pure part of the resolver: the notification cron has already loaded every
+ * row in one query, so it merges here rather than querying again per user.
+ *
+ * @param array $instanceConfig Result of wallos_get_instance_telegram_config().
+ * @param array $row            The user's telegram_notifications row, or [].
+ * @return array Result structure with bot_token, chat_id, enabled and deliverable.
+ */
+function wallos_effective_telegram_config($instanceConfig, $row)
+{
+    $row = $row ?: [];
+
+    // Without the mode column — a database part-way through the migration — a
+    // stored bot token is what marks the row as a custom bot.
+    $legacyMode = trim((string) ($row['bot_token'] ?? '')) !== '' ? 'custom' : 'instance';
+    $mode = wallos_normalize_mode($row['bot_token_mode'] ?? $legacyMode);
+
+    if ($mode === 'custom') {
+        $config = wallos_config_result();
+        $config['mode'] = 'custom';
+        wallos_config_set($config, 'bot_token', (string) ($row['bot_token'] ?? ''), 'user');
+    } else {
+        $config = $instanceConfig;
+        $config['mode'] = 'instance';
+    }
+
+    // The chat id is personal and always the user's own.
+    wallos_config_set($config, 'chat_id', (string) ($row['chat_id'] ?? ''), 'user');
+    $config['values']['enabled'] = (int) ($row['enabled'] ?? 0);
+
+    wallos_finalize_notification_config($config, ['bot_token', 'chat_id'],
+        'The Telegram bot token or chat id is not configured.');
+
+    return $config;
+}
+
+/**
+ * @param WallosDatabase $db
+ * @param int            $userId
+ * @return array Result structure.
+ */
+function wallos_build_effective_telegram_config($db, $userId)
+{
+    $row = wallos_config_user_row($db, 'telegram_notifications', $userId);
+
+    return wallos_effective_telegram_config(wallos_get_instance_telegram_config($db), $row);
+}
+
+/**
+ * API and template representation. The bot token is a credential and never
+ * leaves the server as a value — only its presence and owner are reported.
+ *
+ * @param array $config
+ * @return array
+ */
+function wallos_telegram_public_payload($config)
+{
+    return [
+        'mode' => $config['mode'],
+        'enabled' => (int) ($config['values']['enabled'] ?? 0),
+        'chat_id' => (string) ($config['values']['chat_id'] ?? ''),
+        'bot_token' => wallos_secret_status($config, 'bot_token'),
+        'deliverable' => (bool) ($config['values']['deliverable'] ?? false),
+        'valid' => (bool) $config['valid'],
+    ];
+}
+
+/**
+ * Marks an effective notification config deliverable only when every field it
+ * needs is present, and invalid with a note otherwise. Shared by every provider
+ * so "usable" means the same thing everywhere.
+ *
+ * @param array    $config   Result structure, modified in place.
+ * @param string[] $required Fields that must all be non-empty.
+ * @param string   $note
+ */
+function wallos_finalize_notification_config(&$config, array $required, $note)
+{
+    $deliverable = true;
+    foreach ($required as $field) {
+        if (trim((string) ($config['values'][$field] ?? '')) === '') {
+            $deliverable = false;
+            break;
+        }
+    }
+
+    $config['values']['deliverable'] = $deliverable;
+
+    if (!$deliverable) {
+        $config['valid'] = false;
+        wallos_config_add_note($config, $note);
+    }
+}
+
+/* -------------------------------------------------------------------------
    Memoized entry points
 
    Resolution is deterministic within one request or job, so each of these is
@@ -775,6 +945,27 @@ function wallos_get_effective_ai_config($db, $userId)
 {
     return wallos_config_cached($db, 'ai:' . (int) $userId,
         fn() => wallos_build_effective_ai_config($db, $userId));
+}
+
+/**
+ * @param WallosDatabase $db
+ * @return array Result structure.
+ */
+function wallos_get_instance_telegram_config($db)
+{
+    return wallos_config_cached($db, 'telegram:instance',
+        fn() => wallos_build_instance_telegram_config($db));
+}
+
+/**
+ * @param WallosDatabase $db
+ * @param int            $userId
+ * @return array Result structure.
+ */
+function wallos_get_effective_telegram_config($db, $userId)
+{
+    return wallos_config_cached($db, 'telegram:' . (int) $userId,
+        fn() => wallos_build_effective_telegram_config($db, $userId));
 }
 
 /* -------------------------------------------------------------------------

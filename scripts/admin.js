@@ -99,7 +99,9 @@ function saveInstanceIntegrationsButton() {
     ai_base_url: readFieldValue("instanceAiBaseUrl"),
     ai_model: readFieldValue("instanceAiModel"),
     ai_api_key: readFieldValue("instanceAiApiKey"),
-    ai_api_key_remove: readCheckboxValue("instanceAiApiKeyRemove")
+    ai_api_key_remove: readCheckboxValue("instanceAiApiKeyRemove"),
+    telegram_bot_token: readFieldValue("instanceTelegramBotToken"),
+    telegram_bot_token_remove: readCheckboxValue("instanceTelegramBotTokenRemove")
   };
 
   makeFetchCall('endpoints/admin/saveintegrationsettings.php', data, button);

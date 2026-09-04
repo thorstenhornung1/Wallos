@@ -10,6 +10,7 @@ $data = json_decode($postData, true);
 
 $currencyConfiguration = wallos_get_instance_currency_config($db);
 $aiConfiguration = wallos_get_instance_ai_config($db);
+$telegramConfiguration = wallos_get_instance_telegram_config($db);
 
 $currencyProvider = trim((string) ($data['currency_provider'] ?? ''));
 $currencyApiKey = trim((string) ($data['currency_api_key'] ?? ''));
@@ -17,6 +18,7 @@ $aiProvider = strtolower(trim((string) ($data['ai_provider'] ?? '')));
 $aiBaseUrl = trim((string) ($data['ai_base_url'] ?? ''));
 $aiModel = trim((string) ($data['ai_model'] ?? ''));
 $aiApiKey = trim((string) ($data['ai_api_key'] ?? ''));
+$telegramBotToken = trim((string) ($data['telegram_bot_token'] ?? ''));
 
 if ($currencyProvider !== '' && wallos_parse_currency_provider($currencyProvider) === null) {
     die(json_encode([
@@ -82,6 +84,16 @@ if (empty($aiConfiguration['managed']['api_key'])) {
         wallos_set_instance_setting($db, 'ai', 'api_key', '', true);
     } elseif ($aiApiKey !== '') {
         wallos_set_instance_setting($db, 'ai', 'api_key', $aiApiKey, true);
+    }
+}
+
+// The Telegram bot token is a shared credential; an empty field keeps the
+// stored value, and removing it is an explicit action.
+if (empty($telegramConfiguration['managed']['bot_token'])) {
+    if (!empty($data['telegram_bot_token_remove'])) {
+        wallos_set_instance_setting($db, 'telegram', 'bot_token', '', true);
+    } elseif ($telegramBotToken !== '') {
+        wallos_set_instance_setting($db, 'telegram', 'bot_token', $telegramBotToken, true);
     }
 }
 

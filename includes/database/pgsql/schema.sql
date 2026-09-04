@@ -20,7 +20,7 @@
 --   * Every identifier is quoted, because "user" and "order" are reserved words
 --     and a keyword list kept in the generator would be wrong eventually.
 
--- 42 tables, 75 migrations recorded as applied.
+-- 42 tables, 74 migrations recorded as applied.
 
 CREATE TABLE "admin" (
     "id" SERIAL PRIMARY KEY,
@@ -153,9 +153,7 @@ CREATE TABLE "fixer" (
     "usage_updated_at" TEXT DEFAULT NULL,
     "provider_mode" TEXT DEFAULT 'instance',
     "local_calls" INTEGER DEFAULT 0,
-    "local_calls_month" TEXT DEFAULT '',
-    "usage_used_day" INTEGER DEFAULT NULL,
-    "usage_limit_day" INTEGER DEFAULT NULL
+    "local_calls_month" TEXT DEFAULT ''
 );
 
 CREATE TABLE "frequencies" (
@@ -204,8 +202,7 @@ CREATE TABLE "last_update_next_payment_date" (
 CREATE TABLE "login_tokens" (
     "user_id" INTEGER NOT NULL,
     "token" TEXT NOT NULL,
-    "timestamp" TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    "from_oidc" INTEGER DEFAULT 0
+    "timestamp" TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE TABLE "mattermost_notifications" (
@@ -365,7 +362,8 @@ CREATE TABLE "telegram_notifications" (
     "enabled" INTEGER DEFAULT 0,
     "bot_token" TEXT DEFAULT '',
     "chat_id" TEXT DEFAULT '',
-    "user_id" INTEGER DEFAULT 1
+    "user_id" INTEGER DEFAULT 1,
+    "bot_token_mode" TEXT DEFAULT 'instance'
 );
 
 CREATE TABLE "total_yearly_cost" (
@@ -657,8 +655,7 @@ INSERT INTO "migrations" ("id", "migration") VALUES
     (71, 'migrations/000072.php'),
     (72, 'migrations/000073.php'),
     (73, 'migrations/000074.php'),
-    (74, 'migrations/000075.php'),
-    (75, 'migrations/000076.php');
+    (74, 'migrations/000075.php');
 
 INSERT INTO "payment_methods" ("id", "name", "icon", "enabled", "order", "user_id") VALUES
     (1, 'PayPal', 'images/uploads/icons/paypal.png', 1, 1, 1),

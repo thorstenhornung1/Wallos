@@ -44,6 +44,8 @@ $currencyConfiguration = wallos_get_instance_currency_config($db);
 $currencyKeyStatus = wallos_secret_status($currencyConfiguration, 'api_key');
 $aiConfiguration = wallos_get_instance_ai_config($db);
 $aiKeyStatus = wallos_secret_status($aiConfiguration, 'api_key');
+$telegramConfiguration = wallos_get_instance_telegram_config($db);
+$telegramTokenStatus = wallos_secret_status($telegramConfiguration, 'bot_token');
 $languageConfiguration = wallos_get_instance_language_config($db);
 
 function oidc_input_attrs($field, $managedFields)
@@ -652,6 +654,30 @@ $loginDisabledAllowed = $userCount == 1 && $settings['registrations_open'] == 0;
                     <label for="instanceAiApiKeyRemove"><?= translate('remove_stored_secret', $i18n) ?></label>
                 </div>
             <?php endif; ?>
+
+            <h3><?= translate('notification_providers', $i18n) ?></h3>
+            <div class="form-group">
+                <label for="instanceTelegramBotToken"><?= translate('telegram_bot_token', $i18n) ?></label>
+            </div>
+            <div class="form-group-inline">
+                <?php if ($telegramTokenStatus['managed']): ?>
+                    <input type="text" id="instanceTelegramBotTokenStatus" disabled
+                        data-managed-by="<?= htmlspecialchars($telegramConfiguration['managed_by']['bot_token'] ?? '') ?>"
+                        value="<?= $telegramTokenStatus['configured'] ? translate('configured', $i18n) : translate('not_configured', $i18n) ?>" />
+                <?php else: ?>
+                    <input type="password" id="instanceTelegramBotToken" autocomplete="off"
+                        placeholder="<?= $telegramTokenStatus['configured']
+                            ? translate('telegram_bot_token', $i18n) . ' — ' . translate('leave_empty_to_keep', $i18n)
+                            : translate('telegram_bot_token', $i18n) ?>" value="" />
+                <?php endif; ?>
+            </div>
+            <?php if (!$telegramTokenStatus['managed'] && $telegramTokenStatus['configured']): ?>
+                <div class="form-group-inline">
+                    <input type="checkbox" id="instanceTelegramBotTokenRemove" />
+                    <label for="instanceTelegramBotTokenRemove"><?= translate('remove_stored_secret', $i18n) ?></label>
+                </div>
+            <?php endif; ?>
+
             <div class="buttons">
                 <input type="submit" class="thin mobile-grow" value="<?= translate('save', $i18n) ?>"
                     id="saveInstanceIntegrations" onClick="saveInstanceIntegrationsButton()" />
@@ -663,6 +689,7 @@ $loginDisabledAllowed = $userCount == 1 && $settings['registrations_open'] == 0;
                 </p>
                 <?= wallos_render_managed_notes($currencyConfiguration, $i18n) ?>
                 <?= wallos_render_managed_notes($aiConfiguration, $i18n) ?>
+                <?= wallos_render_managed_notes($telegramConfiguration, $i18n) ?>
             </div>
         </div>
     </section>

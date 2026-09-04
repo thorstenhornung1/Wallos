@@ -168,19 +168,40 @@ function testNotificationsWebhookButton() {
     makeFetchCall('endpoints/notifications/testwebhooknotifications.php', data, button);
 }
 
+function getTelegramMode() {
+    const selected = document.querySelector('input[name="telegrammode"]:checked');
+    return selected ? selected.value : "custom";
+}
+
+// The instance bot token is resolved server side, so nothing but the mode and
+// the personal chat id is sent when the instance bot is selected.
+function toggleTelegramMode() {
+    const usesInstance = getTelegramMode() === "instance";
+    const instanceInfo = document.getElementById("instanceTelegramInfo");
+    const customFields = document.getElementById("customTelegramFields");
+
+    if (instanceInfo) {
+      instanceInfo.style.display = usesInstance ? "" : "none";
+    }
+    if (customFields) {
+      customFields.style.display = usesInstance ? "none" : "";
+    }
+}
+
 function saveNotificationsTelegramButton() {
     const button = document.getElementById("saveNotificationsTelegram");
     button.disabled = true;
-  
-    const enabled = document.getElementById("telegramenabled").checked ? 1 : 0;
-    const chat_id = document.getElementById("telegramchatid").value;
-    const bot_token = document.getElementById("telegrambottoken").value;
-  
+
+    const mode = getTelegramMode();
     const data = {
-      enabled: enabled,
-      chat_id: chat_id,
-      bot_token: bot_token
+      enabled: document.getElementById("telegramenabled").checked ? 1 : 0,
+      chat_id: document.getElementById("telegramchatid").value,
+      mode: mode
     };
+
+    if (mode === "custom") {
+      data.bot_token = document.getElementById("telegrambottoken").value;
+    }
 
     makeFetchCall('endpoints/notifications/savetelegramnotifications.php', data, button);
 }
@@ -188,16 +209,17 @@ function saveNotificationsTelegramButton() {
 function testNotificationsTelegramButton() {
     const button = document.getElementById("testNotificationsTelegram");
     button.disabled = true;
-  
-    const enabled = document.getElementById("telegramenabled").checked ? 1 : 0;
-    const bottoken = document.getElementById("telegrambottoken").value;
-    const chatid = document.getElementById("telegramchatid").value;
-  
+
+    const mode = getTelegramMode();
     const data = {
-      enabled: enabled,
-      bottoken: bottoken,
-      chatid: chatid
+      enabled: document.getElementById("telegramenabled").checked ? 1 : 0,
+      chatid: document.getElementById("telegramchatid").value,
+      mode: mode
     };
+
+    if (mode === "custom") {
+      data.bottoken = document.getElementById("telegrambottoken").value;
+    }
 
     makeFetchCall('endpoints/notifications/testtelegramnotifications.php', data, button);
 }

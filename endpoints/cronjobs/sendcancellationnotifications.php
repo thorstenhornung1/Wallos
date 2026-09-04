@@ -68,10 +68,16 @@ while ($userToNotify = $usersToNotify->fetchArray(SQLITE3_ASSOC)) {
         $gotify['ignore_ssl'] = $row["ignore_ssl"];
     }
 
-    if ($row = $notificationSettings['telegram'][$userId] ?? null) {
-        $telegramNotificationsEnabled = $row['enabled'];
-        $telegram['botToken'] = $row["bot_token"];
-        $telegram['chatId'] = $row["chat_id"];
+    // Instance bot token plus this user's own chat id; see the same block in
+    // sendnotifications.php.
+    $telegramConfig = wallos_effective_telegram_config(
+        wallos_get_instance_telegram_config($db),
+        $notificationSettings['telegram'][$userId] ?? []
+    );
+    if (!empty($telegramConfig['values']['enabled'])) {
+        $telegramNotificationsEnabled = $telegramConfig['values']['deliverable'];
+        $telegram['botToken'] = $telegramConfig['values']['bot_token'];
+        $telegram['chatId'] = $telegramConfig['values']['chat_id'];
     }
 
     if ($row = $notificationSettings['pushover'][$userId] ?? null) {

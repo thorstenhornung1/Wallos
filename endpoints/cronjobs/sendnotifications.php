@@ -224,10 +224,18 @@ while ($userToNotify = $usersToNotify->fetchArray(SQLITE3_ASSOC)) {
         $gotify['ignore_ssl'] = $row["ignore_ssl"];
     }
 
-    if ($row = $notificationSettings['telegram'][$userId] ?? null) {
-        $telegramNotificationsEnabled = $row['enabled'];
-        $telegram['botToken'] = $row["bot_token"];
-        $telegram['chatId'] = $row["chat_id"];
+    // Resolved from the instance bot token and this user's own row, so an
+    // account inheriting the shared bot sends with it while its chat id stays
+    // its own. The rows were already loaded in one query above; this merges
+    // rather than querying again.
+    $telegramConfig = wallos_effective_telegram_config(
+        wallos_get_instance_telegram_config($db),
+        $notificationSettings['telegram'][$userId] ?? []
+    );
+    if (!empty($telegramConfig['values']['enabled'])) {
+        $telegramNotificationsEnabled = $telegramConfig['values']['deliverable'];
+        $telegram['botToken'] = $telegramConfig['values']['bot_token'];
+        $telegram['chatId'] = $telegramConfig['values']['chat_id'];
     }
 
     if ($row = $notificationSettings['pushplus'][$userId] ?? null) {

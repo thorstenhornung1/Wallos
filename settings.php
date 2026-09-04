@@ -313,10 +313,14 @@ if ($budgetPeriodAnchorDate === '1970-01-01' || !preg_match('/^\d{4}-\d{2}-\d{2}
     $result = $stmt->execute();
 
     $rowCount = 0;
+    $notificationsTelegram['bot_token_mode'] = 'instance';
     while ($row = $result->fetchArray(SQLITE3_ASSOC)) {
         $notificationsTelegram['enabled'] = $row['enabled'];
         $notificationsTelegram['bot_token'] = $row['bot_token'];
         $notificationsTelegram['chat_id'] = $row['chat_id'];
+        $notificationsTelegram['bot_token_mode'] = wallos_normalize_mode(
+            $row['bot_token_mode'] ?? (trim((string) $row['bot_token']) !== '' ? 'custom' : 'instance')
+        );
         $rowCount++;
     }
 
@@ -325,6 +329,12 @@ if ($budgetPeriodAnchorDate === '1970-01-01' || !preg_match('/^\d{4}-\d{2}-\d{2}
         $notificationsTelegram['bot_token'] = "";
         $notificationsTelegram['chat_id'] = "";
     }
+
+    // The instance bot token is resolved server side; only whether it exists is
+    // ever shown, never its value.
+    $instanceTelegram = wallos_get_instance_telegram_config($db);
+    $instanceTelegramToken = wallos_secret_status($instanceTelegram, 'bot_token');
+    $usesInstanceTelegram = $notificationsTelegram['bot_token_mode'] === 'instance';
 
 
     // PushPlus notifications
@@ -744,10 +754,45 @@ if ($budgetPeriodAnchorDate === '1970-01-01' || !preg_match('/^\d{4}-\d{2}-\d{2}
                             <?= $notificationsTelegram['enabled'] ? "checked" : "" ?>>
                         <label for="telegramenabled" class="capitalize"><?= translate('enabled', $i18n) ?></label>
                     </div>
+                    <label for="telegrammodeinstance"><?= translate('telegram_bot', $i18n) ?></label>
+                    <div class="form-group-inline">
+                        <div>
+                            <input type="radio" name="telegrammode" id="telegrammodeinstance" value="instance"
+                                onchange="toggleTelegramMode()" <?= $usesInstanceTelegram ? "checked" : "" ?> />
+                            <label for="telegrammodeinstance"><?= translate('use_instance_bot', $i18n) ?></label>
+                        </div>
+                        <div>
+                            <input type="radio" name="telegrammode" id="telegrammodecustom" value="custom"
+                                onchange="toggleTelegramMode()" <?= $usesInstanceTelegram ? "" : "checked" ?> />
+                            <label for="telegrammodecustom"><?= translate('use_custom_bot', $i18n) ?></label>
+                        </div>
+                    </div>
+                    <div class="settings-notes" id="instanceTelegramInfo" <?= $usesInstanceTelegram ? "" : 'style="display:none"' ?>>
+                        <?php if ($instanceTelegram['valid']): ?>
+                            <p>
+                                <i class="fa-solid fa-circle-info"></i>
+                                <?= translate('telegram_bot_token', $i18n) ?>:
+                                <span>
+                                    <?php if ($instanceTelegramToken['managed']): ?>
+                                        <?= translate('managed_externally', $i18n) ?>
+                                    <?php else: ?>
+                                        <?= translate('configured', $i18n) ?>
+                                    <?php endif; ?>
+                                </span>
+                            </p>
+                        <?php else: ?>
+                            <p>
+                                <i class="fa-solid fa-triangle-exclamation"></i>
+                                <?= translate('instance_telegram_not_configured', $i18n) ?>
+                            </p>
+                        <?php endif; ?>
+                    </div>
+                    <div id="customTelegramFields" <?= $usesInstanceTelegram ? 'style="display:none"' : "" ?>>
                     <div class="form-group-inline">
                         <input type="text" name="telegrambottoken" id="telegrambottoken" autocomplete="off"
                             placeholder="<?= translate('telegram_bot_token', $i18n) ?>"
                             value="<?= htmlspecialchars($notificationsTelegram['bot_token'] ? $notificationsTelegram['bot_token'] : "") ?>" />
+                    </div>
                     </div>
                     <div class="form-group-inline">
                         <input type="text" name="telegramchatid" id="telegramchatid" autocomplete="off"

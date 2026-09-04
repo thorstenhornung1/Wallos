@@ -190,18 +190,12 @@ if ($_SERVER["REQUEST_METHOD"] === "POST" || $_SERVER["REQUEST_METHOD"] === "GET
         $notification_settings['pushover_notifications'] = $pushover_notifications;
     }
 
-    $query = "SELECT * FROM telegram_notifications WHERE user_id = :userId";
-    $stmt = $db->prepare($query);
-    $stmt->bindValue(':userId', $userId);
-    $result = $stmt->execute();
-    $telegram_notifications = $result->fetchArray(SQLITE3_ASSOC);
-    if ($telegram_notifications) {
-        unset($telegram_notifications['user_id']);
-        if (isset($telegram_notifications['bot_token'])) {
-            $telegram_notifications['bot_token'] = "********";
-        }
-        $notification_settings['telegram_notifications'] = $telegram_notifications;
-    }
+    // Resolved instance/custom view. The bot token is a credential and is
+    // reported as a status, never as a value — the instance token in particular
+    // must never reach a user.
+    $notification_settings['telegram_notifications'] = wallos_telegram_public_payload(
+        wallos_get_effective_telegram_config($db, $userId)
+    );
 
     $query = "SELECT * FROM webhook_notifications WHERE user_id = :userId";
     $stmt = $db->prepare($query);
