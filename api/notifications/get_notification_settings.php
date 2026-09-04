@@ -164,18 +164,11 @@ if ($_SERVER["REQUEST_METHOD"] === "POST" || $_SERVER["REQUEST_METHOD"] === "GET
         $notification_settings['gotify_notifications'] = $gotify_notifications;
     }
 
-    $query = "SELECT * FROM ntfy_notifications WHERE user_id = :userId";
-    $stmt = $db->prepare($query);
-    $stmt->bindValue(':userId', $userId);
-    $result = $stmt->execute();
-    $ntfy_notifications = $result->fetchArray(SQLITE3_ASSOC);
-    if ($ntfy_notifications) {
-        unset($ntfy_notifications['user_id']);
-        if (isset($ntfy_notifications['headers'])) {
-            $ntfy_notifications['headers'] = "********";
-        }
-        $notification_settings['ntfy_notifications'] = $ntfy_notifications;
-    }
+    // Resolved instance/custom view. The auth headers may carry authorization
+    // material and are reported as a status, never rendered into the page.
+    $notification_settings['ntfy_notifications'] = wallos_ntfy_public_payload(
+        wallos_get_effective_ntfy_config($db, $userId)
+    );
 
     // Resolved instance/custom view. The application token is a credential and
     // is reported as a status, never as a value.

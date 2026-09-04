@@ -425,21 +425,41 @@ function testNotificationsDiscordButton() {
   makeFetchCall('endpoints/notifications/testdiscordnotifications.php', data, button);
 }
 
+function getNtfyMode() {
+  const selected = document.querySelector('input[name="ntfymode"]:checked');
+  return selected ? selected.value : "custom";
+}
+
+// The instance server is resolved server side, so the host is not sent when it
+// is selected. The topic and the optional header override always go.
+function toggleNtfyMode() {
+  const usesInstance = getNtfyMode() === "instance";
+  const instanceInfo = document.getElementById("instanceNtfyInfo");
+  const customFields = document.getElementById("customNtfyFields");
+
+  if (instanceInfo) {
+    instanceInfo.style.display = usesInstance ? "" : "none";
+  }
+  if (customFields) {
+    customFields.style.display = usesInstance ? "none" : "";
+  }
+}
+
 function testNotificationsNtfyButton() {
   const button = document.getElementById("testNotificationsNtfy");
   button.disabled = true;
 
-  const host = document.getElementById("ntfyhost").value;
-  const topic = document.getElementById("ntfytopic").value;
-  const headers = document.getElementById("ntfyheaders").value;
-  const ignore_ssl = document.getElementById("ntfyignoressl").checked ? 1 : 0;
-  
+  const mode = getNtfyMode();
   const data = {
-    host: host,
-    topic: topic,
-    headers: headers,
-    ignore_ssl: ignore_ssl
+    topic: document.getElementById("ntfytopic").value,
+    headers: document.getElementById("ntfyheaders").value,
+    ignore_ssl: document.getElementById("ntfyignoressl").checked ? 1 : 0,
+    mode: mode
   };
+
+  if (mode === "custom") {
+    data.host = document.getElementById("ntfyhost").value;
+  }
 
   makeFetchCall('endpoints/notifications/testntfynotifications.php', data, button);
 }
@@ -448,19 +468,18 @@ function saveNotificationsNtfyButton() {
   const button = document.getElementById("saveNotificationsNtfy");
   button.disabled = true;
 
-  const enabled = document.getElementById("ntfyenabled").checked ? 1 : 0;
-  const host = document.getElementById("ntfyhost").value;
-  const topic = document.getElementById("ntfytopic").value;
-  const headers = document.getElementById("ntfyheaders").value;
-  const ignore_ssl = document.getElementById("ntfyignoressl").checked ? 1 : 0;
-
+  const mode = getNtfyMode();
   const data = {
-    enabled: enabled,
-    host: host,
-    topic: topic,
-    headers: headers,
-    ignore_ssl: ignore_ssl
+    enabled: document.getElementById("ntfyenabled").checked ? 1 : 0,
+    topic: document.getElementById("ntfytopic").value,
+    headers: document.getElementById("ntfyheaders").value,
+    ignore_ssl: document.getElementById("ntfyignoressl").checked ? 1 : 0,
+    mode: mode
   };
+
+  if (mode === "custom") {
+    data.host = document.getElementById("ntfyhost").value;
+  }
 
   makeFetchCall('endpoints/notifications/saventfynotifications.php', data, button);
 }

@@ -12,6 +12,7 @@ $currencyConfiguration = wallos_get_instance_currency_config($db);
 $aiConfiguration = wallos_get_instance_ai_config($db);
 $telegramConfiguration = wallos_get_instance_telegram_config($db);
 $pushoverConfiguration = wallos_get_instance_pushover_config($db);
+$ntfyConfiguration = wallos_get_instance_ntfy_config($db);
 
 $currencyProvider = trim((string) ($data['currency_provider'] ?? ''));
 $currencyApiKey = trim((string) ($data['currency_api_key'] ?? ''));
@@ -21,6 +22,8 @@ $aiModel = trim((string) ($data['ai_model'] ?? ''));
 $aiApiKey = trim((string) ($data['ai_api_key'] ?? ''));
 $telegramBotToken = trim((string) ($data['telegram_bot_token'] ?? ''));
 $pushoverAppToken = trim((string) ($data['pushover_app_token'] ?? ''));
+$ntfyBaseUrl = trim((string) ($data['ntfy_base_url'] ?? ''));
+$ntfyHeaders = trim((string) ($data['ntfy_headers'] ?? ''));
 
 if ($currencyProvider !== '' && wallos_parse_currency_provider($currencyProvider) === null) {
     die(json_encode([
@@ -52,6 +55,23 @@ if ($aiBaseUrl !== '' && empty($aiConfiguration['managed']['url'])) {
     }
 
     validate_webhook_url_for_ssrf($aiBaseUrl, $db, $i18n, $userId);
+}
+
+// The ntfy server URL is validated for scheme here; the actual delivery URL
+// (server plus a user's topic) is SSRF-checked where the request is made — the
+// per-user save and the notification cron.
+if ($ntfyBaseUrl !== '' && empty($ntfyConfiguration['managed']['host'])) {
+    $parsedNtfyUrl = parse_url($ntfyBaseUrl);
+    if (
+        !isset($parsedNtfyUrl['scheme']) ||
+        !in_array(strtolower($parsedNtfyUrl['scheme']), ['http', 'https']) ||
+        !filter_var($ntfyBaseUrl, FILTER_VALIDATE_URL)
+    ) {
+        die(json_encode([
+            "success" => false,
+            "message" => translate('invalid_host', $i18n)
+        ]));
+    }
 }
 
 // Environment managed values are never persisted.
@@ -106,6 +126,21 @@ if (empty($pushoverConfiguration['managed']['token'])) {
         wallos_set_instance_setting($db, 'pushover', 'app_token', '', true);
     } elseif ($pushoverAppToken !== '') {
         wallos_set_instance_setting($db, 'pushover', 'app_token', $pushoverAppToken, true);
+    }
+}
+
+// The ntfy server URL is not a secret and is stored as given. The shared auth
+// headers are a secret: an empty field keeps the stored value, removing them is
+// explicit.
+if (empty($ntfyConfiguration['managed']['host'])) {
+    wallos_set_instance_setting($db, 'ntfy', 'base_url', $ntfyBaseUrl);
+}
+
+if (empty($ntfyConfiguration['managed']['headers'])) {
+    if (!empty($data['ntfy_headers_remove'])) {
+        wallos_set_instance_setting($db, 'ntfy', 'headers', '', true);
+    } elseif ($ntfyHeaders !== '') {
+        wallos_set_instance_setting($db, 'ntfy', 'headers', $ntfyHeaders, true);
     }
 }
 

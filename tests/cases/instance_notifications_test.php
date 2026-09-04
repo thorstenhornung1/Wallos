@@ -210,3 +210,128 @@ wallos_test('the Pushover payload reports status but never the application token
 
     $db->close();
 });
+
+/* -------------------------------------------------------------------------
+   ntfy (issue #14)
+   ------------------------------------------------------------------------- */
+
+wallos_test('one instance ntfy server serves several users, each with their own topic', function () {
+    $db = wallos_test_open_database();
+    wallos_test_create_user($db, 1, 'alice');
+    wallos_test_create_user($db, 2, 'bob');
+
+    wallos_set_instance_setting($db, 'ntfy', 'base_url', 'https://ntfy.example');
+    $db->exec("INSERT INTO ntfy_notifications (enabled, server_mode, topic, user_id)
+               VALUES (1, 'instance', 'alice-topic', 1)");
+    $db->exec("INSERT INTO ntfy_notifications (enabled, server_mode, topic, user_id)
+               VALUES (1, 'instance', 'bob-topic', 2)");
+
+    $alice = wallos_get_effective_ntfy_config($db, 1);
+    $bob = wallos_get_effective_ntfy_config($db, 2);
+
+    assert_same('https://ntfy.example', $alice['values']['host'], 'alice uses the instance server');
+    assert_same('https://ntfy.example', $bob['values']['host'], 'so does bob');
+    assert_same('alice-topic', $alice['values']['topic'], 'alice keeps her topic');
+    assert_same('bob-topic', $bob['values']['topic'], "and never receives bob's");
+    assert_true($alice['values']['deliverable'], 'server plus topic means deliverable');
+
+    $db->close();
+});
+
+wallos_test('the ntfy auth headers are instance-managed, custom or absent', function () {
+    $db = wallos_test_open_database();
+    wallos_test_create_user($db, 1, 'alice');
+    wallos_test_create_user($db, 2, 'bob');
+    wallos_test_create_user($db, 3, 'carol');
+
+    wallos_set_instance_setting($db, 'ntfy', 'base_url', 'https://ntfy.example');
+    wallos_set_instance_setting($db, 'ntfy', 'headers', '{"Authorization":"Bearer instance"}', true);
+
+    // Alice inherits the instance headers, bob overrides them, carol has none of
+    // her own while the instance provides them.
+    $db->exec("INSERT INTO ntfy_notifications (enabled, server_mode, topic, headers, user_id)
+               VALUES (1, 'instance', 'alice-topic', '', 1)");
+    $db->exec("INSERT INTO ntfy_notifications (enabled, server_mode, topic, headers, user_id)
+               VALUES (1, 'instance', 'bob-topic', '{\"Authorization\":\"Bearer bob\"}', 2)");
+
+    $alice = wallos_get_effective_ntfy_config($db, 1);
+    $bob = wallos_get_effective_ntfy_config($db, 2);
+
+    assert_same('instance', $alice['values']['auth_source'], 'alice inherits the instance headers');
+    assert_same('{"Authorization":"Bearer instance"}', $alice['values']['headers'], 'the instance headers are used');
+    assert_same('custom', $bob['values']['auth_source'], 'bob overrides them');
+    assert_same('{"Authorization":"Bearer bob"}', $bob['values']['headers'], "bob's own headers are used, not the instance ones");
+
+    // With no instance headers, an inheriting user has none.
+    wallos_set_instance_setting($db, 'ntfy', 'headers', '', true);
+    wallos_reset_config_cache($db);
+    $carol = wallos_get_effective_ntfy_config($db, 1);
+    assert_same('none', $carol['values']['auth_source'], 'no instance headers and no override means none');
+
+    $db->close();
+});
+
+wallos_test('an ntfy user without a topic is not deliverable', function () {
+    $db = wallos_test_open_database();
+    wallos_test_create_user($db, 1, 'alice');
+
+    wallos_set_instance_setting($db, 'ntfy', 'base_url', 'https://ntfy.example');
+    $db->exec("INSERT INTO ntfy_notifications (enabled, server_mode, topic, user_id)
+               VALUES (1, 'instance', '', 1)");
+
+    $config = wallos_get_effective_ntfy_config($db, 1);
+
+    assert_true(!$config['values']['deliverable'], 'no topic means there is nowhere to deliver');
+    assert_true(!$config['valid'], 'and the configuration is reported invalid');
+
+    $db->close();
+});
+
+wallos_test('an existing custom ntfy server keeps working', function () {
+    $db = wallos_test_open_database();
+    wallos_test_create_user($db, 1, 'alice');
+
+    wallos_set_instance_setting($db, 'ntfy', 'base_url', 'https://ntfy.example');
+    $db->exec("INSERT INTO ntfy_notifications (enabled, server_mode, host, topic, headers, user_id)
+               VALUES (1, 'custom', 'https://my.ntfy', 'my-topic', '{\"X\":\"1\"}', 1)");
+
+    $config = wallos_get_effective_ntfy_config($db, 1);
+
+    assert_same('custom', $config['mode'], 'the user runs their own server');
+    assert_same('https://my.ntfy', $config['values']['host'], 'their host is used, not the instance one');
+    assert_same('my-topic', $config['values']['topic'], 'their topic is kept');
+    assert_same('custom', $config['values']['auth_source'], 'their own headers count as custom auth');
+    assert_true($config['values']['deliverable'], 'a full custom config is deliverable');
+
+    $db->close();
+});
+
+wallos_test('a pre-migration ntfy row with a host is treated as custom', function () {
+    $config = wallos_effective_ntfy_config(wallos_config_result(),
+        ['host' => 'https://legacy.ntfy', 'topic' => 'legacy-topic', 'enabled' => 1]);
+
+    assert_same('custom', $config['mode'], 'a stored host without a mode column means a custom server');
+    assert_same('https://legacy.ntfy', $config['values']['host'], 'the stored host is used');
+    assert_true($config['values']['deliverable'], 'the legacy configuration still delivers');
+});
+
+wallos_test('the ntfy payload never renders the shared auth headers', function () {
+    $db = wallos_test_open_database();
+    wallos_test_create_user($db, 1, 'alice');
+
+    putenv('WALLOS_NTFY_BASE_URL=https://ntfy.example');
+    putenv('WALLOS_NTFY_HEADERS={"Authorization":"Bearer super-secret-auth"}');
+    $db->exec("INSERT INTO ntfy_notifications (enabled, server_mode, topic, user_id)
+               VALUES (1, 'instance', 'visible-topic', 1)");
+
+    $payload = wallos_ntfy_public_payload(wallos_get_effective_ntfy_config($db, 1));
+    $encoded = json_encode($payload);
+
+    assert_not_contains('super-secret-auth', $encoded, 'the shared auth headers are never rendered');
+    assert_same(true, $payload['headers']['configured'], 'their presence is reported');
+    assert_same('instance', $payload['auth_source'], 'the authentication is reported as instance-managed');
+    assert_same('visible-topic', $payload['topic'], 'the personal topic is returned');
+    assert_same('https://ntfy.example', $payload['host'], 'the shared server URL is not a secret and is shown');
+
+    $db->close();
+});

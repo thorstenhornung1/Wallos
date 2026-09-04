@@ -956,6 +956,132 @@ function wallos_pushover_public_payload($config)
 }
 
 /* -------------------------------------------------------------------------
+   ntfy (issue #14)
+   ------------------------------------------------------------------------- */
+
+/**
+ * Instance ntfy configuration: the shared server URL and the optional shared
+ * authentication headers.
+ *
+ * The server URL is not a secret and resolves like any host based instance
+ * value. The headers are treated as a secret because they may carry
+ * authorization material, so they follow the environment secret path and are
+ * never rendered.
+ *
+ * @param WallosDatabase $db
+ * @return array Result structure with host and headers.
+ */
+function wallos_build_instance_ntfy_config($db)
+{
+    $config = wallos_config_result();
+    $config['mode'] = 'instance';
+
+    $instance = wallos_get_instance_settings($db, 'ntfy');
+
+    if (wallos_env_has('WALLOS_NTFY_BASE_URL')) {
+        wallos_config_set($config, 'host', trim((string) wallos_env('WALLOS_NTFY_BASE_URL')),
+            'environment', 'WALLOS_NTFY_BASE_URL');
+    } elseif (!empty($instance['base_url'])) {
+        wallos_config_set($config, 'host', (string) $instance['base_url'], 'admin');
+    } else {
+        wallos_config_set($config, 'host', '', 'default');
+    }
+
+    if (!wallos_apply_env_secret($config, 'headers', 'WALLOS_NTFY_HEADERS')) {
+        $headers = (string) ($instance['headers'] ?? '');
+        wallos_config_set($config, 'headers', $headers, $headers !== '' ? 'admin' : 'default');
+    }
+
+    return $config;
+}
+
+/**
+ * Effective ntfy configuration for one user: the instance server with the
+ * user's own topic, or a full custom server. The authentication headers are
+ * instance-managed, replaced by a per-user override when the user set one, or
+ * absent — auth_source records which.
+ *
+ * @param array $instanceConfig Result of wallos_get_instance_ntfy_config().
+ * @param array $row            The user's ntfy_notifications row, or [].
+ * @return array Result structure with host, topic, headers, auth_source, enabled,
+ *               ignore_ssl and deliverable.
+ */
+function wallos_effective_ntfy_config($instanceConfig, $row)
+{
+    $row = $row ?: [];
+
+    $legacyMode = trim((string) ($row['host'] ?? '')) !== '' ? 'custom' : 'instance';
+    $mode = wallos_normalize_mode($row['server_mode'] ?? $legacyMode);
+
+    $userHeaders = (string) ($row['headers'] ?? '');
+
+    if ($mode === 'custom') {
+        $config = wallos_config_result();
+        $config['mode'] = 'custom';
+        wallos_config_set($config, 'host', (string) ($row['host'] ?? ''), 'user');
+        wallos_config_set($config, 'headers', $userHeaders, 'user');
+        $config['values']['auth_source'] = trim($userHeaders) !== '' ? 'custom' : 'none';
+    } else {
+        $config = $instanceConfig;
+        $config['mode'] = 'instance';
+
+        // The instance server, with a per-user header override when the user set
+        // one. This is where the three-way "instance / custom / absent" answer
+        // the UI needs is decided.
+        if (trim($userHeaders) !== '') {
+            wallos_config_set($config, 'headers', $userHeaders, 'user');
+            $config['values']['auth_source'] = 'custom';
+        } else {
+            $config['values']['auth_source'] =
+                trim((string) ($config['values']['headers'] ?? '')) !== '' ? 'instance' : 'none';
+        }
+    }
+
+    wallos_config_set($config, 'topic', (string) ($row['topic'] ?? ''), 'user');
+    $config['values']['enabled'] = (int) ($row['enabled'] ?? 0);
+    $config['values']['ignore_ssl'] = (int) ($row['ignore_ssl'] ?? 0);
+
+    wallos_finalize_notification_config($config, ['host', 'topic'],
+        'The ntfy server or topic is not configured.');
+
+    return $config;
+}
+
+/**
+ * @param WallosDatabase $db
+ * @param int            $userId
+ * @return array Result structure.
+ */
+function wallos_build_effective_ntfy_config($db, $userId)
+{
+    $row = wallos_config_user_row($db, 'ntfy_notifications', $userId);
+
+    return wallos_effective_ntfy_config(wallos_get_instance_ntfy_config($db), $row);
+}
+
+/**
+ * API and template representation. The authentication headers may carry
+ * authorization material and are reported as a status, never rendered.
+ *
+ * @param array $config
+ * @return array
+ */
+function wallos_ntfy_public_payload($config)
+{
+    return [
+        'mode' => $config['mode'],
+        'enabled' => (int) ($config['values']['enabled'] ?? 0),
+        'host' => (string) ($config['values']['host'] ?? ''),
+        'topic' => (string) ($config['values']['topic'] ?? ''),
+        'ignore_ssl' => (int) ($config['values']['ignore_ssl'] ?? 0),
+        'headers' => wallos_secret_status($config, 'headers'),
+        'auth_source' => (string) ($config['values']['auth_source'] ?? 'none'),
+        'deliverable' => (bool) ($config['values']['deliverable'] ?? false),
+        'valid' => (bool) $config['valid'],
+    ];
+}
+
+/* -------------------------------------------------------------------------
    Memoized entry points
 
    Resolution is deterministic within one request or job, so each of these is
@@ -1076,6 +1202,27 @@ function wallos_get_effective_pushover_config($db, $userId)
 {
     return wallos_config_cached($db, 'pushover:' . (int) $userId,
         fn() => wallos_build_effective_pushover_config($db, $userId));
+}
+
+/**
+ * @param WallosDatabase $db
+ * @return array Result structure.
+ */
+function wallos_get_instance_ntfy_config($db)
+{
+    return wallos_config_cached($db, 'ntfy:instance',
+        fn() => wallos_build_instance_ntfy_config($db));
+}
+
+/**
+ * @param WallosDatabase $db
+ * @param int            $userId
+ * @return array Result structure.
+ */
+function wallos_get_effective_ntfy_config($db, $userId)
+{
+    return wallos_config_cached($db, 'ntfy:' . (int) $userId,
+        fn() => wallos_build_effective_ntfy_config($db, $userId));
 }
 
 /* -------------------------------------------------------------------------

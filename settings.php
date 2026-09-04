@@ -412,12 +412,16 @@ if ($budgetPeriodAnchorDate === '1970-01-01' || !preg_match('/^\d{4}-\d{2}-\d{2}
     $result = $stmt->execute();
 
     $rowCount = 0;
+    $notificationsNtfy['server_mode'] = 'instance';
     while ($row = $result->fetchArray(SQLITE3_ASSOC)) {
         $notificationsNtfy['enabled'] = $row['enabled'];
         $notificationsNtfy['host'] = $row['host'];
         $notificationsNtfy['topic'] = $row['topic'];
         $notificationsNtfy['headers'] = $row['headers'];
         $notificationsNtfy['ignore_ssl'] = $row['ignore_ssl'];
+        $notificationsNtfy['server_mode'] = wallos_normalize_mode(
+            $row['server_mode'] ?? (trim((string) $row['host']) !== '' ? 'custom' : 'instance')
+        );
         $rowCount++;
     }
 
@@ -428,6 +432,12 @@ if ($budgetPeriodAnchorDate === '1970-01-01' || !preg_match('/^\d{4}-\d{2}-\d{2}
         $notificationsNtfy['headers'] = "";
         $notificationsNtfy['ignore_ssl'] = 0;
     }
+
+    // The instance server and its shared auth headers are resolved server side;
+    // the headers, which may carry authorization, are never rendered.
+    $instanceNtfy = wallos_get_instance_ntfy_config($db);
+    $instanceNtfyHeaders = wallos_secret_status($instanceNtfy, 'headers');
+    $usesInstanceNtfy = $notificationsNtfy['server_mode'] === 'instance';
 
     // Webhook notifications
     $sql = "SELECT * FROM webhook_notifications WHERE user_id = :userId LIMIT 1";
@@ -931,9 +941,51 @@ if ($budgetPeriodAnchorDate === '1970-01-01' || !preg_match('/^\d{4}-\d{2}-\d{2}
                         <input type="checkbox" id="ntfyenabled" name="ntfyenabled" <?= $notificationsNtfy['enabled'] ? "checked" : "" ?>>
                         <label for="ntfyenabled" class="capitalize"><?= translate('enabled', $i18n) ?></label>
                     </div>
+                    <label for="ntfymodeinstance"><?= translate('ntfy_server', $i18n) ?></label>
+                    <div class="form-group-inline">
+                        <div>
+                            <input type="radio" name="ntfymode" id="ntfymodeinstance" value="instance"
+                                onchange="toggleNtfyMode()" <?= $usesInstanceNtfy ? "checked" : "" ?> />
+                            <label for="ntfymodeinstance"><?= translate('use_instance_server', $i18n) ?></label>
+                        </div>
+                        <div>
+                            <input type="radio" name="ntfymode" id="ntfymodecustom" value="custom"
+                                onchange="toggleNtfyMode()" <?= $usesInstanceNtfy ? "" : "checked" ?> />
+                            <label for="ntfymodecustom"><?= translate('use_custom_server', $i18n) ?></label>
+                        </div>
+                    </div>
+                    <div class="settings-notes" id="instanceNtfyInfo" <?= $usesInstanceNtfy ? "" : 'style="display:none"' ?>>
+                        <?php if ($instanceNtfy['valid']): ?>
+                            <p>
+                                <i class="fa-solid fa-circle-info"></i>
+                                <?= translate('ntfy_server', $i18n) ?>:
+                                <span><?= htmlspecialchars($instanceNtfy['values']['host']) ?></span>
+                            </p>
+                            <p>
+                                <i class="fa-solid fa-circle-info"></i>
+                                <?= translate('ntfy_authentication', $i18n) ?>:
+                                <span>
+                                    <?php if ($instanceNtfyHeaders['managed']): ?>
+                                        <?= translate('managed_externally', $i18n) ?>
+                                    <?php elseif ($instanceNtfyHeaders['configured']): ?>
+                                        <?= translate('ntfy_auth_instance', $i18n) ?>
+                                    <?php else: ?>
+                                        <?= translate('ntfy_auth_absent', $i18n) ?>
+                                    <?php endif; ?>
+                                </span>
+                            </p>
+                        <?php else: ?>
+                            <p>
+                                <i class="fa-solid fa-triangle-exclamation"></i>
+                                <?= translate('instance_ntfy_not_configured', $i18n) ?>
+                            </p>
+                        <?php endif; ?>
+                    </div>
+                    <div id="customNtfyFields" <?= $usesInstanceNtfy ? 'style="display:none"' : "" ?>>
                     <div class="form-group-inline">
                         <input type="text" name="ntfyhost" id="ntfyhost" autocomplete="off"
                             placeholder="<?= translate('host', $i18n) ?>" value="<?= htmlspecialchars($notificationsNtfy['host']) ?>" />
+                    </div>
                     </div>
                     <div class="form-group-inline">
                         <input type="text" name="ntfytopic" id="ntfytopic" autocomplete="off"

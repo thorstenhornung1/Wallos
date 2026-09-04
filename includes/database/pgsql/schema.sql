@@ -20,7 +20,7 @@
 --   * Every identifier is quoted, because "user" and "order" are reserved words
 --     and a keyword list kept in the generator would be wrong eventually.
 
--- 42 tables, 75 migrations recorded as applied.
+-- 42 tables, 76 migrations recorded as applied.
 
 CREATE TABLE "admin" (
     "id" SERIAL PRIMARY KEY,
@@ -231,7 +231,8 @@ CREATE TABLE "ntfy_notifications" (
     "topic" TEXT DEFAULT '',
     "headers" TEXT DEFAULT '',
     "user_id" INTEGER,
-    "ignore_ssl" INTEGER DEFAULT 0
+    "ignore_ssl" INTEGER DEFAULT 0,
+    "server_mode" TEXT DEFAULT 'instance'
 );
 
 CREATE TABLE "oauth_settings" (
@@ -657,7 +658,8 @@ INSERT INTO "migrations" ("id", "migration") VALUES
     (72, 'migrations/000073.php'),
     (73, 'migrations/000074.php'),
     (74, 'migrations/000075.php'),
-    (75, 'migrations/000076.php');
+    (75, 'migrations/000076.php'),
+    (76, 'migrations/000077.php');
 
 INSERT INTO "payment_methods" ("id", "name", "icon", "enabled", "order", "user_id") VALUES
     (1, 'PayPal', 'images/uploads/icons/paypal.png', 1, 1, 1),

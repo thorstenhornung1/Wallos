@@ -103,7 +103,10 @@ function saveInstanceIntegrationsButton() {
     telegram_bot_token: readFieldValue("instanceTelegramBotToken"),
     telegram_bot_token_remove: readCheckboxValue("instanceTelegramBotTokenRemove"),
     pushover_app_token: readFieldValue("instancePushoverAppToken"),
-    pushover_app_token_remove: readCheckboxValue("instancePushoverAppTokenRemove")
+    pushover_app_token_remove: readCheckboxValue("instancePushoverAppTokenRemove"),
+    ntfy_base_url: readFieldValue("instanceNtfyBaseUrl"),
+    ntfy_headers: readFieldValue("instanceNtfyHeaders"),
+    ntfy_headers_remove: readCheckboxValue("instanceNtfyHeadersRemove")
   };
 
   makeFetchCall('endpoints/admin/saveintegrationsettings.php', data, button);

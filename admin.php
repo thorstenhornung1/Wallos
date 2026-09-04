@@ -48,6 +48,8 @@ $telegramConfiguration = wallos_get_instance_telegram_config($db);
 $telegramTokenStatus = wallos_secret_status($telegramConfiguration, 'bot_token');
 $pushoverConfiguration = wallos_get_instance_pushover_config($db);
 $pushoverTokenStatus = wallos_secret_status($pushoverConfiguration, 'token');
+$ntfyConfiguration = wallos_get_instance_ntfy_config($db);
+$ntfyHeadersStatus = wallos_secret_status($ntfyConfiguration, 'headers');
 $languageConfiguration = wallos_get_instance_language_config($db);
 
 function oidc_input_attrs($field, $managedFields)
@@ -702,6 +704,36 @@ $loginDisabledAllowed = $userCount == 1 && $settings['registrations_open'] == 0;
                 </div>
             <?php endif; ?>
 
+            <div class="form-group">
+                <label for="instanceNtfyBaseUrl"><?= translate('ntfy_server', $i18n) ?></label>
+            </div>
+            <div class="form-group-inline">
+                <input type="text" id="instanceNtfyBaseUrl" autocomplete="off" placeholder="<?= translate('url', $i18n) ?>"
+                    value="<?= htmlspecialchars($ntfyConfiguration['values']['host']) ?>"
+                    <?= wallos_managed_input_attrs($ntfyConfiguration, 'host') ?> />
+            </div>
+            <div class="form-group">
+                <label for="instanceNtfyHeaders"><?= translate('ntfy_shared_headers', $i18n) ?></label>
+            </div>
+            <div class="form-group-inline">
+                <?php if ($ntfyHeadersStatus['managed']): ?>
+                    <input type="text" id="instanceNtfyHeadersStatus" disabled
+                        data-managed-by="<?= htmlspecialchars($ntfyConfiguration['managed_by']['headers'] ?? '') ?>"
+                        value="<?= $ntfyHeadersStatus['configured'] ? translate('configured', $i18n) : translate('not_configured', $i18n) ?>" />
+                <?php else: ?>
+                    <input type="password" id="instanceNtfyHeaders" autocomplete="off"
+                        placeholder="<?= $ntfyHeadersStatus['configured']
+                            ? translate('ntfy_shared_headers', $i18n) . ' — ' . translate('leave_empty_to_keep', $i18n)
+                            : translate('ntfy_shared_headers_placeholder', $i18n) ?>" value="" />
+                <?php endif; ?>
+            </div>
+            <?php if (!$ntfyHeadersStatus['managed'] && $ntfyHeadersStatus['configured']): ?>
+                <div class="form-group-inline">
+                    <input type="checkbox" id="instanceNtfyHeadersRemove" />
+                    <label for="instanceNtfyHeadersRemove"><?= translate('remove_stored_secret', $i18n) ?></label>
+                </div>
+            <?php endif; ?>
+
             <div class="buttons">
                 <input type="submit" class="thin mobile-grow" value="<?= translate('save', $i18n) ?>"
                     id="saveInstanceIntegrations" onClick="saveInstanceIntegrationsButton()" />
@@ -715,6 +747,7 @@ $loginDisabledAllowed = $userCount == 1 && $settings['registrations_open'] == 0;
                 <?= wallos_render_managed_notes($aiConfiguration, $i18n) ?>
                 <?= wallos_render_managed_notes($telegramConfiguration, $i18n) ?>
                 <?= wallos_render_managed_notes($pushoverConfiguration, $i18n) ?>
+                <?= wallos_render_managed_notes($ntfyConfiguration, $i18n) ?>
             </div>
         </div>
     </section>

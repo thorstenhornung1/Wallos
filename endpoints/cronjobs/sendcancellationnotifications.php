@@ -91,12 +91,18 @@ while ($userToNotify = $usersToNotify->fetchArray(SQLITE3_ASSOC)) {
         $pushover['token'] = $pushoverConfig['values']['token'];
     }
 
-    if ($row = $notificationSettings['ntfy'][$userId] ?? null) {
-        $ntfyNotificationsEnabled = $row['enabled'];
-        $ntfy['host'] = $row["host"];
-        $ntfy['topic'] = $row["topic"];
-        $ntfy['headers'] = $row["headers"];
-        $ntfy['ignore_ssl'] = $row["ignore_ssl"];
+    // Instance server (and its shared auth headers, or a per-user override) plus
+    // this user's own topic.
+    $ntfyConfig = wallos_effective_ntfy_config(
+        wallos_get_instance_ntfy_config($db),
+        $notificationSettings['ntfy'][$userId] ?? []
+    );
+    if (!empty($ntfyConfig['values']['enabled'])) {
+        $ntfyNotificationsEnabled = $ntfyConfig['values']['deliverable'];
+        $ntfy['host'] = $ntfyConfig['values']['host'];
+        $ntfy['topic'] = $ntfyConfig['values']['topic'];
+        $ntfy['headers'] = $ntfyConfig['values']['headers'];
+        $ntfy['ignore_ssl'] = $ntfyConfig['values']['ignore_ssl'];
     }
 
     $webhook = [];
