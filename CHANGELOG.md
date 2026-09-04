@@ -1,6 +1,88 @@
 # Changelog
 
-## Unreleased
+## [5.10.0](https://github.com/thorstenhornung1/Wallos/releases/tag/v5.10.0) (2026-09-04)
+
+A minor bump rather than a patch, and for one reason: **who may reach a private
+address changes.** Everything else here is a fix.
+
+### ⚠️ If you maintain a Webhook Allowlist (behaviour change)
+
+Standard accounts no longer reach allowlisted private addresses on the strength
+of the list alone. An administrator opts them in, once, under *Security
+Settings → Allow standard users to use the Webhook Allowlist*. This follows
+upstream 5.5.0 and the default is off, so an installation that never ticks it
+is stricter than before, not looser. If your standard users send notifications
+to an internal service, tick the box after upgrading or those notifications
+stop.
+
+### Security
+
+* **auth:** a remember-me token issued by the 2FA login is revoked on logout
+  again. `logout.php` revokes the token it finds in the session, and `totp.php`
+  was the one login path that never put it there — so an account **with** 2FA
+  kept a usable token across a logout while an account without 2FA did not. On
+  a shared machine that is the whole point of logging out, and it reached
+  exactly the people who had done the most for their own security. A gate now
+  asserts that every path issuing a token names it.
+* **web:** the theme cookies are validated against a fixed list and encoded
+  before they reach an inline script, on the registration page. Upstream's own
+  5.5.0 fix covered the login, 2FA and application pages and missed this one —
+  the only one of the four that renders before any account exists.
+
+### Fixed
+
+* **cron:** the schema installation job reports its runs. It was described in
+  the overview from the beginning and never opened one, so "no run recorded"
+  stood against it on every installation ever made — and the never-reported
+  count, whose whole purpose is to make a dead cron visible, was permanently at
+  one.
+* **cron:** the unreliable-job warning says which number it is showing.
+  "Failed 34 times, most recently two days ago" read as a job in freefall; the
+  count is the job's whole life and now says so.
+* **oidc:** an endpoint host resolves to all of its addresses rather than one,
+  and each is validated separately before curl is pinned to the survivors —
+  upstream's fix for providers behind a CDN or anycast proxy. The user-info
+  call now reports its HTTP status and curl error into the OIDC diagnostics,
+  which had them for the token exchange only.
+* **api:** disabling a payment method that subscriptions still use is refused
+  on the API path too, through the shared reference count rather than a private
+  copy of it.
+
+### Added
+
+* **currency:** `dev/currency-symbols.php` asks the provider which codes it
+  will actually price and names the stored ones it will not. A currency is
+  three free-text fields, so an invented code is accepted and then sits at rate
+  1 — and the rate endpoint cannot report it, because it is handed a symbol
+  list and answers with rates. This is the first thing to run when rates look
+  wrong. It is not a check that a currency exists: both providers list
+  withdrawn codes beside current ones, because they price history back to 1999.
+* **currency:** `updateexchange.php --force` refreshes accounts already
+  refreshed today, from the command line only. The daily skip exists so that
+  deploy frequency cannot exhaust a free provider tier, and the web endpoint
+  has had a force parameter all along — but a session is what an operator
+  diagnosing a provider does not have. A forced run records itself as forced,
+  because it replaces the scheduled run's row.
+* **dev:** `dev/shadow-migrate.sh` rehearses the upgrade path against a copy of
+  a database that actually grew. A fresh installation records every migration
+  as applied in the moment it creates the schema, so no CI run on either
+  backend has ever said anything about what the chain does to a schema with
+  history in it — which is how a migration recorded itself as applied with its
+  work undone in every installation ever made.
+* **dev:** the write audit counts a third shape — a write nobody read, followed
+  on the same branch by a response claiming success. 15 here against 80 in
+  upstream's tree.
+
+### Changed
+
+* **upstream:** release 5.5.0 is merged. Both of this fork's pull requests came
+  home in it, and merging them back surfaced the two security defects above.
+* **dev:** the audit's query classifier follows `$sql = "..."` to where it was
+  written. It used to answer "unknown" for 282 of 459 call sites, and unknown
+  counts as a write — so "305 unchecked prepares, nearly all of them writes"
+  was really 94 writes and 211 reads. The counts the ratchet holds do not move;
+  the figure that was being used to argue a design question does.
+
 
 **Upstream 5.5.0 is merged** — the second merge since the fork left 5.4.4, and
 the one that carried this fork's own two pull requests home: the maintainer
