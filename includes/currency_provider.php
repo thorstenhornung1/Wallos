@@ -182,6 +182,96 @@ function wallos_fetch_exchange_rates($config, $codes)
 }
 
 /**
+ * The currency codes the provider will actually price, and what it calls them.
+ *
+ * Both providers publish this as their own endpoint, so asking costs one
+ * request and no rates. It answers a question the rate endpoint cannot: the
+ * rate call is given a symbol list and returns rates, so a code it does not
+ * know either comes back missing or takes the whole request down with it, and
+ * neither outcome says which code was the problem (#133, #135).
+ *
+ * What it is not is currency master data. fixer lists withdrawn codes beside
+ * current ones — BYR next to BYN, HRK, LTL, VEF — because it prices history
+ * back to 1999. So "the provider knows this code" and "this is a currency
+ * somebody should be offered today" are two different questions, and only the
+ * first one is answered here.
+ *
+ * @param array $config Result of wallos_get_effective_currency_config().
+ * @return array{success: bool, symbols: array<string, string>, usage: array{limit: int|null, used: int|null}, message: string, transport: bool}
+ */
+function wallos_fetch_currency_symbols($config)
+{
+    $failure = [
+        'success' => false,
+        'symbols' => [],
+        'usage' => ['limit' => null, 'used' => null],
+        'message' => '',
+        'transport' => false,
+    ];
+
+    if (empty($config['valid'])) {
+        $failure['message'] = $config['notes'][0] ?? 'Currency provider is not configured.';
+
+        return $failure;
+    }
+
+    $apiKey = (string) $config['values']['api_key'];
+    $provider = (int) $config['values']['provider'];
+
+    if ($provider === 1) {
+        $context = stream_context_create([
+            'http' => [
+                'method' => 'GET',
+                'header' => 'apikey: ' . $apiKey,
+                // Without this a 401 arrives as false, indistinguishable from
+                // the network being down (#101).
+                'ignore_errors' => true,
+            ],
+        ]);
+        $http = wallos_provider_http_get('https://api.apilayer.com/fixer/symbols', $context);
+    } else {
+        $context = stream_context_create([
+            'http' => ['method' => 'GET', 'ignore_errors' => true],
+        ]);
+        $http = wallos_provider_http_get(
+            'http://data.fixer.io/api/symbols?access_key=' . $apiKey, $context);
+    }
+
+    $failure['transport'] = true;
+    $status = wallos_http_status_code($http['headers']);
+
+    if ($http['body'] === false) {
+        $failure['message'] = wallos_provider_failure_message($status, null);
+
+        return $failure;
+    }
+
+    $answer = json_decode($http['body'], true);
+
+    if (!is_array($answer) || !isset($answer['symbols']) || !is_array($answer['symbols'])) {
+        $failure['message'] = wallos_provider_failure_message($status, $answer);
+
+        return $failure;
+    }
+
+    $symbols = [];
+
+    foreach ($answer['symbols'] as $code => $name) {
+        $symbols[strtoupper((string) $code)] = (string) $name;
+    }
+
+    ksort($symbols);
+
+    return [
+        'success' => true,
+        'symbols' => $symbols,
+        'usage' => ['limit' => null, 'used' => null],
+        'message' => '',
+        'transport' => true,
+    ];
+}
+
+/**
  * One provider request for everyone the shared credential serves (#9).
  *
  * Called by the scheduled refresh before it walks its users: the accounts
@@ -196,14 +286,15 @@ function wallos_fetch_exchange_rates($config, $codes)
  *
  * @param SQLite3 $db
  * @param int[]   $userIds Every account the caller is about to refresh.
+ * @param bool    $force   Include accounts already refreshed today.
  */
-function wallos_prewarm_shared_exchange_rates($db, $userIds)
+function wallos_prewarm_shared_exchange_rates($db, $userIds, $force = false)
 {
     $due = [];
     $config = null;
 
     foreach ($userIds as $userId) {
-        if (wallos_exchange_rates_fresh($db, $userId)) {
+        if (!$force && wallos_exchange_rates_fresh($db, $userId)) {
             continue;
         }
 
