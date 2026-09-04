@@ -5,9 +5,14 @@ require_once '../../includes/currency_provider.php';
 
 $newApiKey = isset($_POST["api_key"]) ? trim($_POST["api_key"]) : "";
 $provider = isset($_POST["provider"]) ? $_POST["provider"] : 0;
+$providerId = wallos_parse_currency_provider($provider);
 
 // Clients that predate the instance/custom choice keep their own credentials.
-$defaultMode = $newApiKey === "" ? 'instance' : 'custom';
+// A provider that needs no key arrives with an empty one, which used to be the
+// signal for "clear my credentials" — so it only means that when the chosen
+// provider actually authenticates.
+$keylessProvider = $providerId !== null && !wallos_currency_provider_needs_key($providerId);
+$defaultMode = ($newApiKey === "" && !$keylessProvider) ? 'instance' : 'custom';
 $mode = wallos_normalize_mode($_POST['mode'] ?? $defaultMode);
 
 $stmt = $db->prepare("SELECT COUNT(*) AS count FROM fixer WHERE user_id = :userId");
@@ -41,6 +46,42 @@ if ($mode === 'instance') {
         "success" => false,
         "message" => translate('failed_to_store_api_key', $i18n)
     ]));
+}
+
+if ($keylessProvider) {
+    // Frankfurter is configured by being chosen: there is no credential to
+    // store and none to verify, so nothing is asked of the network here. The
+    // row is updated rather than replaced precisely so the stored Fixer key
+    // survives — looking at a provider that needs no key must never be the way
+    // somebody loses the key they will switch back to.
+    $query = $rowExists
+        ? "UPDATE fixer SET provider = :provider, provider_mode = 'custom' WHERE user_id = :userId"
+        : "INSERT INTO fixer (api_key, provider, provider_mode, user_id) VALUES ('', :provider, 'custom', :userId)";
+    $stmt = $db->prepare($query);
+
+    if ($stmt === false) {
+        die(json_encode([
+            "success" => false,
+            "message" => translate('failed_to_store_api_key', $i18n)
+        ]));
+    }
+
+    // Cast instead of type-declared: both values are integers, both backends
+    // infer that from the PHP type, and new code has no reason to widen the
+    // SQLite boundary the audit exists to shrink (#20).
+    $stmt->bindValue(':provider', (int) $providerId);
+    $stmt->bindValue(':userId', (int) $userId);
+
+    if ($stmt->execute() === false) {
+        die(json_encode([
+            "success" => false,
+            "message" => translate('failed_to_store_api_key', $i18n)
+        ]));
+    }
+
+    wallos_reset_config_cache($db);
+
+    die(json_encode(["success" => true, "message" => translate('api_key_saved', $i18n)]));
 }
 
 if ($newApiKey === "") {

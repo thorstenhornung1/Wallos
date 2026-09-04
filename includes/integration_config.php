@@ -380,6 +380,24 @@ function wallos_currency_provider_needs_key($provider)
 }
 
 /**
+ * Whether a provider meters requests at all.
+ *
+ * A separate question from whether it reports the figure, and the settings page
+ * needs both because there are three answers rather than two: apilayer (1) has
+ * a quota and sends it in response headers, fixer.io (0) has one and publishes
+ * nothing about it, Frankfurter (2) has none. Collapsing the last two produces
+ * the failure of #104 in reverse — an empty progress track that reads as an
+ * untouched allowance, drawn for a provider that has no allowance to draw.
+ *
+ * @param mixed $provider Provider id.
+ * @return bool
+ */
+function wallos_currency_provider_has_quota($provider)
+{
+    return (int) $provider !== 2;
+}
+
+/**
  * @param SQLite3 $db
  * @return array Result structure with provider and api_key.
  */

@@ -11,11 +11,16 @@ if (!isset($_SESSION['loggedin']) || $_SESSION['loggedin'] !== true) {
 }
 
 // What the page can honestly say about provider consumption, in one shape for
-// both providers. apilayer reports its monthly figure in response headers,
-// captured from rate updates so this endpoint never calls the API; fixer.io
-// reports nothing, and for years that absence rendered as an empty area
-// indistinguishable from "plenty left" (#104). Wallos's own count and the
-// date of the last successful refresh exist either way (#106).
+// every provider. There are three states and they must not be collapsed into
+// two: apilayer reports its monthly figure in response headers, captured from
+// rate updates so this endpoint never calls the API; fixer.io has a quota and
+// reports nothing about it, and for years that absence rendered as an empty
+// area indistinguishable from "plenty left" (#104); Frankfurter has no quota
+// at all, which is not the same claim as "unknown" and must not be drawn as a
+// bar at 0%. Wallos's own count and the date of the last successful refresh
+// exist in all three (#106).
+//
+// None of this costs a request: every figure below comes out of the database.
 $config = wallos_get_effective_currency_config($db, $userId);
 
 $provider = (int) ($config['values']['provider'] ?? 0);
@@ -23,6 +28,8 @@ $isInstance = ($config['mode'] ?? 'instance') === 'instance';
 
 $response = [
     'success' => true,
+    'provider' => $provider,
+    'has_quota' => wallos_currency_provider_has_quota($provider),
     'provider_reports' => $provider === 1,
     'shared' => $isInstance,
     'used' => null,

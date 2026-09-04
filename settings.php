@@ -1090,6 +1090,21 @@ if ($budgetPeriodAnchorDate === '1970-01-01' || !preg_match('/^\d{4}-\d{2}-\d{2}
     $query = "SELECT date FROM last_exchange_update";
     $exchange_rates_last_updated = $db->querySingle($query);
 
+    // Provider identity in one place: what it is called on screen, and where a
+    // human can read its catalogue of currency codes.
+    $currencyProviders = [
+        0 => ['name' => 'fixer.io', 'catalogue' => 'https://fixer.io/symbols'],
+        1 => ['name' => 'apilayer.com', 'catalogue' => 'https://apilayer.com/marketplace/fixer-api'],
+        2 => ['name' => 'Frankfurter', 'catalogue' => 'https://api.frankfurter.dev/v2/currencies'],
+    ];
+
+    // Which one is actually in force, so the note below links to the catalogue
+    // that will be asked rather than to whichever provider was the only one
+    // when the note was written. The configuration is cached, so the provider
+    // section further down reads it again for free.
+    $activeCurrencyProvider = (int) (wallos_get_effective_currency_config($db, $userId)['values']['provider'] ?? 0);
+    $activeCurrencyProviderInfo = $currencyProviders[$activeCurrencyProvider] ?? $currencyProviders[0];
+
     ?>
 
     <section class="account-section">
@@ -1169,8 +1184,9 @@ if ($budgetPeriodAnchorDate === '1970-01-01' || !preg_match('/^\d{4}-\d{2}-\d{2}
                     <i class="fa-solid fa-circle-info"></i>
                     <?= translate('currency_info', $i18n) ?>
                     <span>
-                        fixer.io
-                        <a href="https://fixer.io/symbols" target="_blank" title="Currency codes">
+                        <?= htmlspecialchars($activeCurrencyProviderInfo['name']) ?>
+                        <a href="<?= htmlspecialchars($activeCurrencyProviderInfo['catalogue']) ?>" target="_blank"
+                            title="Currency codes">
                             <i class="fa-solid fa-arrow-up-right-from-square"></i>
                         </a>
                     </span>
@@ -1184,7 +1200,10 @@ if ($budgetPeriodAnchorDate === '1970-01-01' || !preg_match('/^\d{4}-\d{2}-\d{2}
 
     <?php
     $apiKey = "";
-    $provider = 0;
+    // Frankfurter needs no account, so it is what an installation with nothing
+    // stored is offered first. A stored row still decides for anyone who has
+    // one; nothing is migrated.
+    $provider = 2;
     $sql = "SELECT api_key, provider FROM fixer WHERE user_id = :userId";
     $stmt = $db->prepare($sql);
     $stmt->bindValue(':userId', $userId, SQLITE3_INTEGER);
@@ -1201,11 +1220,14 @@ if ($budgetPeriodAnchorDate === '1970-01-01' || !preg_match('/^\d{4}-\d{2}-\d{2}
     $instanceCurrency = wallos_get_instance_currency_config($db);
     $instanceCurrencyKey = wallos_secret_status($instanceCurrency, 'api_key');
     $usesInstanceCurrency = $currencyConfig['mode'] === 'instance';
+    $instanceCurrencyProvider = (int) $instanceCurrency['values']['provider'];
+    $instanceCurrencyInfo = $currencyProviders[$instanceCurrencyProvider] ?? $currencyProviders[0];
+    $instanceProviderNeedsKey = wallos_currency_provider_needs_key($instanceCurrencyProvider);
     ?>
 
     <section class="account-section">
         <header>
-            <h2>Fixer API Key</h2>
+            <h2><?= translate('exchange_rates', $i18n) ?></h2>
         </header>
         <div class="account-fixer">
             <label for="currencyModeInstance"><?= translate('currency_provider', $i18n) ?></label>
@@ -1221,23 +1243,27 @@ if ($budgetPeriodAnchorDate === '1970-01-01' || !preg_match('/^\d{4}-\d{2}-\d{2}
                     <label for="currencyModeCustom"><?= translate('use_custom_provider', $i18n) ?></label>
                 </div>
             </div>
-            <div class="settings-notes" id="instanceCurrencyInfo" <?= $usesInstanceCurrency ? '' : 'style="display:none"' ?>>
+            <div class="settings-notes" id="instanceCurrencyInfo"
+                data-provider="<?= $instanceCurrencyProvider ?>"
+                <?= $usesInstanceCurrency ? '' : 'style="display:none"' ?>>
                 <?php if ($instanceCurrency['valid']): ?>
                     <p>
                         <i class="fa-solid fa-circle-info"></i>
                         <?= translate('provider', $i18n) ?>:
-                        <span><?= ((int) $instanceCurrency['values']['provider']) === 1 ? 'apilayer.com' : 'fixer.io' ?></span>
+                        <span><?= htmlspecialchars($instanceCurrencyInfo['name']) ?></span>
                     </p>
-                    <p>
-                        <i class="fa-solid fa-circle-info"></i>
-                        <?= translate('api_key', $i18n) ?>:
-                        <span>
-                            <?= $instanceCurrencyKey['managed']
-                                ? translate('managed_externally', $i18n)
-                                : translate('configured', $i18n) ?>
-                        </span>
-                    </p>
-                    <p><?= translate('shared_instance_quota', $i18n) ?></p>
+                    <?php if ($instanceProviderNeedsKey): ?>
+                        <p>
+                            <i class="fa-solid fa-circle-info"></i>
+                            <?= translate('api_key', $i18n) ?>:
+                            <span>
+                                <?= $instanceCurrencyKey['managed']
+                                    ? translate('managed_externally', $i18n)
+                                    : translate('configured', $i18n) ?>
+                            </span>
+                        </p>
+                        <p><?= translate('shared_instance_quota', $i18n) ?></p>
+                    <?php endif; ?>
                 <?php else: ?>
                     <p>
                         <i class="fa-solid fa-triangle-exclamation"></i>
@@ -1246,16 +1272,29 @@ if ($budgetPeriodAnchorDate === '1970-01-01' || !preg_match('/^\d{4}-\d{2}-\d{2}
                 <?php endif; ?>
             </div>
             <div id="customCurrencyFields" <?= $usesInstanceCurrency ? 'style="display:none"' : '' ?>>
-                <div class="form-group">
-                    <input type="text" name="fixer-key" id="fixerKey" autocomplete="off" value="<?= htmlspecialchars($apiKey) ?>"
-                        placeholder="<?= translate('api_key', $i18n) ?>" <?= $demoMode ? 'disabled title="Not available on Demo Mode"' : '' ?>>
-                </div>
+                <?php
+                // The provider is asked first because it decides whether the
+                // field under it is asked for at all. The ids stay what they
+                // were: renaming them would silently break every inline
+                // handler that names them.
+                ?>
                 <div class="form-group">
                     <label for="fixerProvider"><?= translate('provider', $i18n) ?>:</label>
-                    <select name="fixer-provider" id="fixerProvider">
+                    <select name="fixer-provider" id="fixerProvider" onchange="toggleCurrencyProvider()">
                         <option value="0" <?= $provider == 0 ? 'selected' : '' ?>>fixer.io</option>
                         <option value="1" <?= $provider == 1 ? 'selected' : '' ?>>apilayer.com</option>
+                        <option value="2" <?= $provider == 2 ? 'selected' : '' ?>>Frankfurter</option>
                     </select>
+                </div>
+                <?php
+                // Hidden rather than emptied when the provider needs no key:
+                // the value stays in the field and in the database, so
+                // switching back to Fixer does not cost somebody their key.
+                ?>
+                <div class="form-group" id="currencyApiKeyField"
+                    <?= wallos_currency_provider_needs_key($provider) ? '' : 'style="display:none"' ?>>
+                    <input type="text" name="fixer-key" id="fixerKey" autocomplete="off" value="<?= htmlspecialchars($apiKey) ?>"
+                        placeholder="<?= translate('api_key', $i18n) ?>" <?= $demoMode ? 'disabled title="Not available on Demo Mode"' : '' ?>>
                 </div>
             </div>
             <div class="buttons">
@@ -1271,13 +1310,17 @@ if ($budgetPeriodAnchorDate === '1970-01-01' || !preg_match('/^\d{4}-\d{2}-\d{2}
                     <span class="api-usage-fill" id="fixerUsageFill"></span>
                 </div>
                 <?php
-                // The bar above exists only when the provider reports quota
-                // (apilayer does, in its response headers; fixer.io does not).
-                // These lines carry what can be said either way: that nothing
-                // is reported rather than an empty area reading as "plenty
-                // left", Wallos's own count of the requests it sent, when the
-                // rates last actually refreshed, and — plainly — that the
-                // quota is gone (#106).
+                // The bar above exists only where there is a quota figure to
+                // draw, which means apilayer and its response headers. The
+                // lines below carry the other two states without drawing
+                // anything, because they are three states and not two:
+                // fixer.io has a quota and reports nothing about it, which for
+                // years rendered as an empty area reading as "plenty left"
+                // (#104); Frankfurter has no quota, which is a different
+                // sentence and emphatically not a bar sitting at 0%. Wallos's
+                // own count of the requests it sent, the date the rates last
+                // refreshed, and — plainly — that the quota is gone, apply
+                // wherever they are true (#106).
                 ?>
                 <div class="settings-notes">
                     <p id="fixerUsageExhausted" style="display: none;">
@@ -1288,6 +1331,10 @@ if ($budgetPeriodAnchorDate === '1970-01-01' || !preg_match('/^\d{4}-\d{2}-\d{2}
                         <i class="fa-solid fa-circle-info"></i>
                         <?= translate('currency_no_provider_quota', $i18n) ?>
                     </p>
+                    <p id="fixerUsageNone" style="display: none;">
+                        <i class="fa-solid fa-circle-info"></i>
+                        <?= translate('currency_provider_without_quota', $i18n) ?>
+                    </p>
                     <p id="fixerUsageLocal" style="display: none;">
                         <?= translate('currency_requests_sent', $i18n) ?>: <span id="fixerUsageLocalCount"></span>
                     </p>
@@ -1296,7 +1343,21 @@ if ($budgetPeriodAnchorDate === '1970-01-01' || !preg_match('/^\d{4}-\d{2}-\d{2}
                     </p>
                 </div>
             </div>
-            <div class="settings-notes">
+            <?php
+            // One note block per provider, and only the one describing the
+            // provider in force is on screen. Which one that is depends on the
+            // mode as well as on the select, so toggleCurrencyProvider() makes
+            // the running choice; these attributes are the state a page load
+            // starts in, before any script has run.
+            ?>
+            <div class="settings-notes" id="frankfurterInfo" <?= $activeCurrencyProvider === 2 ? '' : 'style="display:none"' ?>>
+                <p><i class="fa-solid fa-circle-info"></i><?= translate('frankfurter_info', $i18n) ?></p>
+                <p>
+                    <i class="fa-solid fa-triangle-exclamation"></i>
+                    <?= translate('frankfurter_no_crypto', $i18n) ?>
+                </p>
+            </div>
+            <div class="settings-notes" id="fixerProviderInfo" <?= $activeCurrencyProvider === 2 ? 'style="display:none"' : '' ?>>
                 <p><i class="fa-solid fa-circle-info"></i><?= translate('fixer_info', $i18n) ?></p>
                 <p><?= translate('get_key', $i18n) ?>:
                     <span>

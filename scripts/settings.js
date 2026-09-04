@@ -959,12 +959,40 @@ document.addEventListener('DOMContentLoaded', function () {
 
   loadGoogleSearchUsage();
   loadFixerUsage();
+  toggleCurrencyProvider();
 
   if (document.getElementById("ai_type")) {
     toggleAiInputs();
   }
 
 });
+
+// Provider ids as they are stored: 0 fixer.io, 1 apilayer.com, 2 Frankfurter.
+// Only the last authenticates nothing, which is why the key field can go away
+// entirely rather than merely being optional.
+const CURRENCY_PROVIDER_FRANKFURTER = 2;
+
+function currencyProviderNeedsKey(provider) {
+  return provider !== CURRENCY_PROVIDER_FRANKFURTER;
+}
+
+function selectedCurrencyProvider() {
+  const select = document.getElementById("fixerProvider");
+  return select ? parseInt(select.value, 10) : 0;
+}
+
+function effectiveCurrencyProvider() {
+  // In instance mode the provider is the administrator's, not the one sitting
+  // in this user's select, and the notes have to describe whichever one will
+  // actually be asked for rates.
+  const instanceInfo = document.getElementById("instanceCurrencyInfo");
+
+  if (getCurrencyMode() === "instance" && instanceInfo && instanceInfo.dataset.provider !== undefined) {
+    return parseInt(instanceInfo.dataset.provider, 10);
+  }
+
+  return selectedCurrencyProvider();
+}
 
 function getCurrencyMode() {
   const selected = document.querySelector('input[name="currencymode"]:checked');
@@ -982,6 +1010,29 @@ function toggleCurrencyMode() {
   if (customFields) {
     customFields.style.display = usesInstance ? "none" : "";
   }
+
+  toggleCurrencyProvider();
+}
+
+function toggleCurrencyProvider() {
+  // The field is hidden, never cleared: its value is the stored key, and a
+  // look at another provider must not be how somebody loses it.
+  const keyField = document.getElementById("currencyApiKeyField");
+
+  if (keyField) {
+    keyField.style.display = currencyProviderNeedsKey(selectedCurrencyProvider()) ? "" : "none";
+  }
+
+  const usesFrankfurter = effectiveCurrencyProvider() === CURRENCY_PROVIDER_FRANKFURTER;
+  const frankfurterNotes = document.getElementById("frankfurterInfo");
+  const fixerNotes = document.getElementById("fixerProviderInfo");
+
+  if (frankfurterNotes) {
+    frankfurterNotes.style.display = usesFrankfurter ? "" : "none";
+  }
+  if (fixerNotes) {
+    fixerNotes.style.display = usesFrankfurter ? "none" : "";
+  }
 }
 
 function addFixerKeyButton() {
@@ -990,8 +1041,12 @@ function addFixerKeyButton() {
 
   const mode = getCurrencyMode();
   const apiKeyInput = document.querySelector("#fixerKey");
-  const apiKey = mode === "instance" ? "" : apiKeyInput.value.trim();
   const provider = document.querySelector("#fixerProvider").value;
+  // A provider that authenticates nothing has no reason to put a credential on
+  // the wire. The endpoint leaves the stored one alone in that case, so this
+  // costs nothing on the way back to Fixer.
+  const needsKey = currencyProviderNeedsKey(parseInt(provider, 10));
+  const apiKey = (mode === "instance" || !needsKey) ? "" : apiKeyInput.value.trim();
   const convertCurrencyCheckbox = document.querySelector("#convertcurrency");
 
   fetch("endpoints/currency/fixer_api_key.php", {
@@ -1143,10 +1198,11 @@ function loadApiUsage(endpoint, containerId, countId, fillId) {
 }
 
 function loadFixerUsage() {
-  // Not loadApiUsage: the currency endpoint answers for both providers, and
-  // only apilayer reports a quota to draw a bar from. fixer.io gets the
-  // honest statement instead — nothing is reported, here is what Wallos
-  // itself sent — plus the date the rates last refreshed (#106).
+  // Not loadApiUsage: the currency endpoint answers for every provider, and
+  // only apilayer reports a quota figure to draw a bar from. The other two
+  // states get a sentence instead of a graphic — fixer.io has a quota and
+  // reports nothing about it, Frankfurter has no quota at all — plus what
+  // Wallos itself sent and the date the rates last refreshed (#106).
   const usageContainer = document.getElementById("fixerUsage");
   if (!usageContainer) {
     return;
@@ -1174,7 +1230,11 @@ function loadFixerUsage() {
       const label = usageContainer.querySelector(".api-usage-label");
       const track = usageContainer.querySelector(".api-usage-track");
 
-      if (data.total) {
+      const hasQuota = data.has_quota !== false;
+      const reportsQuota = !!data.provider_reports;
+      const quotaKnown = reportsQuota && !!data.total;
+
+      if (quotaKnown) {
         const percent = Math.min(100, Math.round((data.used / data.total) * 100));
         document.getElementById("fixerUsageCount").textContent = `${data.used} / ${data.total}`;
 
@@ -1186,12 +1246,17 @@ function loadFixerUsage() {
         label.style.display = "";
         track.style.display = "";
       } else {
+        // No figure means no bar, no percentage and no invented total. An empty
+        // track reads as an untouched allowance, which is a claim nobody here
+        // can make: Frankfurter has no allowance to be untouched, and fixer.io
+        // simply is not saying.
         label.style.display = "none";
         track.style.display = "none";
       }
 
       showLine("fixerUsageExhausted", !!data.exhausted);
-      showLine("fixerUsageUnknown", !data.provider_reports);
+      showLine("fixerUsageUnknown", hasQuota && !quotaKnown);
+      showLine("fixerUsageNone", !hasQuota);
 
       const hasLocalCount = data.local_calls !== null && data.local_calls !== undefined;
       if (hasLocalCount) {
