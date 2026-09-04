@@ -68,6 +68,13 @@ $forged = 'alice|WRONG-TOKEN-ENTIRELY-MADE-UP|1';
 $genuine = 'alice|the-real-token|1';
 
 wallos_test('the original code required the token whenever login was not the no-auth mode', function () use ($original, $forged) {
+    // The upstream original is SQLite-only: it queries `FROM user` unquoted,
+    // which PostgreSQL rejects as a reserved word (our fork quotes "user").
+    // So the specimen cannot run there — it is what upstream does, faithfully.
+    if (wallos_test_skip_unless_sqlite('reproduces upstream, whose remember_me is SQLite-only')) {
+        return;
+    }
+
     // This is the state an OIDC-only installation is in: password login is
     // disabled through the OIDC setting, which this function never reads, so
     // admin.login_disabled stays 0. The claim to disprove is that such an
@@ -87,6 +94,10 @@ wallos_test('the original code required the token whenever login was not the no-
 });
 
 wallos_test('the original code skipped the token only in the single-user no-auth mode', function () use ($original, $forged) {
+    if (wallos_test_skip_unless_sqlite('reproduces upstream, whose remember_me is SQLite-only')) {
+        return;
+    }
+
     // admin.login_disabled = 1 is where the skip lived. It is the mode in which
     // login.php already signs user 1 in with no password, so a redundant
     // weakness in an already-passwordless configuration — not a bypass of any
