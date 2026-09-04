@@ -4,6 +4,8 @@ if (!isset($userData)) {
     die("User data missing for OIDC login.");
 }
 
+require_once __DIR__ . '/../auth_lifetime.php';
+
 $userId = $userData['id'];
 $username = $userData['username'];
 
@@ -35,7 +37,7 @@ if (isset($tokenData['id_token']) && is_string($tokenData['id_token'])) {
     $_SESSION['oidc_id_token'] = $tokenData['id_token'];
 }
 
-$cookieExpire = time() + (86400 * 30); // 30 days
+$cookieExpire = time() + wallos_auth_max_session_lifetime();
 
 // generate remember token
 $token = bin2hex(random_bytes(32));
@@ -44,6 +46,22 @@ $addLoginTokensStmt = $db->prepare($addLoginTokens);
 $addLoginTokensStmt->bindParam(':userId', $userId, SQLITE3_INTEGER);
 $addLoginTokensStmt->bindParam(':token', $token, SQLITE3_TEXT);
 $addLoginTokensStmt->execute();
+
+// Mark the token as OIDC-derived so a later remember-me restore can tell it
+// apart from an ordinary local token once its oidc_sessions row is gone: a
+// marked token with no row is a revoked OIDC session and must not be restored as
+// a local one (migration 000075, includes/remember_me.php). Guarded on the
+// column so an install whose migration has not run yet still signs users in.
+if ($db->columnExists('login_tokens', 'from_oidc')) {
+    $markOidcToken = $db->prepare('UPDATE login_tokens SET from_oidc = 1 WHERE token = :token');
+    if ($markOidcToken !== false) {
+        $markOidcToken->bindValue(':token', $token);
+        if ($markOidcToken->execute() === false) {
+            error_log('Wallos OIDC: could not mark the remember-me token as OIDC-derived for user '
+                . $userId . '; a later restore may treat it as a local session: ' . $db->lastErrorMsg());
+        }
+    }
+}
 
 $_SESSION['token'] = $token;
 

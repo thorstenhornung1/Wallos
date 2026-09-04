@@ -3,6 +3,7 @@ require_once 'includes/connect.php';
 require_once 'includes/checkuser.php';
 require_once 'includes/oidc_settings.php';
 require_once 'includes/integration_config.php';
+require_once 'includes/auth_lifetime.php';
 
 require_once 'includes/i18n/languages.php';
 require_once 'includes/i18n/getlang.php';
@@ -16,7 +17,7 @@ if ($userCount == 0) {
     exit();
 }
 
-$secondsInMonth = 30 * 24 * 60 * 60;
+$secondsInMonth = wallos_auth_max_session_lifetime();
 if (session_status() === PHP_SESSION_NONE) {
     session_set_cookie_params([
         'lifetime' => $secondsInMonth,             
@@ -38,7 +39,7 @@ if (isset($_SESSION['loggedin']) && $_SESSION['loggedin'] === true) {
 
 $demoMode = getenv('DEMO_MODE');
 
-$cookieExpire = time() + (30 * 24 * 60 * 60);
+$cookieExpire = time() + wallos_auth_max_session_lifetime();
 
 // Check if login is disabled
 $adminQuery = "SELECT login_disabled FROM admin";
@@ -146,7 +147,7 @@ if ($oidcEnabled) {
     $password_login_disabled = (int) $oidcSettings['password_login_disabled'] === 1;
 
     // Generate a CSRF-protecting state string
-    $secondsInMonth = 30 * 24 * 60 * 60;
+    $secondsInMonth = wallos_auth_max_session_lifetime();
     if (session_status() === PHP_SESSION_NONE) {
         session_set_cookie_params([
             'lifetime' => $secondsInMonth,

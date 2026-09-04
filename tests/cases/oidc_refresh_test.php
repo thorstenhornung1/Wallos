@@ -400,9 +400,14 @@ wallos_test('a failed refresh is recorded and nobody is signed out', function ()
     $db->close();
 });
 
-wallos_test('a credential the provider calls dead is not kept', function () {
-    // invalid_grant is the one answer that will never change. Keeping a secret
-    // that can never be spent again is only a liability.
+wallos_test('a credential the provider calls dead ends the session', function () {
+    // Part B revises #144 here, and only here. invalid_grant is the provider
+    // stating this session's credential is gone — expired, revoked, or belonging
+    // to a session that no longer exists, the one answer that will never change.
+    // #144 recorded it and kept the user signed in; Part B ends the session,
+    // because a definitive rejection is the identity provider exercising the
+    // authority the whole model rests on. The transient case above is untouched:
+    // an unreachable provider still signs nobody out.
     $db = wallos_test_open_database();
     refresh_fixture($db, 'php-session-1');
     wallos_oidc_record_access_token($db, 'php-session-1', [
@@ -422,15 +427,16 @@ wallos_test('a credential the provider calls dead is not kept', function () {
         . 'echo "action=" . $verdict["action"] . "\n";' . "\n"
         . 'echo "error=" . $verdict["error"] . "\n";');
 
-    assert_contains('action=failed', $output, 'reported as a failure (' . $output . ')');
+    assert_contains('action=revoked', $output,
+        'reported as a revocation, not a transient failure (' . $output . ')');
     assert_contains('error=invalid_grant', $output, 'in the provider\'s own words');
 
-    assert_same('', refresh_session_column($db, 'refresh_token', 'php-session-1'),
-        'the dead credential is gone');
-    assert_same('invalid_grant', refresh_session_column($db, 'refresh_error', 'php-session-1'),
-        'and why is on the row');
-    assert_true(wallos_oidc_session_is_active($db, 'php-session-1'),
-        'still not a reason to sign anybody out');
+    assert_true(!wallos_oidc_session_is_active($db, 'php-session-1'),
+        'the session the provider rejected is ended, not merely flagged');
+    assert_same(0, (int) $db->scalar('SELECT COUNT(*) FROM oidc_sessions WHERE session_id = :s',
+        [':s' => 'php-session-1']), 'its row was deleted');
+    assert_same(0, (int) $db->scalar('SELECT COUNT(*) FROM login_tokens WHERE token = :t',
+        [':t' => 'remember-token']), 'and its remember-me token was revoked with it');
     $db->close();
 });
 

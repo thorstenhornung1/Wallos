@@ -1,8 +1,9 @@
 <?php
 require_once 'remember_me.php';
+require_once 'auth_lifetime.php';
 
 // Handle OIDC first
-$secondsInMonth = 30 * 24 * 60 * 60;
+$secondsInMonth = wallos_auth_max_session_lifetime();
 if (session_status() === PHP_SESSION_NONE) {
     session_set_cookie_params([
         'lifetime' => $secondsInMonth,             
@@ -57,6 +58,21 @@ if (isset($_GET['code']) && isset($_GET['state'])) {
             $db->close();
             header("Location: logout.php");
             exit();
+        }
+
+        // A restored OIDC session must prove it is still one the provider
+        // accepts before it is granted access, exactly as a live one does above.
+        // This is the long-idle gap: the PHP session was collected past the
+        // point its access token should have been refreshed, so this first
+        // request is where the refresh — and any definitive rejection — has to
+        // happen, before the page is served. (Req 4)
+        if (isset($_SESSION['from_oidc']) && $_SESSION['from_oidc'] === true) {
+            require_once __DIR__ . '/oidc/session_guard.php';
+            if (!wallos_oidc_current_session_is_valid($db)) {
+                $db->close();
+                header('Location: logout.php');
+                exit();
+            }
         }
 
         if ($userData['avatar'] == "") {

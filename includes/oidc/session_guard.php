@@ -48,12 +48,19 @@ function wallos_oidc_current_session_is_valid($db)
         return false;
     }
 
-    // Never allowed to change the verdict: a refresh that fails leaves the
-    // session valid and records that it can no longer be revoked remotely. A
-    // provider having a bad minute must not sign anybody out.
-    wallos_oidc_maintain_access_token($db, session_id());
+    // A refresh outcome can change the verdict, in one direction and for one
+    // cause only. A TRANSIENT failure still leaves the session valid and records
+    // that it can no longer be revoked remotely — a provider having a bad minute
+    // must not sign anybody out (#144), which this preserves. A DEFINITIVE
+    // failure — invalid_grant, the provider stating the credential is gone —
+    // ends the session: wallos_oidc_maintain_access_token() has by then removed
+    // the row and its remember-me token, and returning false here refuses the
+    // running request, so the identity provider has the final word even when a
+    // back-channel logout was never received. Every other outcome keeps the
+    // session valid.
+    $maintenance = wallos_oidc_maintain_access_token($db, session_id());
 
-    return true;
+    return $maintenance['action'] !== 'revoked';
 }
 
 /**

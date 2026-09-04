@@ -97,6 +97,14 @@ function restoreSessionFromRememberMeCookie($db)
     //   the new session id in oidc_sessions, because session_regenerate_id()
     //   above just invalidated the recorded one — leaving revocation to delete
     //   a row that belongs to a session that no longer exists.
+    // Whether this remember-me token was minted for an OIDC session. The marker
+    // outlives the oidc_sessions row on purpose (migration 000075): once the row
+    // is gone it is the only thing left that tells a revoked OIDC token apart
+    // from an ordinary local one, and the two must not be treated the same. A
+    // token from before the column carries no marker and is read as local, which
+    // is the behaviour that predates it.
+    $tokenIsOidc = isset($row['from_oidc']) && (int) $row['from_oidc'] === 1;
+
     $sessionStatement = $db->prepare('SELECT id, id_token FROM oidc_sessions WHERE login_token = :token LIMIT 1');
     if ($sessionStatement !== false) {
         $sessionStatement->bindValue(':token', $token, SQLITE3_TEXT);
@@ -141,6 +149,22 @@ function restoreSessionFromRememberMeCookie($db)
 
                 return false;
             }
+        } elseif ($tokenIsOidc) {
+            // The token was minted for an OIDC session and its oidc_sessions row
+            // is gone: the identity provider ended that session — a back-channel
+            // logout, or a definitive refresh failure the guard acted on.
+            // Restoring here would rebuild an independent local session the
+            // provider can no longer reach, which is exactly what the revocation
+            // removed. Refused, so a cookie cannot outlive the authority that
+            // created the session behind it. (The genuine revocation paths also
+            // delete this token, so the login_tokens lookup above usually fails
+            // first; this closes the case where the token outlived its row.)
+            error_log('Wallos: a remember-me cookie for a revoked OIDC session was refused rather '
+                . 'than restored as a local session.');
+
+            $_SESSION = [];
+
+            return false;
         }
     }
 
