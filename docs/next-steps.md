@@ -5,30 +5,35 @@ open or a decision somebody would otherwise have to rediscover. What is already
 done lives in `CHANGELOG.md`; what is broken lives in the issue tracker. This
 file is the part that is in neither.
 
-## Embargoed — do not push until coordinated disclosure (decided 2026-09-04)
+## Held on `security/remember-me-token` — and the severity was corrected down
 
-There is a prepared security fix that is **held on the branch
-`security/remember-me-token` and must not reach any public remote** until
-upstream has addressed it or Thorsten's report has been acknowledged. `main`
-is deliberately clean of it so it can carry other work without leaking this.
+A prepared fix to `includes/remember_me.php` sits on the branch
+`security/remember-me-token`, off `main`. It was first held as an embargoed
+security fix; a review, then a hard test (`remember_me_flag_diagnosis`),
+**disproved the exploitable reading**, so the embargo is now a courtesy rather
+than a necessity.
 
-It is a fix to an authentication defect that this fork shares with
-`ellite/Wallos` unchanged, so publishing our diff would disclose an unpatched
-vulnerability in upstream's code. The mechanism, the measurement, and the
-maintainer email are **not in this repository** — they are in the iCloud file
-`wallos-security-email.md`, which is where the specifics stay. Thorsten sends
-that email himself; nothing has been sent.
+What it actually is: the remember-me lookup skipped the cookie's token when
+`admin.login_disabled` was set — but that is Wallos's single-user, no-login
+mode, in which `login.php` already authenticates user 1 with no password, and
+which can only be enabled with one user and registrations closed. The OIDC
+"disable password login" setting is a *different* flag
+(`oauth_settings.password_login_disabled`) that this function never read, so an
+OIDC-only installation was never exposed. Proven both directions in the test,
+and both our instances have `admin.login_disabled = 0` regardless.
 
-**The daily task:** check whether `ellite/Wallos` `main` has changed
-`includes/remember_me.php` (or otherwise addressed it). When it has — or when
-the maintainer acknowledges — the hold is over: the branch can be released,
-and at that point decide whether the public changelog entry stays terse or is
-expanded. Until then, released state stays at 5.11.0 in public; 5.11.1 exists
-only on the held branch.
+So this is a defense-in-depth / correctness fix. It can be released normally
+whenever Thorsten wants; the only reason it is still on a branch rather than
+`main` is that he was mid-decision. A short, non-alarming note to the upstream
+maintainer is drafted in the iCloud file `wallos-security-email.md` (root and
+`Documents/`) — his to send, low urgency, not a disclosure.
 
-Checked so far:
-* 2026-09-04 — filed and held. Upstream unchanged. Both of our instances have
-  `login_disabled = 0`, so neither is currently exposed.
+**No daily embargo watch is needed anymore.** If anything, the open follow-up
+is the more interesting one the review pointed at: `oidc_login.php` mints a
+30-day `login_tokens` row and cookie on *every* OIDC sign-in, with no "remember
+me" choice — worth taking apart alongside the back-channel-logout work (#144),
+because it means re-entry for up to 30 days is authenticated by Wallos's own
+token rather than by the IdP.
 
 ## The state right now
 

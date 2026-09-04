@@ -75,7 +75,7 @@ function restoreSessionFromRememberMeCookie($db)
 
     $row = $result->fetchArray(SQLITE3_ASSOC);
 
-    if ($row == false) {
+    if ($row === false) {
         return false;
     }
 
