@@ -1,5 +1,86 @@
 # Changelog
 
+## [5.11.0](https://github.com/thorstenhornung1/Wallos/releases/tag/v5.11.0) (2026-09-04)
+
+### Added
+
+* **currency:** **Frankfurter v2**, an exchange-rate provider that needs no
+  account, no API key and has no request quota. Selecting it is the whole
+  configuration.
+
+  Until now a new installation could not convert a currency until somebody
+  registered with a rate provider, copied a key and pasted it into the settings
+  page. That was the first wall in front of a feature Wallos otherwise has
+  entirely.
+
+  Fixer stays first-class and nobody is migrated: **Frankfurter has no
+  cryptocurrency** — verified against its catalogue, `BTC` and `ETH` are absent
+  while the precious metals `XAU` and `XAG` are present — so an account
+  tracking a crypto subscription still needs fixer. Choosing Frankfurter no
+  longer deletes the stored fixer key either, on the settings page or through
+  the API; switching back finds it where it was left.
+
+  Frankfurter is asked in the account's own main currency rather than through
+  EUR, which removes a division and a rounding step. That made the run cache
+  dangerous: it keyed on provider and credential alone, so a USD account could
+  have been served EUR rates. The base is part of the key now, and it is
+  carried on the result as well, so the caller cannot silently accept an answer
+  computed for a different base. Both were written as failing tests first — the
+  worst case stored a rate 16% wrong, because the existing division masks most
+  of a wrong base into what looks like a rounding artefact.
+
+  Two of its behaviours are not what a reader would guess and are handled
+  explicitly: an unknown base answers **HTTP 200 with an empty array**, which a
+  bare `is_array()` check would call success; and one malformed code takes down
+  the **whole** request with a 422, so a single invented currency (#133) would
+  stop every account's rates in a shared union fetch. Codes are filtered and
+  what was held back is named.
+
+### Fixed
+
+* **oidc:** back-channel logout worked for about five minutes after login.
+  Now it works for as long as the session is in use.
+
+  Measured both directions on a live provider. Seventy-two minutes after
+  signing in, an administrator deleting the session got no notification sent at
+  all — no error, no task, nothing in any log, while the session kept working.
+  The same action within five minutes of a login produced the full chain and
+  signed the browser out in under two seconds.
+
+  The provider notifies only relying parties that still hold a **live access
+  token** for the session, and Wallos never obtained a refresh token: no
+  `offline_access` was requested and the token endpoint was never spoken to
+  again after login. Five minutes later there was nothing left to find, while
+  the remember-me cookie kept the session alive for thirty days. The gap
+  between those two numbers was the defect, and it was invisible from both
+  ends.
+
+  Wallos now requests `offline_access`, stores the refresh token per session,
+  and refreshes at **half the access token's own life** — derived from the
+  token, never a fixed interval, so a provider with a different validity works
+  unchanged. The refresh runs lazily on the account's own next request rather
+  than from a cron, which would hold tokens alive for accounts nobody is using
+  and tell the provider an abandoned session is active.
+
+  A failed refresh **never signs anybody out**. It records that the session can
+  no longer be ended remotely and retries a token lifetime later, so an
+  unreachable provider is not asked once per page load.
+
+  **What this does not fix:** a session left untouched for longer than its
+  token's life is unreachable again until its next request. Better than five
+  minutes; not the same as solved.
+
+  The premise — that a refreshed access token stays bound to the same provider
+  session — is confirmed by reading the provider's source, not by measurement.
+  `docs/test-instance.md` §7.4 carries the run that would settle it, and §7.2
+  keeps the issue open until it is green.
+
+* **currency:** the settings page no longer calls all of this "Fixer", and
+  stops inventing a quota where none exists. Three states are told apart
+  instead of two: a real figure with a bar, a provider that reports no usage,
+  and a provider that has no quota at all. Nothing on the page costs a provider
+  request.
+
 ## [5.10.3](https://github.com/thorstenhornung1/Wallos/releases/tag/v5.10.3) (2026-09-04)
 
 ### Fixed
