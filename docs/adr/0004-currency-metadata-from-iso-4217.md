@@ -30,17 +30,56 @@ So there are two questions and they have two sources.
 
 | question | source |
 |---|---|
-| What is this currency? | ISO 4217, published by SIX |
+| What is this currency? | ISO 4217, taken from CLDR |
 | Can we get a rate for it? | the provider's `/symbols` |
 | May the user pick it here? | Wallos |
 
 **ISO 4217 metadata is generated at build time and committed**, at
 `resources/currencies/currencies.json`: code, name, numeric code, minor units,
-and an `isoStatus` of `active` or `historical` with the withdrawal date where
-the source gives one. A weekly GitHub Action downloads List One and List Three,
-regenerates, validates, and — on a change — **opens a pull request rather than
-committing to main**. A running installation never contacts SIX; a SIX outage
-cannot affect installation, startup, currency selection or rate retrieval.
+and an `isoStatus` of `active` or `historical`. A weekly GitHub Action
+downloads, regenerates, validates, and — on a change — **opens a pull request
+rather than committing to main**. A running installation never contacts the
+source; an outage there cannot affect installation, startup, currency selection
+or rate retrieval.
+
+**The source is CLDR, not SIX** — decided 2026-09-04 after checking the
+licence, and it is the one thing in this document that changed between draft
+and decision.
+
+SIX is the ISO 4217 maintenance agency and the authoritative source, and it
+publishes the lists free of charge. It does not license them. The files carry
+no copyright notice and no licence at all, the data page says only that SIX
+makes them "available online and free of charge" — which describes what SIX
+does, not what a downloader may do — and the site's terms of use say, verbatim
+and read at the source rather than taken from a summary:
+
+> The entire content of the SIX website is protected by copyright law.
+> Consequently, presentations, brochures, flyers, graphics, texts, designs,
+> charts, etc., may not be reproduced or reused in any way or used for
+> commercial purposes.
+
+Whether an XML data file falls under that "etc." is exactly where
+interpretation begins, and nothing on the site resolves it. ISO's own position
+pulls the other way — it has said publicly that the codes may be used free of
+charge "in commercial and other applications" — but every permission anyone
+states is about *use*, and committing a generated file into a public repository
+is *redistribution*. Those are different acts and only the first one has an
+answer.
+
+The GitHub projects that mirror the SIX lists do not solve this; they relabel
+it. The most widely used one states its own licence reasoning outright — "The
+original site states no restriction on use" — which is a third party's legal
+opinion about somebody else's data, resting on a premise the terms of use
+contradict. Another checks the SIX XML in unchanged under an MIT header it
+cannot grant.
+
+**CLDR has what SIX lacks: an actual grant.** The Unicode licence names data
+files separately from software and permits "use, copy, modify, merge, publish,
+distribute", conditioned only on carrying the notice. It is OSI-approved. CLDR
+gets its currency codes from SIX as well, so the factual chain is the same —
+the difference is not sanitary, it is that an established consortium has
+examined the question and issued a permission, where here we would be relying
+on our own reading. That is a real difference and not a proof.
 
 **`isoStatus` and `fixerSupported` are separate properties**, and every
 combination is meaningful:
@@ -88,10 +127,35 @@ it belonged to the credential. A provider dropping support for a code, or a row
 that predates validation, reaches the same place. The two are complementary and
 neither is the other's excuse.
 
-**What must be checked before implementing**, and is not settled here: whether
-the SIX dataset may be redistributed in a repository under this project's
-licence. The design assumes a committed snapshot, and that assumption is load
-bearing — if redistribution is not permitted, the shape changes.
+**What CLDR costs, stated rather than discovered later.** No ISO withdrawal
+date — CLDR carries country-level usage periods instead, from which a global
+date is a derivation rather than a source value. No numeric codes for
+historical currencies; the LDML specification says so outright. Up to about
+twelve months of lag, because CLDR has one annual release plus maintenance
+releases while SIX publishes amendments continuously. And more generator
+surface: three files instead of one, and a `DEFAULT` rule for minor units that
+covers the codes the fractions table does not list — a quiet failure mode
+exactly of the kind this design's loudness rules exist for, so the validation
+must fail when `fractions` has no `DEFAULT` and when the validity data returns
+implausibly few current codes.
+
+Only the lag has a user-visible effect, and the design already absorbs it: a
+code the registry does not know is a stated fallback, not an error, and
+`fixerSupported` is a separate axis. If the lag ever matters, a small
+hand-maintained overlay for freshly announced codes is a different act from
+redistributing a database — three letters, a number and a date typed out.
+
+**Still open, and worth doing anyway: ask SIX.** A written answer on whether
+the lists may be redistributed in a GPL-3.0 project would restore the
+authoritative source, and it would be worth having for every other project with
+this question. Until there is one, CLDR carries it.
+
+**And a warning about this entry's own evidence.** The quotations above were
+read at their URLs. The wider licence analysis behind them — the Swiss position
+on database rights, the EU directive's reach, whether the terms of use bind as
+a contract independently of copyright — was researched, not adjudicated. If the
+SIX route is ever taken, those are the points a lawyer looks at, and the list is
+in the research notes rather than invented here.
 
 **The failure mode is deliberately loud.** The generation job fails rather than
 overwrites when the download fails, the XML will not parse, required fields
