@@ -3,6 +3,7 @@
 require_once '../../includes/connect_endpoint.php';
 require_once '../../includes/validate_endpoint_admin.php';
 require_once '../../includes/integration_config.php';
+require_once '../../includes/oidc_settings.php';
 
 $postData = file_get_contents("php://input");
 $data = json_decode($postData, true);
@@ -24,6 +25,20 @@ if (isset($data['default_language']) && empty($languageConfiguration['managed'][
 }
 
 if ($disableLogin == 1) {
+    // The single-user no-login mode contradicts OIDC — one grants access with no
+    // authentication, the other puts the identity provider in charge — so the two
+    // must not both be on. This is NOT oauth_settings.password_login_disabled,
+    // which only hides the password form and is compatible with OIDC. See
+    // api/admin/set_admin_settings.php for the same guard.
+    $oidcConfiguration = wallos_get_effective_oidc_configuration($db);
+    if ($oidcConfiguration['enabled'] == 1 && $oidcConfiguration['is_configured']) {
+        echo json_encode([
+            "success" => false,
+            "message" => translate('error', $i18n)
+        ]);
+        die();
+    }
+
     if ($openRegistrations == 1) {
         echo json_encode([
             "success" => false,

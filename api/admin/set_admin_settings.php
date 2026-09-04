@@ -85,6 +85,26 @@ $registrations_open = isset($_POST['registrations_open']) ? intval($_POST['regis
 $login_disabled = isset($_POST['login_disabled']) ? intval($_POST['login_disabled']) : intval($adminSettings['login_disabled']);
 
 if ($login_disabled === 1) {
+    // admin.login_disabled is the single-user, no-authentication mode:
+    // login.php signs user 1 in with no credentials at all. That is the
+    // opposite of what OIDC is for — the identity provider deciding who gets in
+    // — so the two must never both be on. This is NOT
+    // oauth_settings.password_login_disabled, which only hides the password
+    // form and leaves OIDC fully in charge; that one is meant for an OIDC-only
+    // instance and is compatible with OIDC by design.
+    $oidcConfiguration = wallos_get_effective_oidc_configuration($db);
+    if ($oidcConfiguration['enabled'] == 1 && $oidcConfiguration['is_configured']) {
+        echo json_encode([
+            'success' => false,
+            'title' => 'Validation error',
+            'message' => 'The single-user no-login mode cannot be enabled while OIDC is enabled: '
+                . 'one grants access with no authentication, the other puts the identity provider '
+                . 'in charge. To hide the password form on an OIDC-only instance, use the OIDC '
+                . '"disable password login" setting instead.'
+        ]);
+        exit;
+    }
+
     if ($registrations_open === 1) {
         echo json_encode([
             'success' => false,

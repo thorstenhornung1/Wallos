@@ -20,7 +20,7 @@
 --   * Every identifier is quoted, because "user" and "order" are reserved words
 --     and a keyword list kept in the generator would be wrong eventually.
 
--- 42 tables, 74 migrations recorded as applied.
+-- 42 tables, 75 migrations recorded as applied.
 
 CREATE TABLE "admin" (
     "id" SERIAL PRIMARY KEY,
@@ -204,7 +204,8 @@ CREATE TABLE "last_update_next_payment_date" (
 CREATE TABLE "login_tokens" (
     "user_id" INTEGER NOT NULL,
     "token" TEXT NOT NULL,
-    "timestamp" TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    "timestamp" TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    "from_oidc" INTEGER DEFAULT 0
 );
 
 CREATE TABLE "mattermost_notifications" (
@@ -656,7 +657,8 @@ INSERT INTO "migrations" ("id", "migration") VALUES
     (71, 'migrations/000072.php'),
     (72, 'migrations/000073.php'),
     (73, 'migrations/000074.php'),
-    (74, 'migrations/000075.php');
+    (74, 'migrations/000075.php'),
+    (75, 'migrations/000076.php');
 
 INSERT INTO "payment_methods" ("id", "name", "icon", "enabled", "order", "user_id") VALUES
     (1, 'PayPal', 'images/uploads/icons/paypal.png', 1, 1, 1),

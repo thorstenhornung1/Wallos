@@ -13,8 +13,9 @@ require_once 'i18n/languages.php';
 require_once 'i18n/getlang.php';
 require_once 'i18n/' . $lang . '.php';
 require_once 'remember_me.php';
+require_once __DIR__ . '/auth_lifetime.php';
 
-$secondsInMonth = 30 * 24 * 60 * 60;
+$secondsInMonth = wallos_auth_max_session_lifetime();
 if (session_status() === PHP_SESSION_NONE) {
     session_set_cookie_params([
         'lifetime' => $secondsInMonth,
@@ -40,6 +41,18 @@ if (isset($_SESSION['loggedin']) && $_SESSION['loggedin'] === true) {
     // endpoints don't silently behave as logged-out after an idle period.
     $restoredUser = restoreSessionFromRememberMeCookie($db);
     $userId = $restoredUser !== false ? $restoredUser['id'] : 0;
+
+    // A restored OIDC session must clear the same guard a live one does above,
+    // before the endpoint runs. This is the long-idle gap: the PHP session was
+    // collected past the point its access token should have been refreshed, so
+    // this first request is where the refresh happens and where a provider that
+    // has definitively rejected the session ends it — all before any protected
+    // data is served. (Req 4)
+    if ($restoredUser !== false && isset($_SESSION['from_oidc'])
+        && $_SESSION['from_oidc'] === true) {
+        require_once __DIR__ . '/oidc/session_guard.php';
+        wallos_oidc_require_valid_session($db);
+    }
 }
 
 ?>

@@ -3,8 +3,9 @@ require_once 'includes/connect.php';
 require_once 'includes/oidc_settings.php';
 require_once 'includes/oidc/logout.php';
 require_once 'includes/session_tokens.php';
+require_once 'includes/auth_lifetime.php';
 
-$secondsInMonth = 30 * 24 * 60 * 60;
+$secondsInMonth = wallos_auth_max_session_lifetime();
 if (session_status() === PHP_SESSION_NONE) {
     session_set_cookie_params([
         'lifetime' => $secondsInMonth,             

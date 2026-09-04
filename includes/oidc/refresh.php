@@ -364,6 +364,93 @@ function wallos_oidc_record_refresh_failure($db, $sessionId, $now, $reason, $for
 }
 
 /**
+ * Ends one OIDC session locally, because the provider has ended it.
+ *
+ * The counterpart to back-channel logout for the case a back-channel message
+ * never arrived: a definitive refresh failure (invalid_grant) is the provider
+ * saying this session's credential is gone, and the only honest local answer is
+ * to end the session it belongs to. This does the same three things
+ * wallos_oidc_revoke_sessions() does for a single session identified by its PHP
+ * session id — revoke the remember-me token, delete the row, drop the
+ * provider-granted admin role — so a session ended this way and one ended by a
+ * back-channel token leave the same state behind.
+ *
+ * It does not touch $_SESSION or the cookie: those belong to the running
+ * request and are cleared by the guard that calls this, exactly as they are for
+ * a back-channel revocation the guard notices. Every write's result is read,
+ * because a half-finished revocation is worse than none — a token that outlives
+ * its row is a browser signed into a session no future logout can reach.
+ *
+ * @param WallosDatabase $db
+ * @param string         $sessionId the PHP session id
+ * @return bool whether the session row was removed
+ */
+function wallos_oidc_terminate_session($db, $sessionId)
+{
+    if (!$db->tableExists('oidc_sessions')) {
+        return false;
+    }
+
+    require_once __DIR__ . '/../session_tokens.php';
+    require_once __DIR__ . '/../user_roles.php';
+
+    $stmt = $db->prepare('SELECT id, user_id, login_token FROM oidc_sessions
+                           WHERE session_id = :sessionId LIMIT 1');
+    if ($stmt === false) {
+        error_log('Wallos OIDC: could not read the session the provider rejected, so it '
+            . 'could not be ended: ' . $db->lastErrorMsg());
+
+        return false;
+    }
+    $stmt->bindValue(':sessionId', $sessionId);
+    $result = $stmt->execute();
+    $row = $result === false ? false : $result->fetchArray();
+
+    if ($row === false) {
+        // Already gone — a back-channel logout reached it first, or a parallel
+        // request did. The desired state holds either way.
+        return false;
+    }
+
+    // The remember-me token goes first, so a browser holding the cookie is not
+    // signed straight back into a session with no row to revoke. If it cannot be
+    // removed the session is left in place rather than half-revoked: the next
+    // request tries again, which is safer than a token that outlives its row.
+    if (($row['login_token'] ?? '') !== ''
+        && wallos_revoke_login_token($db, $row['login_token']) === false) {
+        error_log('Wallos OIDC: the remember-me token for a provider-rejected session survived; '
+            . 'leaving the session in place rather than half-revoking it: ' . $db->lastErrorMsg());
+
+        return false;
+    }
+
+    $delete = $db->prepare('DELETE FROM oidc_sessions WHERE id = :id');
+    if ($delete === false) {
+        error_log('Wallos OIDC: could not prepare the delete for a provider-rejected session: '
+            . $db->lastErrorMsg());
+
+        return false;
+    }
+    $delete->bindValue(':id', (int) $row['id']);
+    if ($delete->execute() === false) {
+        error_log('Wallos OIDC: a provider-rejected session row was not removed: ' . $db->lastErrorMsg());
+
+        return false;
+    }
+
+    // The provider-granted admin role goes with the session, the same rule the
+    // login-time sync and back-channel logout both follow: a source-scoped
+    // revoke, so a local administrator is untouched and the next successful
+    // OIDC login re-grants it if the claim is still there.
+    if (wallos_revoke_role($db, (int) $row['user_id'], WALLOS_ROLE_ADMIN, WALLOS_ROLE_SOURCE_OIDC) === false) {
+        error_log('Wallos OIDC: could not revoke the provider-granted admin role for user '
+            . (int) $row['user_id'] . ' whose session the provider rejected: ' . $db->lastErrorMsg());
+    }
+
+    return true;
+}
+
+/**
  * Asks the provider for a new access token.
  *
  * @param WallosDatabase $db
@@ -463,7 +550,11 @@ function wallos_oidc_request_refreshed_token($db, $settings, $refreshToken)
  * @param int|null       $now
  * @return array{action: string, error: string|null}
  *   action is one of: unsupported, no_session, no_refresh_token, no_expiry,
- *   not_due, backing_off, refreshed, failed
+ *   not_due, backing_off, refreshed, failed, revoked. "revoked" is the only one
+ *   that ends the session: the provider called the credential dead
+ *   (invalid_grant), so the row and its remember-me token were removed and the
+ *   caller must reject the request. "failed" is a transient failure that leaves
+ *   the session signed in, exactly as #144 required.
  */
 function wallos_oidc_maintain_access_token($db, $sessionId, $now = null)
 {
@@ -543,14 +634,49 @@ function wallos_oidc_maintain_access_token($db, $sessionId, $now = null)
     $outcome = wallos_oidc_request_refreshed_token($db, $configuration['settings'], $refreshToken);
 
     if (!$outcome['success']) {
-        wallos_oidc_record_refresh_failure($db, $sessionId, $now, $outcome['error'], $outcome['definitive']);
+        // The one place Part B revises #144. #144 chose that a failed refresh
+        // NEVER signs anyone out — it recorded only that the session could no
+        // longer be revoked remotely — because a provider having a bad minute
+        // must not become a logout storm. That reasoning still holds for a
+        // TRANSIENT failure and is preserved untouched below.
+        //
+        // A DEFINITIVE failure is different in kind. invalid_grant is the
+        // provider stating this session's credential is gone: expired, revoked,
+        // or belonging to a session that no longer exists. That is the provider
+        // exercising the authority the whole model rests on, and it is the same
+        // event a back-channel logout carries — one that here was simply never
+        // received. So the session is ended, before this request is allowed to
+        // reach anything it protects.
+        if ($outcome['definitive']) {
+            wallos_oidc_terminate_session($db, $sessionId);
+
+            // Nothing is scheduled after this: the row is gone, so any later
+            // call in the same request reads no session and returns. Clearing
+            // the marker keeps a stale "not due" from masking the revocation.
+            unset($_SESSION['oidc_refresh_after']);
+
+            // No token and no session id in the line — the row id and the
+            // account are what an operator needs to find it.
+            wallos_oidc_log_failure('token_refresh_revoked', [
+                'session_row' => (int) ($row['id'] ?? 0),
+                'user_id' => (int) ($row['user_id'] ?? 0),
+                'provider_error' => $outcome['error'],
+                'consequence' => 'the provider rejected the credential as gone; the local session was ended',
+            ]);
+
+            return $verdict('revoked', $outcome['error']);
+        }
+
+        // Transient — unchanged from #144. $forget is false here by
+        // construction: a credential is only forgotten when the provider calls
+        // it dead, which is the definitive branch above and no longer reaches
+        // this line.
+        wallos_oidc_record_refresh_failure($db, $sessionId, $now, $outcome['error'], false);
         $_SESSION['oidc_refresh_after'] = wallos_oidc_retry_due_at($issuedAt, $expiresAt, $now);
 
         // Loud in the right direction: the user stays signed in, and what was
         // lost is said out loud rather than left to be discovered the next time
-        // somebody tries to end this session and nothing happens. No token and
-        // no session id in the line — the row id and the account are what an
-        // operator needs to find it.
+        // somebody tries to end this session and nothing happens.
         wallos_oidc_log_failure('token_refresh_failed', [
             'session_row' => (int) ($row['id'] ?? 0),
             'user_id' => (int) ($row['user_id'] ?? 0),
