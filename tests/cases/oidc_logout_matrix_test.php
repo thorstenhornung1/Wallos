@@ -142,22 +142,23 @@ function logout_matrix_token($claims)
  * Makes the installation look like one configured against the fixture provider.
  *
  * The discovery document is written straight into the cache table with a fresh
- * timestamp, so nothing is fetched over the network; the JWKS is served to curl
- * from a file, which is a URL the endpoint's own fetch accepts unchanged. That
- * is what makes the endpoint itself — rather than the function underneath it —
- * something a test can drive.
+ * timestamp, and the JWKS is primed into its own cache against the same jwks_uri
+ * the document names, both with fresh timestamps — so the endpoint reads its
+ * keys from the cache and nothing is fetched over the network (the JWKS fetch is
+ * now cached and routed through the SSRF allowlist, so a file:// URL it once
+ * accepted is refused). That is what makes the endpoint itself — rather than the
+ * function underneath it — something a test can drive.
  *
  * @param WallosDatabase $db
  * @return void
  */
 function logout_matrix_configure($db)
 {
-    $jwksPath = WALLOS_TEST_TMP . '/matrix-jwks.json';
-    file_put_contents($jwksPath, json_encode(logout_matrix_key()['jwks']));
+    $jwksUri = 'https://auth.matrix.example.com/jwks';
 
     $document = json_encode([
         'issuer' => 'https://auth.matrix.example.com',
-        'jwks_uri' => 'file://' . $jwksPath,
+        'jwks_uri' => $jwksUri,
         'authorization_endpoint' => 'https://auth.matrix.example.com/auth',
         'token_endpoint' => 'https://auth.matrix.example.com/token',
         'userinfo_endpoint' => 'https://auth.matrix.example.com/userinfo',
@@ -169,6 +170,13 @@ function logout_matrix_configure($db)
     $stmt->bindValue(':document', $document);
     $stmt->bindValue(':fetchedAt', time());
     $stmt->execute();
+
+    $jwks = $db->prepare('INSERT INTO oidc_jwks_cache (jwks_uri, document, fetched_at)
+                          VALUES (:uri, :document, :fetchedAt)');
+    $jwks->bindValue(':uri', $jwksUri);
+    $jwks->bindValue(':document', json_encode(logout_matrix_key()['jwks']));
+    $jwks->bindValue(':fetchedAt', time());
+    $jwks->execute();
 
     // The same values an operator would put in the environment. The subprocess
     // below inherits them, which is also how it inherits WALLOS_DB_PATH (or the
@@ -435,6 +443,57 @@ wallos_test('a logout does take the provider-granted admin role off the API key'
 
     $db->close();
 });
+
+wallos_test('a sub-identified logout drops the provider admin role even with no session rows',
+    function () {
+        // F1. The de-provisioned admin whose browser session has expired and
+        // whose only live reach is a never-expiring API key. No oidc_sessions row
+        // remains, so the revocation's affected-users set — built only from the
+        // rows the delete loop touched — was empty, and the cached oidc admin
+        // role stayed. The key kept administering. Now a logout token naming the
+        // subject resolves the account and lets the surviving-session guard drop
+        // the role, which with no session left it does.
+        $db = wallos_test_open_database();
+        logout_matrix_user($db, 1, 'sub-alice', 'alice-api-key');
+        wallos_grant_role($db, 1, WALLOS_ROLE_ADMIN, WALLOS_ROLE_SOURCE_OIDC);
+        // Deliberately no wallos_oidc_register_session(): the sessions are gone.
+
+        $revoked = wallos_oidc_revoke_sessions($db, 'sub-alice', null);
+
+        assert_same(0, $revoked, 'there was no session row to revoke');
+        assert_true(!wallos_user_is_admin($db, 1),
+            'but the cached provider-granted admin role was dropped');
+
+        $verdict = wallos_resolve_admin_api_user($db, 'alice-api-key');
+        assert_same('not_admin', $verdict['reason'], 'so the API key no longer administers');
+        assert_true($verdict['user'] !== null, 'though it still resolves to the account');
+
+        $db->close();
+    }
+);
+
+wallos_test('a sub-identified logout keeps the role while another session survives',
+    function () {
+        // The mandatory positive control for F1's added sub-resolution: the
+        // surviving-session guard the QA pass added still holds. Signing the phone
+        // out must not de-administer the laptop that is still signed in — without
+        // the guard, resolving the subject would de-admin every partial logout.
+        $db = wallos_test_open_database();
+        logout_matrix_user($db, 1, 'sub-alice', 'alice-api-key');
+        wallos_grant_role($db, 1, WALLOS_ROLE_ADMIN, WALLOS_ROLE_SOURCE_OIDC);
+        wallos_oidc_register_session($db, 1, 'sid-phone', 'php-phone', '');
+        wallos_oidc_register_session($db, 1, 'sid-laptop', 'php-laptop', '');
+
+        $revoked = wallos_oidc_revoke_sessions($db, 'sub-alice', 'sid-phone');
+
+        assert_same(1, $revoked, 'one session ended');
+        assert_true(wallos_oidc_session_is_active($db, 'php-laptop'), 'the laptop is still signed in');
+        assert_true(wallos_user_is_admin($db, 1),
+            'and keeps the admin role its surviving session backs');
+
+        $db->close();
+    }
+);
 
 wallos_test('no API endpoint consults the session state it is not part of', function () {
     // The source half of the finding above, so that "the API key is not bound to

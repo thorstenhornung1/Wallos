@@ -51,27 +51,34 @@ $settings = $oidcConfiguration['settings'];
 $discovery = $oidcConfiguration['discovery_document'];
 
 $jwksUri = is_array($discovery) ? ($discovery['jwks_uri'] ?? '') : '';
-$jwks = wallos_oidc_fetch_jwks($jwksUri);
-if ($jwks === null) {
-    // Without the provider's keys nothing can be verified, and accepting the
-    // token anyway would defeat the entire point of signing it.
-    error_log('Wallos OIDC back-channel logout: signing keys are unavailable.');
-    $fail(400);
-}
 
 $issuer = is_array($discovery) && !empty($discovery['issuer'])
     ? $discovery['issuer']
     : rtrim(trim((string) wallos_env('OIDC_ISSUER')), '/');
 
-$verdict = wallos_oidc_validate_logout_token(
+// Pre-filter first, then fetch the signing keys through the cache, then verify.
+// The pre-filter rejects obvious junk — wrong issuer, a stale or missing iat, no
+// logout event — without any outbound fetch, so an anonymous POST cannot force
+// one (F2). A token that clears it is still validated signature-first, before
+// any claim is trusted, inside wallos_oidc_validate_logout_token().
+$verdict = wallos_oidc_authorize_logout_token(
+    $db,
     $logoutToken,
-    $jwks,
+    $jwksUri,
     ['issuer' => $issuer, 'audience' => $settings['client_id']],
     time()
 );
 
 if (!$verdict['valid']) {
-    error_log('Wallos OIDC back-channel logout rejected: ' . $verdict['error']);
+    if ($verdict['error'] === 'jwks_unavailable') {
+        // Without the provider's keys nothing can be verified, and accepting the
+        // token anyway would defeat the entire point of signing it. An operator
+        // problem — the provider is unreachable or misconfigured — not a bad
+        // token, so it is logged as its own thing.
+        error_log('Wallos OIDC back-channel logout: signing keys are unavailable.');
+    } else {
+        error_log('Wallos OIDC back-channel logout rejected: ' . $verdict['error']);
+    }
     $fail(400);
 }
 

@@ -28,6 +28,29 @@ expiry, `invalid_grant` on a stale-token refresh terminating the session, and
 the long-idle gap closed — in progress, a later release, needs the #144 live
 window to prove end to end.
 
+## OIDC de-provisioning and the API key — the residual F1 leaves standing
+
+The security-hardening pass (`security/oidc-hardening`) closed F1: a
+back-channel logout that names a subject by `sub` now drops that subject's
+provider-granted (`oidc`-sourced) admin role even when the token matched no
+`oidc_sessions` row — the case where the browser session had already expired and
+the account's only live reach was its never-expiring API key. The role is still
+dropped only when no OIDC session of the account survives, so signing one device
+out never de-administers another that is still signed in.
+
+What that does **not** reach, and cannot without new machinery: the provider
+removing someone from the admin group **and sending no back-channel logout at
+all**. The admin role is a cached claim, re-synced at interactive login and at a
+session-revocation event; with neither, nothing tells Wallos the claim is gone,
+and the API key keeps administering until the next sign-in that never comes. The
+only code fix is periodic claim re-validation (a background job that re-checks
+each OIDC admin's group membership against the provider) — deliberately **not
+built** here: it is a standing cost, a new provider dependency, and outside this
+pass's scope. Until it exists, the operational rule stands: **rotate an OIDC
+user's API key when you de-provision them at the identity provider.** Ending
+their sessions there is not enough on its own if no back-channel logout is
+delivered.
+
 ## The state right now
 
 Released: **5.9.0** (2026-08-31, as authorised),
