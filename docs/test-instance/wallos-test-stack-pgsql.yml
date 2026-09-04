@@ -71,7 +71,9 @@ services:
       # but a secret can be rotated without this file changing — on the real test
       # instance it was, and a QA run spent six hundred live calls on the
       # assumption (#104). Verify against the instance before section 6.
-      WALLOS_CURRENCY_PROVIDER: fixer
+      # 2026-09-04: Frankfurter v2 (5.11.0, #140) — schluessellos, kein Kontingent.
+      # Der Fixer-Key bleibt als Rueckweg konfiguriert und wird nicht geloescht.
+      WALLOS_CURRENCY_PROVIDER: frankfurter
       WALLOS_CURRENCY_API_KEY_FILE: /run/secrets/currency_api_key
 
       # Shared instance AI provider, same reasoning.
