@@ -4,6 +4,10 @@
 
 Proposed, 2026-09-04. Answers the open half of [#133](https://github.com/thorstenhornung1/Wallos/issues/133).
 
+Challenged 2026-09-04 by [#140](https://github.com/thorstenhornung1/Wallos/issues/140)
+and upheld unchanged. See *The decision was challenged: Frankfurter* below. One
+factual correction came out of it, marked where it applies.
+
 ## Context
 
 A currency in Wallos is three free-text fields. An invented code is accepted
@@ -88,8 +92,16 @@ combination is meaningful:
 * active but unsupported — a valid currency whose rates we cannot fetch. Say so
   in the selector rather than hiding it.
 * historical but supported — useful for old records and historical rates.
-* neither — `isoStatus: null`, which is where Bitcoin and the metals go. **Not
-  labelled as an ISO currency, and not removed either.**
+* neither — `isoStatus: null`, which is where Bitcoin goes. **Not labelled as
+  an ISO currency, and not removed either.**
+
+This bullet read "Bitcoin and the metals" until 2026-09-04 and was wrong about
+the metals. `XAU` 959, `XAG` 961, `XPT` 962 and `XPD` 964 are current ISO 4217
+codes — verified in SIX's own current list, where they carry minor units
+`N.A.` — and CLDR carries all four. They generate as `active`. Crypto is the
+only genuine occupant of the null slot, which does not change what the slot is
+for. The correction is recorded rather than quietly applied because the review
+below is what found it.
 
 That last row is the point of the whole separation, and it is what makes the
 answer serve two audiences at once. A household or a shared flat gets a list of
@@ -145,6 +157,11 @@ code the registry does not know is a stated fallback, not an error, and
 hand-maintained overlay for freshly announced codes is a different act from
 redistributing a database — three letters, a number and a date typed out.
 
+These are the costs #140 offered to buy back, and the review below is why the
+offer was declined. The short version: the source that appeared to carry
+withdrawal dates does not carry withdrawal dates. It carries the date a rate
+was last published, which agrees with ISO's withdrawal month in 6 of 36 cases.
+
 **Still open, and worth doing anyway: ask SIX.** A written answer on whether
 the lists may be redistributed in a GPL-3.0 project would restore the
 authoritative source, and it would be worth having for every other project with
@@ -163,6 +180,249 @@ disappear, or the output fails its schema — and warns when more than a tenth o
 the catalogue changes at once, which is what a parser breaking looks like from
 the outside. An empty or half-populated registry must never be the quiet
 outcome of an upstream format change.
+
+## The decision was challenged: Frankfurter, 2026-09-04
+
+[#140](https://github.com/thorstenhornung1/Wallos/issues/140) proposes
+Frankfurter as a rate provider that needs no API key, and noticed something
+that reads as a direct hit on the source chosen above:
+`GET /v2/currencies?scope=all` returns numeric codes for historical currencies
+*and* dates that look like withdrawal dates — the two things this document
+accepted as CLDR's cost, two days after accepting them.
+
+It was worth answering rather than waving off. Everything below was measured
+against the live service or read at the URL given, on 2026-09-04.
+
+**The decision stands. The source does not change and the mechanism does not
+change.** Four reasons, and the first would settle it alone.
+
+### 1. There is no licence on the data — and this time there are eighty-four of them
+
+Frankfurter's repository carries an MIT licence at
+`https://github.com/lineofflight/frankfurter/blob/main/LICENSE`, "Copyright (c)
+Hakan Ensari", granting rights "to deal in **the Software**". The OpenAPI
+document at `https://api.frankfurter.dev/v2/openapi.json` repeats that same MIT
+in `info.license` and links to that same file. Both describe the program.
+Neither says anything about the rates or the currency metadata the program
+serves. A package registry showing "MIT" beside this project is showing the
+code licence, and that is the exact substitution this document refused to make
+for SIX.
+
+The site is asked the question directly and answers it directly. Under
+commercial use, `https://frankfurter.dev`:
+
+> Yes, absolutely. See each provider's terms for details on the underlying
+> data.
+
+That is not a grant, it is a redirection, and it redirects to
+`GET /v2/providers` — which returns **84 providers, of which 29 carry a
+`terms_url` and 55 carry `terms_url: null`.** Counted from the response, not
+estimated. Frankfurter cannot name a terms document for two thirds of the
+sources its data comes from.
+
+This document rejected SIX because one licence question could not be resolved
+from public information. Here there are eighty-four, fifty-five of which have
+no document to read at all. The same standard, applied honestly, refuses this
+harder — and refuses it on the axis that matters, because committing a
+generated file into a public GPL-3.0 repository is redistribution, not use.
+
+The three provider terms actually read are not blanket grants either, and they
+do not resemble each other:
+
+* **ECB**, the pivot source —
+  `https://www.ecb.europa.eu/services/using-our-site/disclaimer/html/index.en.html`
+  — "Users of this website may make free use of the information obtained
+  directly from it", conditioned on citing the ECB and on telling buyers the
+  information is available free of charge if it is ever sold on.
+* **Bank of Canada** — `https://www.bankofcanada.ca/terms/` — a bespoke
+  conditional permission requiring attribution, a due-diligence duty on
+  accuracy, and the same disclosure to purchasers. It names no licence.
+* **Reserve Bank of Australia** — `https://www.rba.gov.au/copyright/` — the one
+  that does use a standard licence, CC BY 4.0, and then lists **Financial
+  Data** among the categories that licence does not cover, under separate
+  terms of their own.
+
+Three sources, three different regimes, and the only one on a recognised open
+licence carves out the category the exchange rates are in. Whatever that is
+collectively, it is not something you regenerate weekly and commit.
+
+**None of this touches #140.** Fetching a rate at runtime is *use*, and it is
+the same act Wallos already performs against fixer today. The challenge was to
+*redistribute*, and redistribution is the half with no answer. The distinction
+this document drew about SIX does the work here without modification, which is
+some evidence the distinction was the right one to draw.
+
+### 2. It is a rate catalogue, not the register, and it is measurably so
+
+SIX's own lists, read at the source on 2026-09-04 and both stamped
+`Pblshd="2026-01-01"`, carry **178** distinct current alpha codes and **137**
+distinct historical alpha codes across 169 country rows, every historical row
+with a `WthdrwlDt`. Against that:
+
+| | ISO 4217 | Frankfurter |
+|---|---|---|
+| current codes | 178 | 165, four of which are not ISO codes at all |
+| historical codes | 137 | 36 |
+
+The gap is not the interesting part. The composition is.
+
+* **`CNH`, `GGP`, `IMP` and `JEP` are in the active list and are not ISO 4217
+  codes.** All four return `iso_numeric: ""`, in a field named `iso_code`.
+  Offshore renminbi is a market convention; the Guernsey, Isle of Man and
+  Jersey pounds are covered by ISO under `GBP`. A field named `iso_code` that
+  returns things which are not ISO codes is this whole document's problem in
+  one row.
+* **`ANG` and `MRO` are listed as active and ISO withdrew both** — `ANG` at
+  `2025-03`, replaced by `XCG`; `MRO` at `2017-12`, replaced by `MRU`. Both
+  still return a rate today. `GET /v2/currency/ANG` names why:
+  `"providers": ["BDI","NBP"]`. Two central banks still carry a line for a
+  currency that stopped existing eighteen months ago, and that is enough to
+  keep it in the active list. If `isoStatus` were generated from `scope`, `ANG`
+  would come out `active`, and Wallos would offer a user a retired currency
+  priced off a stale table in Burundi and Poland.
+* **`ANG` and `XCG` both carry numeric code 532.** ISO reassigned 532 from the
+  one to the other. Frankfurter holds both at once, so the numeric code is not
+  unique in this catalogue.
+* **19 current ISO codes are absent at either scope** — `BOV CHE CHW CLF COU
+  MXV USN UYI UYW VED XAD XBA XBB XBC XBD XSU XTS XUA XXX`. Most are fund and
+  unit codes nobody subscribes in. `VED` is a circulating code. `XXX` is the
+  code ISO defines for "no currency", which is worth having precisely so that
+  nothing else has to stand in for it.
+* **There are no minor units.** `/v2/currencies` returns `iso_code`,
+  `iso_numeric`, `name`, `symbol`, `start_date`, `end_date`;
+  `/v2/currency/{code}` adds `providers` and `peg`. Minor units appear nowhere
+  in the API. The file specified above requires them.
+
+That last point is the plainest one and it stands on its own: **the proposed
+replacement source cannot fill the fields of the file it would replace.**
+
+None of this is carelessness on Frankfurter's part. It is a catalogue of codes
+for which some contributing source has published a rate — which is why `CNH` is
+in it and `XXX` is not, why `ANG` outlives its withdrawal, and why the
+historical half stops at 36 rather than 137. Nothing is wrong with the
+catalogue. It answers the second question in the table above, and it is the
+wrong column for the first.
+
+### 3. `end_date` has one meaning, and the meaning is not lifecycle
+
+#140 flagged `end_date` as a freshness marker on active rows and a withdrawal
+date on withdrawn ones, and called it a hazard. The API's own specification
+settles it, and the answer is simpler and worse than that: it is a freshness
+marker on **both** halves. The OpenAPI schema documents the pair as
+
+> `start_date` — "Earliest available date"
+> `end_date` — "Latest available date"
+
+Nothing there is about a currency's life. On the active half the measurement
+agrees — in a single call, 120 rows at `2026-09-04`, 44 at `2026-09-03`, and
+`KPW` alone at `2026-09-02`. On the withdrawn half it agrees too, once the
+dates are checked against ISO instead of against intuition.
+
+**Six of the 36 agree with ISO's withdrawal date even to the month. Thirty do
+not.**
+
+The euro block is the mild case: ISO withdrew `ATS`, `BEF`, `ESP`, `FIM`,
+`GRD`, `ITL`, `LUF` and `PTE` at `2002-03`, and Frankfurter has all eight at
+`2002-02-28`. `FRF` is `2002-02-16` and `NLG` is `2002-01-26` — not because
+anything happened in ISO's register on those days, but because that is when the
+last quote landed. The bad cases are years out:
+
+| code | ISO withdrawal | Frankfurter `end_date` |
+|---|---|---|
+| `ROL` | 2005-06 | 2008-12-30 |
+| `TRL` | 2005-12 | 2010-05-11 |
+| `ZWD` | 2008-08 | 2013-10-30 |
+| `TMM` | 2009-01 | 2014-04-03 |
+| `SLL` | 2023-12 | 2022-06-30 |
+
+The first four are late because banks kept publishing a converted legacy series
+after ISO retired the code. `SLL` is *early*, which is the same fault seen from
+the other side: the quotes stopped eighteen months before ISO withdrew it. A
+field that is three years late for one currency and eighteen months early for
+another is not a withdrawal date with noise on it. It is a different quantity.
+
+The fallback behaviour makes the real meaning visible.
+`?date=2002-02-20&quotes=FRF` does not fail; it returns the row for
+`2002-02-16` — the `end_date`, because that is the last row there is. And the
+legacy rates are not the legal ones: the French franc was irrevocably fixed at
+6.55957 to the euro from 1999, and this series returns 6.5828, 6.5511, 6.5619
+and 6.5766 on different days. Converting an old FRF amount through it lands
+near the right answer and not on it.
+
+**So the two meanings cannot be told apart on the row, because there is only
+one meaning and no lifecycle dates anywhere.** The only signal is which scope
+an entry appears in; that split is *inferred* to be a rate-recency threshold —
+it is not documented, but `ANG` at `2026-09-04` and `MRO` at `2026-09-03` are
+active while `BGN` at `2025-12-31` is archived — and it is already wrong for
+two currencies. This is worse than the hazard #140 described. The field is not
+ambiguous. It is consistently something other than what was wanted.
+
+One loose end, recorded because it was seen and not because it changes
+anything: `?date=2002-02-28&quotes=BEF` returns 40.328, stable across three
+calls, while `?date=2002-03-05&quotes=BEF` returns the same stated date
+`2002-02-28` with rate 40.442. Two rates for one date, depending on which date
+was asked for. Reproducible; cause not determined and not pursued. BEF's
+irrevocable rate was 40.3399, so neither figure is the legal one.
+
+### 4. The mechanism was never what was in question
+
+Build-time generation with a committed file, a weekly job that opens a pull
+request, and a running installation that never contacts the source: none of
+that was challenged and none of it changes. #140 proposes a **source** change,
+which is refused above; it is not a proposal to read metadata at runtime, and
+the two are different arguments with different answers.
+
+If anything the challenge strengthens the mechanism. A source whose `end_date`
+column moves every day for 165 rows is a source you must not read at runtime
+for a question that is supposed to be stable, and the freshness measurement in
+section 3 is what that looks like from the outside.
+
+### 5. The crypto slot is unaffected
+
+`/v2/currency/BTC` returns HTTP 404, and neither `BTC` nor `ETH` appears at
+either scope. #140's finding holds, and the `isoStatus: null` slot is exactly
+as needed: someone tracking a crypto subscription still needs a provider that
+prices it, and `fixerSupported` remains its own axis for that reason. The
+metals were the error in the original bullet, and that correction is recorded
+where the bullet is.
+
+### What is worth keeping from the challenge
+
+`/v2/currencies` is a good answer to the second question in the table above,
+and a better one than fixer's `/symbols`, because `GET /v2/currency/{code}`
+names which providers publish a code — so "we cannot price this" can say why.
+That belongs in the provider column and in the informational CI report, both of
+which this document already has room for. It stays a runtime query against a
+provider and never becomes a committed file.
+
+The report also gains a case that is no longer hypothetical. "Historical but
+supported" was written above as a design row. `ANG` and `MRO` are that row,
+live, today — ISO-withdrawn and still priced by a provider. That is precisely
+the disagreement the report exists to print and not fail on.
+
+### What could not be settled
+
+* **The IMF's terms.** `https://www.imf.org/en/about/copyright-and-terms`
+  returned HTTP 403 to two different tools from here. It is one of the 29
+  providers that names a terms document, and the document could not be read.
+* **The other 26 named terms documents were not read.** Three were, they
+  disagree with each other, and the one on a standard open licence excludes
+  financial data from it. Extrapolating from three to twenty-nine would be the
+  same move this document refuses elsewhere.
+* **The 55 providers with no `terms_url`.** Whether they publish terms
+  somewhere Frankfurter has not linked is unknown. Frankfurter does not say and
+  neither does this entry.
+* **Where the currency metadata itself comes from.** `frankfurter.dev/currencies`
+  says only "For symbols, subunits, and formatting positions, see World
+  Currency Codes", linking to `https://frankfurter.dev/world-currency-codes/`,
+  which is Frankfurter's own page and names no upstream and no licence. So even
+  the provenance of the names, symbols and numeric codes — the part that would
+  have been copied — is unstated.
+* **Whether the `scope` split is a pure rate-recency threshold.** Inferred from
+  three data points, not documented.
+* **Whether the `BEF` two-rates-for-one-date result is a blend artefact or a
+  bug.** Reproducible, unexplained, and irrelevant to the decision.
+* **Asking SIX.** Still open, still worth doing, and unchanged by any of this.
 
 ## The first implementation
 
