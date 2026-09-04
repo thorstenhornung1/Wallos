@@ -472,6 +472,17 @@ wallos_test('a currency Frankfurter does not price keeps its rate and is named',
     assert_true(abs(frankfurter_rate($db, 1, 'USD') - 1.1612) < 0.000001,
         'while the rest were updated');
 
+    // The echo above is the HTTP/CLI surface; an operator watches the run's
+    // persisted detail and the [Wallos cron] log line, which are built from
+    // the reporting harness rather than stdout. A live run found BTC held
+    // correctly but named nowhere the harness records — silent-correct being
+    // indistinguishable from silent-wrong. It must reach the detail.
+    $detail = (string) $db->scalar("SELECT detail FROM cron_runs WHERE job = 'updateexchange'");
+    assert_contains('not priced: BTC', $detail,
+        'the held code is named in the persisted run detail (got: ' . $detail . ')');
+    assert_contains('held=1', $detail,
+        'and counted, so a held currency is a number as well as a name');
+
     $db->close();
 });
 

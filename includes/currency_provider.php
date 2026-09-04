@@ -1004,14 +1004,18 @@ function wallos_update_exchange_rates_for_user($db, $userId)
     if ($unpriced !== []) {
         sort($unpriced);
 
+        // Returned as well as named in the message, because the message is for
+        // a human reading a page and the array is for the cron report, which
+        // has to name the held code somewhere it persists (#106).
         return [
             'success' => true,
             'message' => 'Rates updated successfully! The provider does not price '
                 . implode(', ', $unpriced) . '; the previous rate was kept.',
+            'unpriced' => $unpriced,
         ];
     }
 
-    return ['success' => true, 'message' => 'Rates updated successfully!'];
+    return ['success' => true, 'message' => 'Rates updated successfully!', 'unpriced' => []];
 }
 
 /**

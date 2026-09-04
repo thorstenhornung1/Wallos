@@ -51,6 +51,10 @@ while ($row = $usersToUpdateExchange->fetchArray(SQLITE3_ASSOC)) {
 // hit the run cache instead of the provider.
 wallos_prewarm_shared_exchange_rates($db, array_column($userRows, 'id'), $force);
 
+// Codes some account holds that the provider would not price this run, kept
+// as a set so the summary names each once however many accounts hold it.
+$heldCodes = [];
+
 foreach ($userRows as $userToUpdateExchange) {
     $userId = $userToUpdateExchange['id'];
     echo "For user: " . $userToUpdateExchange['username'] . "<br />";
@@ -91,6 +95,19 @@ foreach ($userRows as $userToUpdateExchange) {
         // that did not move — and printing "Rates updated successfully!" over
         // that is how it stays unnoticed.
         echo $update['message'] . "<br />";
+
+        // The echo above reaches the HTTP/CLI output; the run's persisted
+        // detail and the [Wallos cron] log line are built from the reporting
+        // harness, not from stdout. So a held currency that is only echoed is
+        // invisible exactly where an operator looks (cron_runs, the log). Name
+        // it there too — counted, and the codes carried to the run summary —
+        // without failing the run, because the refresh did succeed.
+        if (!empty($update['unpriced'])) {
+            wallos_cron_count('held');
+            foreach ($update['unpriced'] as $unpricedCode) {
+                $heldCodes[(string) $unpricedCode] = true;
+            }
+        }
     } else {
         wallos_cron_problem('exchange rates for user ' . $userId . ' were not updated: '
             . $update['message']);
@@ -98,7 +115,12 @@ foreach ($userRows as $userToUpdateExchange) {
     }
 }
 
-wallos_cron_done();
+// Named in the persisted detail, not only echoed: "held=1" says how many, and
+// the summary says which, so "the BTC figure did not move" is legible in
+// cron_runs and the log rather than only in a page nobody keeps.
+wallos_cron_done($heldCodes === []
+    ? ''
+    : 'not priced: ' . implode(', ', array_keys($heldCodes)));
 
 $db->close();
 
