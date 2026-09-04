@@ -427,8 +427,8 @@ wallos_test('the admin page knows about exactly the jobs the crontab runs', func
     // the crontab is reported as overdue for ever.
     assert_same([], array_values(array_diff($scheduled, $known)),
         'every scheduled job is described in wallos_cron_jobs()');
-    assert_same(['createdatabase'], array_values(array_diff($known, $scheduled)),
-        'and the only job described but not scheduled is the one startup.sh runs');
+    assert_same(['createdatabase', 'providerprobe'], array_values(array_diff($known, $scheduled)),
+        'and the only jobs described but not scheduled are the two startup.sh runs');
 });
 
 wallos_test('every job the page describes actually opens a run', function () {

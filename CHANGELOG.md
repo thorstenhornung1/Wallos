@@ -1,5 +1,43 @@
 # Changelog
 
+## [5.10.2](https://github.com/thorstenhornung1/Wallos/releases/tag/v5.10.2) (2026-09-04)
+
+**Deploying this release runs the test. Nothing else is required of anybody.**
+
+### Added
+
+* **currency:** a startup probe that asks the rate provider, once per
+  installation, what it does with a currency code it does not know.
+
+  The answer cannot be read out of our code, because it is the provider's
+  behaviour. Two outcomes, far apart. If it drops the unknown symbol and prices
+  the rest, an invented currency stays at the rate 1 it was seeded with and
+  goes into every total on the dashboard, the statistics page and the calendar,
+  with nothing on screen telling it from a correct number. If it refuses the
+  whole request, then — because the scheduled refresh fetches the union of
+  every due account's symbols in one call, and the refusal cache serves that one
+  answer to every subset — a single account's typo stops rate refreshes for
+  every account sharing the instance credential, indefinitely.
+
+  The verdict lands in `cron_runs`, on the admin page under *Scheduled jobs*,
+  and in the container log as one line beginning `[Wallos provider probe]`.
+
+  **It touches no user data.** The first design added an invented currency to a
+  real account, reset the freshness rows and waited for a scheduled run at a
+  fixed time. That is a great many moving parts, each of them a way to leave an
+  instance changed, for a question that one request answers: the union is ours
+  and can be read, and what is unknown is only what the provider does when an
+  unknown symbol is in the list.
+
+  One request, ever. A stored verdict means it never asks again, so restarts
+  and redeploys cost nothing, and an installation with no provider configured
+  says so and asks nothing at all.
+
+### Removed
+
+* **cron:** the temporary 08:30 refresh from 5.10.1, as that release said it
+  would be. The probe replaces it and needs no clock.
+
 ## [5.10.1](https://github.com/thorstenhornung1/Wallos/releases/tag/v5.10.1) (2026-09-04)
 
 **A dated, temporary change. 5.10.2 takes it back out.**

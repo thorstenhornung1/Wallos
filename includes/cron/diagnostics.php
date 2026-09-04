@@ -112,6 +112,11 @@ function wallos_cron_jobs()
             'schedule' => 'at startup',
             'stale_after' => 0,
         ],
+        'providerprobe' => [
+            'label' => 'Currency provider probe',
+            'schedule' => 'at startup, once per installation',
+            'stale_after' => 0,
+        ],
     ];
 }
 

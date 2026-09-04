@@ -266,5 +266,12 @@ fi
 # Run checkforupdates.php
 /usr/local/bin/php /var/www/html/endpoints/cronjobs/checkforupdates.php || true
 
+# Ask the rate provider, once per installation, what it does with a currency
+# code it does not know. The answer decides whether an invented code sits at a
+# wrong rate or stops the refresh for everyone sharing the credential, and it
+# is the provider's behaviour rather than ours — so it cannot be read out of
+# the code. A stored verdict means this never asks twice.
+/usr/local/bin/php /var/www/html/endpoints/cronjobs/providerprobe.php || true
+
 # Essentially wait until all child processes exit
 wait

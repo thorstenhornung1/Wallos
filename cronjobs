@@ -27,25 +27,6 @@
 0 1 * * * WALLOS_CRON_STRICT=1 /usr/local/bin/php /var/www/html/endpoints/cronjobs/updatenextpayment.php > /tmp/cron/updatenextpayment.log 2>> /proc/1/fd/2
 0 2 * * * WALLOS_CRON_STRICT=1 /usr/local/bin/php /var/www/html/endpoints/cronjobs/updateexchange.php > /tmp/cron/updateexchange.log 2>> /proc/1/fd/2
 
-# TEMPORARY — REMOVE IN 5.10.2.
-#
-# One extra rate refresh, at 08:30 on 4 September only. It exists to run the
-# provider test on the day it was decided rather than the morning after: an
-# invented currency code is added to one account, and this run answers whether
-# the provider drops the unknown symbol or refuses the whole request. The
-# second outcome would mean one account's typo stops rate refreshes for every
-# account sharing the instance credential (#135), and the first would confirm
-# the quieter case instead (#133) — a rate of 1 that nothing on screen tells
-# from a correct number.
-#
-# It has to be a scheduled run and not a hand-triggered one. The daily job
-# skips any account already refreshed today, so anything run after 02:00 skips
-# them all; forcing past that is a different code path than the one under test.
-#
-# tests/cases/cron_reporting_test.php fails the moment the version moves off
-# 5.10.1 while this line is still here, so removing it is a gate rather than
-# somebody's memory.
-30 8 4 9 * WALLOS_CRON_STRICT=1 /usr/local/bin/php /var/www/html/endpoints/cronjobs/updateexchange.php > /tmp/cron/updateexchange.log 2>> /proc/1/fd/2
 0 8 * * * WALLOS_CRON_STRICT=1 /usr/local/bin/php /var/www/html/endpoints/cronjobs/sendcancellationnotifications.php > /tmp/cron/sendcancellationnotifications.log 2>> /proc/1/fd/2
 0 9 * * * WALLOS_CRON_STRICT=1 /usr/local/bin/php /var/www/html/endpoints/cronjobs/sendnotifications.php > /tmp/cron/sendnotifications.log 2>> /proc/1/fd/2
 */2 * * * * WALLOS_CRON_STRICT=1 /usr/local/bin/php /var/www/html/endpoints/cronjobs/sendverificationemails.php > /tmp/cron/sendverificationemails.log 2>> /proc/1/fd/2
