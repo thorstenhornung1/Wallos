@@ -93,8 +93,15 @@ function wallos_oidc_validate_logout_token($token, $jwks, $expectations, $now, $
         return $reject('not_a_logout_event');
     }
 
-    $sub = isset($claims['sub']) && is_string($claims['sub']) ? $claims['sub'] : null;
-    $sid = isset($claims['sid']) && is_string($claims['sid']) ? $claims['sid'] : null;
+    // An empty string is not an identifier. A token carrying sid:"" or sub:""
+    // names nothing, and reading it as a value is how the guard that exists to
+    // refuse an anonymous token stops refusing one: "" === null is false, so the
+    // empty string slips past the check below as if it named a session. An empty
+    // claim is read as absent, here, so everything downstream sees null.
+    $sub = isset($claims['sub']) && is_string($claims['sub']) && $claims['sub'] !== ''
+        ? $claims['sub'] : null;
+    $sid = isset($claims['sid']) && is_string($claims['sid']) && $claims['sid'] !== ''
+        ? $claims['sid'] : null;
 
     // Without either, the token says a session ended but not whose.
     if ($sub === null && $sid === null) {
@@ -177,11 +184,137 @@ function wallos_oidc_session_is_active($db, $sessionId)
 }
 
 /**
- * Revoke the sessions a logout token identifies.
+ * The sessions a logout token identifies.
  *
- * Correlates by sid when the provider sent one — that ends exactly the session
- * it means. With only sub, every session of that subject is ended, which is the
- * documented fallback and the right reading of "this person is logged out".
+ * Correlates by sid when the provider sent one, but scoped to the subject named
+ * in the same token: a provider session id two accounts ever share must end only
+ * the one the token is about, and the sub that scopes it arrived in the very same
+ * token. With only a sid — a token that named no subject — the session is ended
+ * by its sid alone, because there is nothing to scope by. With only a sub, every
+ * session of that subject is ended, the documented "this person is logged out".
+ *
+ * The one subtlety is the empty-sid fallback. A provider that leaves sid out of
+ * the ID token makes Wallos record '' for every session, then sends a sid only in
+ * its logout tokens — so the sid can never match a row, and without a fallback
+ * that session can never be ended (it lives its full local lifetime while the
+ * provider, answered 200, never retries). When the scoped sid reaches nothing,
+ * the subject's sessions that carry no recorded sid are taken instead: those are
+ * exactly the ones a sid could not reach, still scoped to the named subject so
+ * another account is never touched, and a session that does carry its own sid is
+ * left to be ended by that sid rather than swept up here.
+ *
+ * @param SQLite3     $db
+ * @param string|null $sub
+ * @param string|null $sid
+ * @return array<int, array> the session rows to revoke
+ */
+function wallos_oidc_sessions_for_logout($db, $sub, $sid)
+{
+    // An empty string names nothing; read as absent so a token carrying sid:""
+    // or sub:"" reaches no row. The validator refuses such a token outright, but
+    // this path must be correct on its own — it is reached by callers, not only
+    // by the endpoint.
+    $sub = (is_string($sub) && $sub !== '') ? $sub : null;
+    $sid = (is_string($sid) && $sid !== '') ? $sid : null;
+
+    if ($sid !== null && $sub !== null) {
+        $rows = wallos_oidc_run_session_select(
+            $db,
+            'SELECT s.id, s.user_id, s.login_token FROM oidc_sessions s
+             JOIN "user" u ON u.id = s.user_id
+             WHERE s.sid = :sid AND u.oidc_sub = :sub',
+            [':sid' => $sid, ':sub' => $sub]
+        );
+
+        if ($rows !== []) {
+            return $rows;
+        }
+
+        return wallos_oidc_run_session_select(
+            $db,
+            'SELECT s.id, s.user_id, s.login_token FROM oidc_sessions s
+             JOIN "user" u ON u.id = s.user_id
+             WHERE u.oidc_sub = :sub AND (s.sid IS NULL OR s.sid = \'\')',
+            [':sub' => $sub]
+        );
+    }
+
+    if ($sid !== null) {
+        return wallos_oidc_run_session_select(
+            $db,
+            'SELECT id, user_id, login_token FROM oidc_sessions WHERE sid = :sid',
+            [':sid' => $sid]
+        );
+    }
+
+    if ($sub !== null) {
+        return wallos_oidc_run_session_select(
+            $db,
+            'SELECT s.id, s.user_id, s.login_token FROM oidc_sessions s
+             JOIN "user" u ON u.id = s.user_id
+             WHERE u.oidc_sub = :sub',
+            [':sub' => $sub]
+        );
+    }
+
+    return [];
+}
+
+/**
+ * Runs one of the selects above and returns its rows, or [] when the statement
+ * could not even be prepared — an unprepared select finding nothing is the same
+ * outcome for a caller whose next step is to iterate the rows.
+ *
+ * @param SQLite3              $db
+ * @param string               $sql
+ * @param array<string, mixed> $bindings
+ * @return array<int, array>
+ */
+function wallos_oidc_run_session_select($db, $sql, $bindings)
+{
+    $stmt = $db->prepare($sql);
+    if ($stmt === false) {
+        return [];
+    }
+
+    foreach ($bindings as $name => $value) {
+        $stmt->bindValue($name, $value);
+    }
+
+    $result = $stmt->execute();
+    $rows = [];
+    while ($result !== false && $row = $result->fetchArray()) {
+        $rows[] = $row;
+    }
+
+    return $rows;
+}
+
+/**
+ * Whether the user still holds any OIDC session at all.
+ *
+ * Asked after a revocation has deleted the rows it was going to, so that the
+ * provider-granted admin role is dropped only when the last session backing it
+ * is gone — never while another device of the same account is still signed in.
+ *
+ * @param SQLite3 $db
+ * @param int     $userId
+ * @return bool
+ */
+function wallos_oidc_user_has_active_session($db, $userId)
+{
+    $stmt = $db->prepare('SELECT 1 FROM oidc_sessions WHERE user_id = :userId LIMIT 1');
+    if ($stmt === false) {
+        return false;
+    }
+    $stmt->bindValue(':userId', (int) $userId);
+    $result = $stmt->execute();
+
+    return $result !== false && $result->fetchArray() !== false;
+}
+
+/**
+ * Revoke the sessions a logout token identifies.
  *
  * Never deletes the user or any of their data. An identity disappearing at the
  * provider is not permission to destroy subscriptions or financial history.
@@ -193,28 +326,7 @@ function wallos_oidc_session_is_active($db, $sessionId)
  */
 function wallos_oidc_revoke_sessions($db, $sub, $sid)
 {
-    $rows = [];
-
-    if ($sid !== null && $sid !== '') {
-        $stmt = $db->prepare('SELECT id, user_id, login_token FROM oidc_sessions WHERE sid = :sid');
-        if ($stmt === false) {
-            return 0;
-        }
-        $stmt->bindValue(':sid', $sid, SQLITE3_TEXT);
-    } else {
-        $stmt = $db->prepare('SELECT s.id, s.user_id, s.login_token FROM oidc_sessions s
-                              JOIN "user" u ON u.id = s.user_id
-                              WHERE u.oidc_sub = :sub');
-        if ($stmt === false) {
-            return 0;
-        }
-        $stmt->bindValue(':sub', $sub, SQLITE3_TEXT);
-    }
-
-    $result = $stmt->execute();
-    while ($result !== false && $row = $result->fetchArray(SQLITE3_ASSOC)) {
-        $rows[] = $row;
-    }
+    $rows = wallos_oidc_sessions_for_logout($db, $sub, $sid);
 
     $affectedUsers = [];
     $revoked = 0;
@@ -254,7 +366,7 @@ function wallos_oidc_revoke_sessions($db, $sub, $sid)
             error_log('Wallos OIDC revocation: could not prepare the session delete: ' . $db->lastErrorMsg());
             continue;
         }
-        $delete->bindValue(':id', $row['id'], SQLITE3_INTEGER);
+        $delete->bindValue(':id', (int) $row['id']);
         if ($delete->execute() === false) {
             error_log('Wallos OIDC revocation: session ' . $row['id'] . ' was not revoked: ' . $db->lastErrorMsg());
             continue;
@@ -266,15 +378,25 @@ function wallos_oidc_revoke_sessions($db, $sub, $sid)
         }
     }
 
-    // The provider-derived admin role goes with the session.
+    // The provider-derived admin role goes with the session — but only when it
+    // was the account's last one.
     //
     // Otherwise an administrator removed from the admin group keeps the role
-    // until they next sign in — and back-channel logout is precisely the signal
-    // that says they are not going to. Source-scoped, so a local administrator
-    // is untouched, and the next successful login re-grants it if the claim is
-    // still there. That is the same rule the login-time sync follows.
+    // until they next sign in, and back-channel logout is precisely the signal
+    // that says they are not going to. The role, though, backs the account's
+    // OIDC sessions collectively, not the one row this token named: signing the
+    // phone out must not de-administer the laptop, which is still signed in and
+    // still working. So the role is dropped only when this revocation ended the
+    // last session behind it — checked after the deletes above. Source-scoped,
+    // so a local administrator is untouched, and the next successful login
+    // re-grants it if the claim is still there, the same rule the login-time
+    // sync follows.
     require_once __DIR__ . '/../user_roles.php';
     foreach (array_keys($affectedUsers) as $userId) {
+        if (wallos_oidc_user_has_active_session($db, $userId)) {
+            continue;
+        }
+
         if (wallos_revoke_role($db, $userId, WALLOS_ROLE_ADMIN, WALLOS_ROLE_SOURCE_OIDC) === false) {
             // The session is gone either way, so this does not change the count
             // reported to the provider. But an administrator whose group

@@ -43,8 +43,13 @@ function diagnosis_run($rememberMePath, $cookie)
         . 'require ' . var_export($rememberMePath, true) . ';' . "\n"
         . 'echo restoreSessionFromRememberMeCookie($db) !== false ? "yes" : "no";');
 
+    // Only stdout: this helper's verdict is the "yes"/"no" the script echoes,
+    // and the restore now writes a rejection line to stderr for the forgery
+    // shape (a real username, a token that matches nothing). That line is
+    // asserted on its own below, through a helper that keeps stderr; here it is
+    // noise that would turn an exact "no" into "…refused.\nno".
     $output = [];
-    $command = 'php ' . escapeshellarg($script) . ' 2>&1';
+    $command = 'php ' . escapeshellarg($script) . ' 2>/dev/null';
     exec($command, $output);
     unlink($script);
 
@@ -177,3 +182,74 @@ wallos_test('the fixed function reads neither login flag: the token alone decide
     assert_true(strpos($source, 'password_login_disabled') === false,
         'and it never consulted the OIDC password-login setting — the two were always separate');
 });
+
+// ---------------------------------------- the one rejection worth logging
+
+/**
+ * Runs the fixed restore in its own process with a given cookie and returns
+ * everything it wrote to stdout and stderr — error_log goes to stderr in the
+ * CLI, so the rejection line lands here.
+ *
+ * @param string $cookie
+ * @return string
+ */
+function rejection_log_run($cookie)
+{
+    $script = WALLOS_TEST_TMP . '/reject-' . uniqid('', true) . '.php';
+    file_put_contents($script, "<?php\n"
+        . '$_COOKIE["wallos_login"] = ' . var_export($cookie, true) . ';' . "\n"
+        . 'require ' . var_export(WALLOS_ROOT . '/includes/database/connection.php', true) . ';' . "\n"
+        . '$db = wallos_database_connect();' . "\n"
+        . 'ini_set("session.save_path", ' . var_export(WALLOS_TEST_TMP, true) . ');' . "\n"
+        . 'session_start();' . "\n"
+        . 'require ' . var_export(WALLOS_ROOT . '/includes/remember_me.php', true) . ';' . "\n"
+        . 'echo "restored=" . (restoreSessionFromRememberMeCookie($db) !== false ? "yes" : "no") . "\n";');
+
+    $output = [];
+    exec('php ' . escapeshellarg($script) . ' 2>&1', $output);
+    unlink($script);
+
+    return implode("\n", $output);
+}
+
+wallos_test('a rejected remember-me cookie is logged only for the forgery shape, and never the token',
+    function () {
+        // The calibrated signal. A cookie whose username resolves to a real
+        // account but whose token matches no row is the shape of a forged cookie
+        // or a revoked credential being replayed — worth one line. The ordinary
+        // miss (an unknown username, a malformed cookie, a cleared post-logout
+        // cookie) is not, or the line drowns in every visit. Both directions are
+        // asserted, or a log that fired for everything would pass the first.
+        $db = wallos_test_open_database();
+        wallos_test_create_user($db, 1, 'alice');
+        $insert = $db->prepare('INSERT INTO login_tokens (user_id, token) VALUES (1, :t)');
+        $insert->bindValue(':t', 'the-real-token');
+        assert_true($insert->execute() !== false, 'alice has a remembered session');
+        $db->close();
+
+        $marker = 'matches no active session';
+
+        // Forgery shape: alice is real, the token is not hers.
+        $forged = rejection_log_run('alice|not-the-token|1');
+        assert_contains('restored=no', $forged, 'the forged cookie is refused (' . $forged . ')');
+        assert_contains($marker, $forged, 'and the refusal is logged (' . $forged . ')');
+        assert_contains('user 1', $forged, 'by the account id, so an operator can find it');
+        assert_true(strpos($forged, 'not-the-token') === false,
+            'and never the token value — a token in the log is a credential in the log');
+
+        // Ordinary misses: nothing forensic to say, so nothing is said.
+        $unknownUser = rejection_log_run('nobody|not-the-token|1');
+        assert_contains('restored=no', $unknownUser, 'an unknown username is refused');
+        assert_true(strpos($unknownUser, $marker) === false,
+            'but not logged — the username resolved to no account (' . $unknownUser . ')');
+
+        $malformed = rejection_log_run('only-one-field');
+        assert_true(strpos($malformed, $marker) === false,
+            'a malformed cookie is not logged either (' . $malformed . ')');
+
+        // And a genuine cookie restores and says nothing.
+        $genuine = rejection_log_run('alice|the-real-token|1');
+        assert_contains('restored=yes', $genuine, 'the real cookie restores (' . $genuine . ')');
+        assert_true(strpos($genuine, $marker) === false,
+            'and a successful restore logs no rejection');
+    });

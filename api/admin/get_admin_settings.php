@@ -52,7 +52,7 @@ if ($_SERVER["REQUEST_METHOD"] === "POST" || $_SERVER["REQUEST_METHOD"] === "GET
     $user = wallos_require_admin_api_user($db, $apiKey);
     $userId = $user['id'];
 
-    $sql = "SELECT * FROM 'admin'";
+    $sql = "SELECT * FROM \"admin\"";
     $stmt = $db->prepare($sql);
     $stmt->bindValue(':userId', $userId);
     $result = $stmt->execute();

@@ -76,6 +76,18 @@ function restoreSessionFromRememberMeCookie($db)
     $row = $result->fetchArray(SQLITE3_ASSOC);
 
     if ($row === false) {
+        // The one rejection worth a line. The username resolved to a real
+        // account, yet the token in the cookie matches no row for it — the shape
+        // of a forged cookie, or of a credential that has since been revoked and
+        // is being replayed. The ordinary stale-cookie miss never reaches here:
+        // a post-logout cookie is cleared, and an unknown username returned above
+        // — so this fires on the meaningful case rather than on every visit.
+        //
+        // The user id, never the token. A token in the log is a credential in
+        // the log, and this line exists to notice the credential, not to leak it.
+        error_log('Wallos: a remember-me cookie for user ' . (int) $userId
+            . ' presented a token that matches no active session; it was refused.');
+
         return false;
     }
 

@@ -67,7 +67,7 @@ $user = wallos_require_admin_api_user($db, $apiKey);
 $userId = $user['id'];
 
 // Fetch current admin settings
-$adminSql = "SELECT * FROM 'admin' WHERE id = 1";
+$adminSql = "SELECT * FROM \"admin\" WHERE id = 1";
 $adminResult = $db->query($adminSql);
 $adminSettings = $adminResult->fetchArray(SQLITE3_ASSOC);
 
