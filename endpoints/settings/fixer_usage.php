@@ -35,8 +35,18 @@ $response = [
     'used' => null,
     'total' => null,
     'exhausted' => false,
+    // The daily pair, apart from the monthly one: a day's limit reached clears
+    // by tomorrow's cron, a month's quota exhausted does not, and the reader is
+    // owed the difference (#106).
+    'used_day' => null,
+    'total_day' => null,
+    'daily_limit_reached' => false,
     'local_calls' => wallos_currency_local_calls($db, $config, $userId),
     'rates_updated' => null,
+    // Whether the last successful refresh has fallen far enough behind to read
+    // as a stall rather than a normal daily gap. Derived below from the date
+    // alone — no provider request (#106).
+    'rates_stale' => false,
 ];
 
 // The last successful refresh is per user whatever the key mode: rates are
@@ -53,9 +63,19 @@ if ($stmt !== false) {
     }
 }
 
+// A refresh runs daily, so a stored date older than yesterday means the
+// automatic updates have stopped — the stall #106 is about. One day of slack
+// absorbs a cron that has not run yet today. A never-refreshed instance carries
+// no date and is "not yet", not "stalled", so a null date is left alone.
+if ($response['rates_updated'] !== null) {
+    $response['rates_stale'] = $response['rates_updated'] < date('Y-m-d', strtotime('-1 day'));
+}
+
 if ($provider === 1) {
     $used = null;
     $limit = null;
+    $usedDay = null;
+    $limitDay = null;
 
     if ($isInstance) {
         // A shared credential has shared quota, so it is reported as such
@@ -63,8 +83,16 @@ if ($provider === 1) {
         $instance = wallos_get_instance_settings($db, 'currency');
         $used = $instance['usage_used'] ?? null;
         $limit = $instance['usage_limit'] ?? null;
+        $usedDay = $instance['usage_used_day'] ?? null;
+        $limitDay = $instance['usage_limit_day'] ?? null;
     } elseif ($db->columnExists('fixer', 'usage_used')) {
-        $stmt = $db->prepare('SELECT usage_used, usage_limit FROM fixer WHERE user_id = :userId');
+        // The daily columns arrived in migration 000075; read them only where
+        // they exist, in the one query that already reads the monthly pair.
+        $hasDay = $db->columnExists('fixer', 'usage_used_day');
+        $columns = $hasDay
+            ? 'usage_used, usage_limit, usage_used_day, usage_limit_day'
+            : 'usage_used, usage_limit';
+        $stmt = $db->prepare('SELECT ' . $columns . ' FROM fixer WHERE user_id = :userId');
 
         if ($stmt !== false) {
             $stmt->bindValue(':userId', $userId, SQLITE3_INTEGER);
@@ -74,6 +102,11 @@ if ($provider === 1) {
             if ($row) {
                 $used = $row['usage_used'];
                 $limit = $row['usage_limit'];
+
+                if ($hasDay) {
+                    $usedDay = $row['usage_used_day'] ?? null;
+                    $limitDay = $row['usage_limit_day'] ?? null;
+                }
             }
         }
     }
@@ -82,6 +115,12 @@ if ($provider === 1) {
         $response['used'] = (int) $used;
         $response['total'] = (int) $limit;
         $response['exhausted'] = (int) $used >= (int) $limit;
+    }
+
+    if ($usedDay !== null && !empty($limitDay)) {
+        $response['used_day'] = (int) $usedDay;
+        $response['total_day'] = (int) $limitDay;
+        $response['daily_limit_reached'] = (int) $usedDay >= (int) $limitDay;
     }
 }
 
