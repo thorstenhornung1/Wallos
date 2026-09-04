@@ -1,6 +1,7 @@
 <?php
 
 require_once __DIR__ . '/config_helper.php';
+require_once __DIR__ . '/ssrf_helper.php';
 
 function wallos_get_oidc_defaults()
 {
@@ -78,6 +79,49 @@ function wallos_get_db_oidc_enabled($db)
 }
 
 /**
+ * Whether making OIDC effective would collide with the single-user no-login mode.
+ *
+ * admin.login_disabled signs user 1 in with no credentials at all; OIDC hands
+ * the decision of who gets in to the identity provider. The two contradict each
+ * other, and set_admin_settings.php already refuses login_disabled=1 while OIDC
+ * is effective. This is the reverse direction (finding F3), for the paths that
+ * enable OIDC: refuse turning it on — or completing the configuration that makes
+ * it effective — while login_disabled is set. Without it the mutual exclusion
+ * was guarded in one direction only.
+ *
+ * "Effective" is enabled AND configured, the same predicate the login page and
+ * the reverse guard use. A caller about to flip the enable toggle passes the
+ * value it is about to write and the current configured state; a caller
+ * completing the configuration passes the stored enable flag and true, since the
+ * save is the thing that would make it configured. Either way, if the result
+ * would be effective and login_disabled is on, it is blocked — so no path,
+ * whichever of {enable, configure} happens last, can leave the pair both on.
+ *
+ * This is NOT oauth_settings.password_login_disabled, which only hides the
+ * password form on an OIDC-only instance and is compatible with OIDC by design.
+ *
+ * @param WallosDatabase $db
+ * @param int            $enabledAfter    oidc_oauth_enabled after this write
+ * @param bool           $configuredAfter whether OIDC would be fully configured after it
+ * @return bool
+ */
+function wallos_oidc_enable_conflicts_with_login_disabled($db, $enabledAfter, $configuredAfter)
+{
+    if ((int) $enabledAfter !== 1 || !$configuredAfter) {
+        return false;
+    }
+
+    $stmt = $db->prepare('SELECT login_disabled FROM admin WHERE id = 1');
+    if ($stmt === false) {
+        return false;
+    }
+    $result = $stmt->execute();
+    $row = $result === false ? false : $result->fetchArray();
+
+    return $row !== false && (int) $row['login_disabled'] === 1;
+}
+
+/**
  * How long a discovery document is reused before being fetched again.
  *
  * The document describes endpoints and key locations, which change rarely and
@@ -124,7 +168,7 @@ function wallos_get_oidc_discovery_document($db, $issuer)
         }
     }
 
-    [$document, $error] = wallos_fetch_oidc_discovery_document($issuer);
+    [$document, $error] = wallos_fetch_oidc_discovery_document($issuer, $db);
 
     if ($document === null) {
         // Stale beats absent: the alternative is a login page that fails
@@ -149,7 +193,54 @@ function wallos_get_oidc_discovery_document($db, $issuer)
     return [$document, null];
 }
 
-function wallos_fetch_oidc_discovery_document($issuer)
+if (!function_exists('wallos_oidc_discovery_http_get')) {
+    /**
+     * The one network touch of discovery, separated so a test can stand in for
+     * the provider without a socket and watch whether it was called at all. A
+     * test defines its own version before this file loads; the guard lets that
+     * stand, the same arrangement wallos_oidc_token_endpoint_post() uses.
+     *
+     * @param string      $url
+     * @param string|null $resolve a curl RESOLVE entry pinning the host to the
+     *                             addresses the SSRF check already approved
+     * @return array{body: string|false, status: int, error: string}
+     */
+    function wallos_oidc_discovery_http_get($url, $resolve = null)
+    {
+        $ch = curl_init($url);
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_TIMEOUT, 10);
+        curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 5);
+        curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
+        curl_setopt($ch, CURLOPT_MAXREDIRS, 3);
+        curl_setopt($ch, CURLOPT_HTTPHEADER, ['Accept: application/json']);
+        if (is_string($resolve) && $resolve !== '') {
+            curl_setopt($ch, CURLOPT_RESOLVE, [$resolve]);
+        }
+        $response = curl_exec($ch);
+        $httpCode = (int) curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
+        $curlError = curl_error($ch);
+        curl_close($ch);
+
+        return ['body' => $response, 'status' => $httpCode, 'error' => $curlError];
+    }
+}
+
+/**
+ * Fetch the discovery document, routed through the SSRF allowlist.
+ *
+ * P2: the well-known URL is derived from the operator-configured issuer, which
+ * Wallos does not control, so it goes through validate_oidc_endpoint_url — the
+ * same check the token, userinfo and refresh fetches make — and is pinned to the
+ * addresses it approved. Defence in depth rather than a live hole; a disallowed
+ * address is refused rather than fetched. $db is what the allowlist reads, so it
+ * is required for the check to run.
+ *
+ * @param string         $issuer
+ * @param WallosDatabase $db
+ * @return array [document|null, error|null]
+ */
+function wallos_fetch_oidc_discovery_document($issuer, $db)
 {
     $issuer = rtrim(trim((string) $issuer), '/');
     if ($issuer === '') {
@@ -157,24 +248,24 @@ function wallos_fetch_oidc_discovery_document($issuer)
     }
 
     $url = $issuer . '/.well-known/openid-configuration';
-    $ch = curl_init($url);
-    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-    curl_setopt($ch, CURLOPT_TIMEOUT, 10);
-    curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 5);
-    curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
-    curl_setopt($ch, CURLOPT_MAXREDIRS, 3);
-    curl_setopt($ch, CURLOPT_HTTPHEADER, ['Accept: application/json']);
-    $response = curl_exec($ch);
-    $httpCode = (int) curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
-    $curlError = curl_error($ch);
-    curl_close($ch);
 
-    if ($response === false || $httpCode >= 400) {
-        $error = $curlError !== '' ? $curlError : 'HTTP ' . $httpCode;
+    $validation = validate_oidc_endpoint_url($url, $db);
+    if ($validation === false) {
+        return [null, 'OIDC discovery refused for ' . $url
+            . ': the address is not permitted (private or reserved, and not allowlisted).'];
+    }
+
+    $response = wallos_oidc_discovery_http_get(
+        $url,
+        $validation['host'] . ':' . $validation['port'] . ':' . implode(',', $validation['ips'])
+    );
+
+    if ($response['body'] === false || $response['status'] >= 400) {
+        $error = $response['error'] !== '' ? $response['error'] : 'HTTP ' . $response['status'];
         return [null, 'OIDC discovery failed for ' . $url . ': ' . $error];
     }
 
-    $document = json_decode($response, true);
+    $document = json_decode($response['body'], true);
     if (!is_array($document)) {
         return [null, 'OIDC discovery returned invalid JSON for ' . $url . '.'];
     }

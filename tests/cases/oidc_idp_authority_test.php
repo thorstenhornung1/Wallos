@@ -584,3 +584,119 @@ wallos_test('the single-user no-login mode cannot be enabled while OIDC is enabl
         'and the setting was written');
     $db->close();
 });
+
+// ------------------ F3: the reverse direction — enabling OIDC while no-login
+
+/**
+ * Drives api/admin/set_oidc_settings.php as its own process against the fixture
+ * database, with an admin api key, and returns what it answered.
+ *
+ * @param string $apiKey
+ * @param array  $post   extra POST fields
+ * @return string
+ */
+function idp_oidc_settings_child($apiKey, $post)
+{
+    $assignments = '';
+    foreach ($post as $key => $value) {
+        $assignments .= '$_POST[' . var_export($key, true) . '] = ' . var_export($value, true) . ';' . "\n";
+    }
+
+    return idp_run_php(
+        '$_SERVER["REQUEST_METHOD"] = "POST";' . "\n"
+        . '$_POST["api_key"] = ' . var_export($apiKey, true) . ';' . "\n"
+        . $assignments
+        . 'chdir(' . var_export(WALLOS_ROOT . '/api/admin', true) . ');' . "\n"
+        . 'require ' . var_export(WALLOS_ROOT . '/api/admin/set_oidc_settings.php', true) . ';');
+}
+
+wallos_test('OIDC cannot be enabled through the API while the no-login mode is active', function () {
+    // The reverse of set_admin_settings.php's guard (finding F3): the mutual
+    // exclusion used to be enforced in one direction only. Driven end to end
+    // through api/admin/set_oidc_settings.php. Enabling OIDC while
+    // admin.login_disabled is set is refused; with the no-login mode off it
+    // succeeds — the positive control, or the guard would just be "refuse always".
+    $db = wallos_test_open_database();
+    wallos_test_create_user($db, 1, 'alice');
+
+    require_once WALLOS_ROOT . '/includes/user_roles.php';
+    wallos_grant_role($db, 1, WALLOS_ROLE_ADMIN, WALLOS_ROLE_SOURCE_LOCAL);
+
+    $key = 'admin-api-key';
+    $stmt = $db->prepare('UPDATE "user" SET api_key = :k WHERE id = 1');
+    $stmt->bindValue(':k', $key);
+    $stmt->execute();
+
+    // Configure OIDC with literal public IPs and no issuer, so is_configured
+    // holds and nothing here reaches the network, but leave the toggle off. Then
+    // turn the no-login mode on directly (set_admin_settings.php would refuse it
+    // once OIDC were effective, which is the other half of the same exclusion).
+    $saved = wallos_save_oidc_settings($db, [
+        'name' => 'Test provider',
+        'client_id' => 'wallos',
+        'client_secret' => 'confidential',
+        'authorization_url' => 'http://93.184.216.34/authorize',
+        'token_url' => 'http://93.184.216.34/token',
+        'user_info_url' => 'http://93.184.216.34/userinfo',
+        'redirect_url' => 'http://93.184.216.34/login.php',
+        'user_identifier_field' => 'email',
+    ], []);
+    assert_true($saved['success'], 'the fixture configured OIDC: ' . (string) $saved['error']);
+    $db->exec('UPDATE admin SET login_disabled = 1, oidc_oauth_enabled = 0');
+
+    $refused = idp_oidc_settings_child($key, ['oidc_enabled' => '1']);
+    assert_contains('"success":false', $refused,
+        'enabling OIDC while the no-login mode is on is refused (' . $refused . ')');
+    assert_same(0, (int) $db->scalar('SELECT oidc_oauth_enabled FROM admin WHERE id = 1'),
+        'and the toggle was not written');
+
+    // Positive control: with the no-login mode off, the same request succeeds.
+    $db->exec('UPDATE admin SET login_disabled = 0');
+    $allowed = idp_oidc_settings_child($key, ['oidc_enabled' => '1']);
+    assert_contains('"success":true', $allowed,
+        'with the no-login mode off, enabling OIDC is allowed (' . $allowed . ')');
+    assert_same(1, (int) $db->scalar('SELECT oidc_oauth_enabled FROM admin WHERE id = 1'),
+        'and the toggle was written');
+
+    $db->close();
+});
+
+wallos_test('the OIDC enable guard blocks only the effective-plus-no-login combination', function () {
+    // The predicate itself, both directions, so the config paths (which pass the
+    // stored enable flag and true) and the toggle paths (which pass is_configured)
+    // rest on tested logic rather than on the two end-to-end drives alone.
+    require_once WALLOS_ROOT . '/includes/oidc_settings.php';
+    $db = wallos_test_open_database();
+
+    $db->exec('UPDATE admin SET login_disabled = 1');
+    assert_true(wallos_oidc_enable_conflicts_with_login_disabled($db, 1, true),
+        'enabled and configured while no-login is on is a conflict');
+    assert_true(!wallos_oidc_enable_conflicts_with_login_disabled($db, 0, true),
+        'disabling OIDC is never a conflict');
+    assert_true(!wallos_oidc_enable_conflicts_with_login_disabled($db, 1, false),
+        'enabled but not configured is not yet effective, so not a conflict');
+
+    // The positive control: with the no-login mode off there is no conflict.
+    $db->exec('UPDATE admin SET login_disabled = 0');
+    assert_true(!wallos_oidc_enable_conflicts_with_login_disabled($db, 1, true),
+        'with the no-login mode off, enabling a configured OIDC is allowed');
+
+    $db->close();
+});
+
+wallos_test('every OIDC-enable path guards against the no-login mode', function () {
+    // set_admin_settings.php guards the other direction; these are the paths that
+    // enable OIDC — the API endpoint (toggle and config), the interface's config
+    // save, and the interface's enable toggle. The interface pair authenticates
+    // by session and CSRF, so they are pinned here as calls (the tokeniser tells
+    // a call from a comment), with the predicate itself tested above.
+    foreach ([
+        'api/admin/set_oidc_settings.php',
+        'endpoints/admin/saveoidcsettings.php',
+        'endpoints/admin/enableoidc.php',
+    ] as $path) {
+        assert_true(
+            wallos_test_file_calls($path, 'wallos_oidc_enable_conflicts_with_login_disabled'),
+            $path . ' calls the mutual-exclusion guard');
+    }
+});

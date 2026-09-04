@@ -20,7 +20,7 @@
 --   * Every identifier is quoted, because "user" and "order" are reserved words
 --     and a keyword list kept in the generator would be wrong eventually.
 
--- 42 tables, 79 migrations recorded as applied.
+-- 43 tables, 80 migrations recorded as applied.
 
 CREATE TABLE "admin" (
     "id" SERIAL PRIMARY KEY,
@@ -268,6 +268,13 @@ CREATE TABLE "oidc_discovery_cache" (
     "document" TEXT NOT NULL,
     "fetched_at" INTEGER NOT NULL,
     PRIMARY KEY ("issuer")
+);
+
+CREATE TABLE "oidc_jwks_cache" (
+    "jwks_uri" TEXT,
+    "document" TEXT NOT NULL,
+    "fetched_at" INTEGER NOT NULL,
+    PRIMARY KEY ("jwks_uri")
 );
 
 CREATE TABLE "oidc_sessions" (
@@ -666,7 +673,8 @@ INSERT INTO "migrations" ("id", "migration") VALUES
     (76, 'migrations/000077.php'),
     (77, 'migrations/000078.php'),
     (78, 'migrations/000079.php'),
-    (79, 'migrations/000080.php');
+    (79, 'migrations/000080.php'),
+    (80, 'migrations/000081.php');
 
 INSERT INTO "payment_methods" ("id", "name", "icon", "enabled", "order", "user_id") VALUES
     (1, 'PayPal', 'images/uploads/icons/paypal.png', 1, 1, 1),

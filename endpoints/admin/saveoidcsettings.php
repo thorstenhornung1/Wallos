@@ -49,6 +49,18 @@ if (!empty($data['oidcClearClientSecret'])) {
 }
 
 $oidcConfiguration = wallos_get_effective_oidc_configuration($db);
+// F3: refuse completing the OIDC configuration while it is enabled and the
+// single-user no-login mode is active, since that save is the write that would
+// make OIDC effective. See wallos_oidc_enable_conflicts_with_login_disabled().
+if (wallos_oidc_enable_conflicts_with_login_disabled($db, $oidcConfiguration['enabled'], true)) {
+    $db->close();
+    die(json_encode([
+        "success" => false,
+        "message" => "OIDC configuration cannot be completed while the single-user "
+            . "no-login mode is active. Disable it first."
+    ]));
+}
+
 $result = wallos_save_oidc_settings($db, $submitted, $oidcConfiguration['managed_fields']);
 
 $db->close();
