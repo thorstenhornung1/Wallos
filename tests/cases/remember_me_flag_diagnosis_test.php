@@ -125,6 +125,36 @@ wallos_test('the fix requires the token in both modes, and still admits a genuin
     $db->close();
 });
 
+wallos_test('the shapes of a cookie that must never restore', function () use ($fixed, $forged) {
+    // The rest of the negative surface the spec names. All against the fixed
+    // code; the flag is left at its default because the point is that none of
+    // these depends on it any more.
+    $db = wallos_test_open_database();
+    wallos_test_create_user($db, 1, 'alice');
+    wallos_test_create_user($db, 2, 'bob');
+    $insert = $db->prepare('INSERT INTO login_tokens (user_id, token) VALUES (1, :t)');
+    $insert->bindValue(':t', 'alice-token');
+    $insert->execute();
+
+    // A cookie that is not three fields never parses.
+    assert_same('no', diagnosis_run($fixed, 'only-one-field'),
+        'a malformed cookie is refused');
+
+    // A username no user has.
+    assert_same('no', diagnosis_run($fixed, 'nobody|alice-token|1'),
+        'an unknown username is refused even with a token that exists for someone');
+
+    // A real user who has never been remembered — no row to match.
+    assert_same('no', diagnosis_run($fixed, 'bob|alice-token|1'),
+        'a real token belonging to another user does not restore this one');
+
+    // And bob, who has no token at all.
+    assert_same('no', diagnosis_run($fixed, 'bob|anything|1'),
+        'a user with no login_tokens row is refused');
+
+    $db->close();
+});
+
 wallos_test('the fixed function reads neither login flag: the token alone decides', function () use ($fixed) {
     // The structural proof behind the behaviour: once the branch is gone, no
     // configuration flag can reopen the skip. And it never read the OIDC flag,
