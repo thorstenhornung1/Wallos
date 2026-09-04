@@ -250,10 +250,15 @@ while ($userToNotify = $usersToNotify->fetchArray(SQLITE3_ASSOC)) {
         $mattermost['bot_icon_emoji'] = $row['bot_icon_emoji'];
     }
 
-    if ($row = $notificationSettings['pushover'][$userId] ?? null) {
-        $pushoverNotificationsEnabled = $row['enabled'];
-        $pushover['user_key'] = $row["user_key"];
-        $pushover['token'] = $row["token"];
+    // Instance application token plus this user's own user key.
+    $pushoverConfig = wallos_effective_pushover_config(
+        wallos_get_instance_pushover_config($db),
+        $notificationSettings['pushover'][$userId] ?? []
+    );
+    if (!empty($pushoverConfig['values']['enabled'])) {
+        $pushoverNotificationsEnabled = $pushoverConfig['values']['deliverable'];
+        $pushover['user_key'] = $pushoverConfig['values']['user_key'];
+        $pushover['token'] = $pushoverConfig['values']['token'];
     }
 
     if ($row = $notificationSettings['ntfy'][$userId] ?? null) {

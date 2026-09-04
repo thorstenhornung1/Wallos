@@ -46,6 +46,8 @@ $aiConfiguration = wallos_get_instance_ai_config($db);
 $aiKeyStatus = wallos_secret_status($aiConfiguration, 'api_key');
 $telegramConfiguration = wallos_get_instance_telegram_config($db);
 $telegramTokenStatus = wallos_secret_status($telegramConfiguration, 'bot_token');
+$pushoverConfiguration = wallos_get_instance_pushover_config($db);
+$pushoverTokenStatus = wallos_secret_status($pushoverConfiguration, 'token');
 $languageConfiguration = wallos_get_instance_language_config($db);
 
 function oidc_input_attrs($field, $managedFields)
@@ -678,6 +680,28 @@ $loginDisabledAllowed = $userCount == 1 && $settings['registrations_open'] == 0;
                 </div>
             <?php endif; ?>
 
+            <div class="form-group">
+                <label for="instancePushoverAppToken"><?= translate('pushover_application_token', $i18n) ?></label>
+            </div>
+            <div class="form-group-inline">
+                <?php if ($pushoverTokenStatus['managed']): ?>
+                    <input type="text" id="instancePushoverAppTokenStatus" disabled
+                        data-managed-by="<?= htmlspecialchars($pushoverConfiguration['managed_by']['token'] ?? '') ?>"
+                        value="<?= $pushoverTokenStatus['configured'] ? translate('configured', $i18n) : translate('not_configured', $i18n) ?>" />
+                <?php else: ?>
+                    <input type="password" id="instancePushoverAppToken" autocomplete="off"
+                        placeholder="<?= $pushoverTokenStatus['configured']
+                            ? translate('pushover_application_token', $i18n) . ' — ' . translate('leave_empty_to_keep', $i18n)
+                            : translate('pushover_application_token', $i18n) ?>" value="" />
+                <?php endif; ?>
+            </div>
+            <?php if (!$pushoverTokenStatus['managed'] && $pushoverTokenStatus['configured']): ?>
+                <div class="form-group-inline">
+                    <input type="checkbox" id="instancePushoverAppTokenRemove" />
+                    <label for="instancePushoverAppTokenRemove"><?= translate('remove_stored_secret', $i18n) ?></label>
+                </div>
+            <?php endif; ?>
+
             <div class="buttons">
                 <input type="submit" class="thin mobile-grow" value="<?= translate('save', $i18n) ?>"
                     id="saveInstanceIntegrations" onClick="saveInstanceIntegrationsButton()" />
@@ -690,6 +714,7 @@ $loginDisabledAllowed = $userCount == 1 && $settings['registrations_open'] == 0;
                 <?= wallos_render_managed_notes($currencyConfiguration, $i18n) ?>
                 <?= wallos_render_managed_notes($aiConfiguration, $i18n) ?>
                 <?= wallos_render_managed_notes($telegramConfiguration, $i18n) ?>
+                <?= wallos_render_managed_notes($pushoverConfiguration, $i18n) ?>
             </div>
         </div>
     </section>

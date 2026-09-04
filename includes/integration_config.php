@@ -867,6 +867,95 @@ function wallos_finalize_notification_config(&$config, array $required, $note)
 }
 
 /* -------------------------------------------------------------------------
+   Pushover (issue #13)
+   ------------------------------------------------------------------------- */
+
+/**
+ * Instance Pushover configuration: the shared application token only.
+ *
+ * @param WallosDatabase $db
+ * @return array Result structure with token.
+ */
+function wallos_build_instance_pushover_config($db)
+{
+    $config = wallos_config_result();
+    $config['mode'] = 'instance';
+
+    $instance = wallos_get_instance_settings($db, 'pushover');
+
+    if (!wallos_apply_env_secret($config, 'token', 'WALLOS_PUSHOVER_APP_TOKEN')) {
+        $token = (string) ($instance['app_token'] ?? '');
+        wallos_config_set($config, 'token', $token, $token !== '' ? 'admin' : 'default');
+    }
+
+    return $config;
+}
+
+/**
+ * Effective Pushover configuration for one user, from the instance application
+ * token and the user's own row. The user key is personal and always the user's.
+ *
+ * @param array $instanceConfig Result of wallos_get_instance_pushover_config().
+ * @param array $row            The user's pushover_notifications row, or [].
+ * @return array Result structure with token, user_key, enabled and deliverable.
+ */
+function wallos_effective_pushover_config($instanceConfig, $row)
+{
+    $row = $row ?: [];
+
+    $legacyMode = trim((string) ($row['token'] ?? '')) !== '' ? 'custom' : 'instance';
+    $mode = wallos_normalize_mode($row['token_mode'] ?? $legacyMode);
+
+    if ($mode === 'custom') {
+        $config = wallos_config_result();
+        $config['mode'] = 'custom';
+        wallos_config_set($config, 'token', (string) ($row['token'] ?? ''), 'user');
+    } else {
+        $config = $instanceConfig;
+        $config['mode'] = 'instance';
+    }
+
+    wallos_config_set($config, 'user_key', (string) ($row['user_key'] ?? ''), 'user');
+    $config['values']['enabled'] = (int) ($row['enabled'] ?? 0);
+
+    wallos_finalize_notification_config($config, ['token', 'user_key'],
+        'The Pushover application token or user key is not configured.');
+
+    return $config;
+}
+
+/**
+ * @param WallosDatabase $db
+ * @param int            $userId
+ * @return array Result structure.
+ */
+function wallos_build_effective_pushover_config($db, $userId)
+{
+    $row = wallos_config_user_row($db, 'pushover_notifications', $userId);
+
+    return wallos_effective_pushover_config(wallos_get_instance_pushover_config($db), $row);
+}
+
+/**
+ * API and template representation. The application token is a credential and is
+ * reported as a status, never as a value.
+ *
+ * @param array $config
+ * @return array
+ */
+function wallos_pushover_public_payload($config)
+{
+    return [
+        'mode' => $config['mode'],
+        'enabled' => (int) ($config['values']['enabled'] ?? 0),
+        'user_key' => (string) ($config['values']['user_key'] ?? ''),
+        'token' => wallos_secret_status($config, 'token'),
+        'deliverable' => (bool) ($config['values']['deliverable'] ?? false),
+        'valid' => (bool) $config['valid'],
+    ];
+}
+
+/* -------------------------------------------------------------------------
    Memoized entry points
 
    Resolution is deterministic within one request or job, so each of these is
@@ -966,6 +1055,27 @@ function wallos_get_effective_telegram_config($db, $userId)
 {
     return wallos_config_cached($db, 'telegram:' . (int) $userId,
         fn() => wallos_build_effective_telegram_config($db, $userId));
+}
+
+/**
+ * @param WallosDatabase $db
+ * @return array Result structure.
+ */
+function wallos_get_instance_pushover_config($db)
+{
+    return wallos_config_cached($db, 'pushover:instance',
+        fn() => wallos_build_instance_pushover_config($db));
+}
+
+/**
+ * @param WallosDatabase $db
+ * @param int            $userId
+ * @return array Result structure.
+ */
+function wallos_get_effective_pushover_config($db, $userId)
+{
+    return wallos_config_cached($db, 'pushover:' . (int) $userId,
+        fn() => wallos_build_effective_pushover_config($db, $userId));
 }
 
 /* -------------------------------------------------------------------------

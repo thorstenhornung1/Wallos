@@ -331,19 +331,40 @@ function testNotificationsGotifyButton() {
     makeFetchCall('endpoints/notifications/testgotifynotifications.php', data, button);
 }
 
+function getPushoverMode() {
+  const selected = document.querySelector('input[name="pushovermode"]:checked');
+  return selected ? selected.value : "custom";
+}
+
+// The instance application token is resolved server side, so nothing but the
+// mode and the personal user key is sent when the instance application is used.
+function togglePushoverMode() {
+  const usesInstance = getPushoverMode() === "instance";
+  const instanceInfo = document.getElementById("instancePushoverInfo");
+  const customFields = document.getElementById("customPushoverFields");
+
+  if (instanceInfo) {
+    instanceInfo.style.display = usesInstance ? "" : "none";
+  }
+  if (customFields) {
+    customFields.style.display = usesInstance ? "none" : "";
+  }
+}
+
 function saveNotificationsPushoverButton() {
   const button = document.getElementById("saveNotificationsPushover");
   button.disabled = true;
 
-  const enabled = document.getElementById("pushoverenabled").checked ? 1 : 0;
-  const user_key = document.getElementById("pushoveruserkey").value;
-  const token = document.getElementById("pushovertoken").value;
-
+  const mode = getPushoverMode();
   const data = {
-    enabled: enabled,
-    user_key: user_key,
-    token: token
+    enabled: document.getElementById("pushoverenabled").checked ? 1 : 0,
+    user_key: document.getElementById("pushoveruserkey").value,
+    mode: mode
   };
+
+  if (mode === "custom") {
+    data.token = document.getElementById("pushovertoken").value;
+  }
 
   makeFetchCall('endpoints/notifications/savepushovernotifications.php', data, button);
 }
@@ -352,15 +373,16 @@ function testNotificationsPushoverButton() {
   const button = document.getElementById("testNotificationsPushover");
   button.disabled = true;
 
-  const enabled = document.getElementById("pushoverenabled").checked ? 1 : 0;
-  const user_key = document.getElementById("pushoveruserkey").value;
-  const token = document.getElementById("pushovertoken").value;
-
+  const mode = getPushoverMode();
   const data = {
-    enabled: enabled,
-    user_key: user_key,
-    token: token
+    enabled: document.getElementById("pushoverenabled").checked ? 1 : 0,
+    user_key: document.getElementById("pushoveruserkey").value,
+    mode: mode
   };
+
+  if (mode === "custom") {
+    data.token = document.getElementById("pushovertoken").value;
+  }
 
   makeFetchCall('endpoints/notifications/testpushovernotifications.php', data, button);
 }

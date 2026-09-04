@@ -293,10 +293,14 @@ if ($budgetPeriodAnchorDate === '1970-01-01' || !preg_match('/^\d{4}-\d{2}-\d{2}
     $result = $stmt->execute();
 
     $rowCount = 0;
+    $notificationsPushover['token_mode'] = 'instance';
     while ($row = $result->fetchArray(SQLITE3_ASSOC)) {
         $notificationsPushover['enabled'] = $row['enabled'];
         $notificationsPushover['token'] = $row['token'];
         $notificationsPushover['user_key'] = $row['user_key'];
+        $notificationsPushover['token_mode'] = wallos_normalize_mode(
+            $row['token_mode'] ?? (trim((string) $row['token']) !== '' ? 'custom' : 'instance')
+        );
         $rowCount++;
     }
 
@@ -305,6 +309,12 @@ if ($budgetPeriodAnchorDate === '1970-01-01' || !preg_match('/^\d{4}-\d{2}-\d{2}
         $notificationsPushover['token'] = "";
         $notificationsPushover['user_key'] = "";
     }
+
+    // The instance application token is resolved server side; only whether it
+    // exists is ever shown, never its value.
+    $instancePushover = wallos_get_instance_pushover_config($db);
+    $instancePushoverToken = wallos_secret_status($instancePushover, 'token');
+    $usesInstancePushover = $notificationsPushover['token_mode'] === 'instance';
 
     // Telegram notifications
     $sql = "SELECT * FROM telegram_notifications WHERE user_id = :userId LIMIT 1";
@@ -721,15 +731,50 @@ if ($budgetPeriodAnchorDate === '1970-01-01' || !preg_match('/^\d{4}-\d{2}-\d{2}
                             <?= $notificationsPushover['enabled'] ? "checked" : "" ?>>
                         <label for="pushoverenabled" class="capitalize"><?= translate('enabled', $i18n) ?></label>
                     </div>
+                    <label for="pushovermodeinstance"><?= translate('pushover_application', $i18n) ?></label>
+                    <div class="form-group-inline">
+                        <div>
+                            <input type="radio" name="pushovermode" id="pushovermodeinstance" value="instance"
+                                onchange="togglePushoverMode()" <?= $usesInstancePushover ? "checked" : "" ?> />
+                            <label for="pushovermodeinstance"><?= translate('use_instance_application', $i18n) ?></label>
+                        </div>
+                        <div>
+                            <input type="radio" name="pushovermode" id="pushovermodecustom" value="custom"
+                                onchange="togglePushoverMode()" <?= $usesInstancePushover ? "" : "checked" ?> />
+                            <label for="pushovermodecustom"><?= translate('use_custom_application', $i18n) ?></label>
+                        </div>
+                    </div>
+                    <div class="settings-notes" id="instancePushoverInfo" <?= $usesInstancePushover ? "" : 'style="display:none"' ?>>
+                        <?php if ($instancePushover['valid']): ?>
+                            <p>
+                                <i class="fa-solid fa-circle-info"></i>
+                                <?= translate('pushover_application_token', $i18n) ?>:
+                                <span>
+                                    <?php if ($instancePushoverToken['managed']): ?>
+                                        <?= translate('managed_externally', $i18n) ?>
+                                    <?php else: ?>
+                                        <?= translate('configured', $i18n) ?>
+                                    <?php endif; ?>
+                                </span>
+                            </p>
+                        <?php else: ?>
+                            <p>
+                                <i class="fa-solid fa-triangle-exclamation"></i>
+                                <?= translate('instance_pushover_not_configured', $i18n) ?>
+                            </p>
+                        <?php endif; ?>
+                    </div>
                     <div class="form-group-inline">
                         <input type="text" name="pushoveruserkey" id="pushoveruserkey" autocomplete="off"
                             placeholder="<?= translate('pushover_user_key', $i18n) ?>"
                             value="<?= htmlspecialchars($notificationsPushover['user_key']) ?>" />
                     </div>
+                    <div id="customPushoverFields" <?= $usesInstancePushover ? 'style="display:none"' : "" ?>>
                     <div class="form-group-inline">
                         <input type="text" name="pushovertoken" id="pushovertoken" autocomplete="off"
                             placeholder="<?= translate('token', $i18n) ?>"
                             value="<?= htmlspecialchars($notificationsPushover['token']) ?>" />
+                    </div>
                     </div>
 
                     <div class="buttons">

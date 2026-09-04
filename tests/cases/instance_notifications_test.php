@@ -119,3 +119,94 @@ wallos_test('the Telegram payload reports status but never the bot token', funct
 
     $db->close();
 });
+
+/* -------------------------------------------------------------------------
+   Pushover (issue #13)
+   ------------------------------------------------------------------------- */
+
+wallos_test('one instance Pushover application serves several users, each with their own user key', function () {
+    $db = wallos_test_open_database();
+    wallos_test_create_user($db, 1, 'alice');
+    wallos_test_create_user($db, 2, 'bob');
+
+    wallos_set_instance_setting($db, 'pushover', 'app_token', 'instance-app-token', true);
+    $db->exec("INSERT INTO pushover_notifications (enabled, token_mode, user_key, user_id)
+               VALUES (1, 'instance', 'alice-key', 1)");
+    $db->exec("INSERT INTO pushover_notifications (enabled, token_mode, user_key, user_id)
+               VALUES (1, 'instance', 'bob-key', 2)");
+
+    $alice = wallos_get_effective_pushover_config($db, 1);
+    $bob = wallos_get_effective_pushover_config($db, 2);
+
+    assert_same('instance-app-token', $alice['values']['token'], 'alice sends through the instance application');
+    assert_same('instance-app-token', $bob['values']['token'], 'so does bob');
+    assert_same('alice-key', $alice['values']['user_key'], 'alice keeps her user key');
+    assert_same('bob-key', $bob['values']['user_key'], "and never receives bob's");
+    assert_true($alice['values']['deliverable'], 'both halves present means deliverable');
+
+    $db->close();
+});
+
+wallos_test('a Pushover user without a user key is not deliverable', function () {
+    $db = wallos_test_open_database();
+    wallos_test_create_user($db, 1, 'alice');
+
+    wallos_set_instance_setting($db, 'pushover', 'app_token', 'instance-app-token', true);
+    $db->exec("INSERT INTO pushover_notifications (enabled, token_mode, user_key, user_id)
+               VALUES (1, 'instance', '', 1)");
+
+    $config = wallos_get_effective_pushover_config($db, 1);
+
+    assert_true(!$config['values']['deliverable'], 'no user key means there is no person to deliver to');
+    assert_true(!$config['valid'], 'and the configuration is reported invalid');
+
+    $db->close();
+});
+
+wallos_test('an existing custom Pushover application keeps working', function () {
+    $db = wallos_test_open_database();
+    wallos_test_create_user($db, 1, 'alice');
+
+    wallos_set_instance_setting($db, 'pushover', 'app_token', 'instance-app-token', true);
+    $db->exec("INSERT INTO pushover_notifications (enabled, token_mode, token, user_key, user_id)
+               VALUES (1, 'custom', 'user-app-token', 'user-key', 1)");
+
+    $config = wallos_get_effective_pushover_config($db, 1);
+
+    assert_same('custom', $config['mode'], 'the user runs their own application');
+    assert_same('user-app-token', $config['values']['token'], 'their own token is used, not the instance one');
+    assert_same('user-key', $config['values']['user_key'], 'their user key is kept');
+    assert_true($config['values']['deliverable'], 'a full custom config is deliverable');
+
+    $db->close();
+});
+
+wallos_test('a pre-migration Pushover row with a token is treated as custom', function () {
+    $config = wallos_effective_pushover_config(wallos_config_result(),
+        ['token' => 'legacy-app-token', 'user_key' => 'legacy-key', 'enabled' => 1]);
+
+    assert_same('custom', $config['mode'], 'a stored token without a mode column means a custom application');
+    assert_same('legacy-app-token', $config['values']['token'], 'the stored token is used');
+
+    // No database is opened in this case; nothing to close.
+    assert_true($config['values']['deliverable'], 'the legacy configuration still delivers');
+});
+
+wallos_test('the Pushover payload reports status but never the application token', function () {
+    $db = wallos_test_open_database();
+    wallos_test_create_user($db, 1, 'alice');
+
+    putenv('WALLOS_PUSHOVER_APP_TOKEN=super-secret-app-token');
+    $db->exec("INSERT INTO pushover_notifications (enabled, token_mode, user_key, user_id)
+               VALUES (1, 'instance', 'visible-key', 1)");
+
+    $payload = wallos_pushover_public_payload(wallos_get_effective_pushover_config($db, 1));
+    $encoded = json_encode($payload);
+
+    assert_not_contains('super-secret-app-token', $encoded, 'the instance application token never reaches a user');
+    assert_same(true, $payload['token']['configured'], 'its presence is reported');
+    assert_same('environment', $payload['token']['source'], 'its source is reported');
+    assert_same('visible-key', $payload['user_key'], 'the personal user key is returned');
+
+    $db->close();
+});

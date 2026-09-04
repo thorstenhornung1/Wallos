@@ -101,7 +101,9 @@ function saveInstanceIntegrationsButton() {
     ai_api_key: readFieldValue("instanceAiApiKey"),
     ai_api_key_remove: readCheckboxValue("instanceAiApiKeyRemove"),
     telegram_bot_token: readFieldValue("instanceTelegramBotToken"),
-    telegram_bot_token_remove: readCheckboxValue("instanceTelegramBotTokenRemove")
+    telegram_bot_token_remove: readCheckboxValue("instanceTelegramBotTokenRemove"),
+    pushover_app_token: readFieldValue("instancePushoverAppToken"),
+    pushover_app_token_remove: readCheckboxValue("instancePushoverAppTokenRemove")
   };
 
   makeFetchCall('endpoints/admin/saveintegrationsettings.php', data, button);

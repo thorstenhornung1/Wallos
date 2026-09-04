@@ -15,7 +15,7 @@
 #
 # Do not edit by hand — run dev/write-audit.php --update and commit the diff.
 #
-# 114 file(s), 23 discarded result(s), 294 unchecked prepare(s), 15 unreported write(s).
+# 114 file(s), 23 discarded result(s), 293 unchecked prepare(s), 15 unreported write(s).
 
 admin.php	0	4	0
 api/admin/get_admin_settings.php	0	1	0
@@ -30,7 +30,7 @@ api/fixer/get_fixer.php	0	2	0
 api/fixer/set_fixer.php	0	3	0
 api/household/get_household.php	0	3	0
 api/household/set_household.php	0	6	0
-api/notifications/get_notification_settings.php	0	9	0
+api/notifications/get_notification_settings.php	0	8	0
 api/payment_methods/get_payment_methods.php	0	3	0
 api/payment_methods/set_payment_methods.php	0	7	0
 api/settings/get_settings.php	0	4	0
