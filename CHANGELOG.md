@@ -1,5 +1,40 @@
 # Changelog
 
+## [5.11.1](https://github.com/thorstenhornung1/Wallos/releases/tag/v5.11.1) (2026-09-04)
+
+### Fixed
+
+* **auth:** a "remember me" cookie is always checked against its token now.
+  A defense-in-depth fix, not the account-takeover it first looked like — the
+  correction is recorded here because the wrong reading is instructive.
+
+  `restoreSessionFromRememberMeCookie()` dropped the token condition whenever
+  `admin.login_disabled` was set, looking up `login_tokens` by `user_id`
+  alone. The first reading called this an OIDC-only bypass: disable password
+  login, forge a cookie, and you are in. That was wrong, and the error was
+  mistaking two different settings for one.
+
+  `admin.login_disabled` is Wallos's **single-user, no-login mode** —
+  `login.php` signs user 1 in with no password at all when it is set, and it
+  can only be enabled with exactly one user and registrations closed. The OIDC
+  "disable password login" toggle is a **separate** setting,
+  `oauth_settings.password_login_disabled`, and this function never read it. So
+  an OIDC-only installation leaves `admin.login_disabled` at 0, takes the else
+  branch, and required the token correctly all along. The skip was reachable
+  only in the mode that is already passwordless, where a redundant weakness
+  changes nothing an operator had not already asked for.
+
+  A hard test proves it rather than asserting it (`remember_me_flag_diagnosis`):
+  the original code refuses a forged cookie with `admin.login_disabled = 0`
+  (the OIDC-only state) and accepts it only with the flag set; the fix refuses
+  it in both modes while still admitting a genuine token. The two-direction
+  shape is the gate — a fix that refused everybody would fail the genuine case.
+
+  The branch is gone: the token is part of the lookup unconditionally, so no
+  configuration flag can reopen the skip. This code is upstream's and
+  unchanged from it; a friendly note to the maintainer is a separate,
+  low-urgency courtesy, not a security disclosure.
+
 ## [5.11.0](https://github.com/thorstenhornung1/Wallos/releases/tag/v5.11.0) (2026-09-04)
 
 ### Added

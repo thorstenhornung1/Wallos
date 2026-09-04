@@ -5,6 +5,36 @@ open or a decision somebody would otherwise have to rediscover. What is already
 done lives in `CHANGELOG.md`; what is broken lives in the issue tracker. This
 file is the part that is in neither.
 
+## Held on `security/remember-me-token` — and the severity was corrected down
+
+A prepared fix to `includes/remember_me.php` sits on the branch
+`security/remember-me-token`, off `main`. It was first held as an embargoed
+security fix; a review, then a hard test (`remember_me_flag_diagnosis`),
+**disproved the exploitable reading**, so the embargo is now a courtesy rather
+than a necessity.
+
+What it actually is: the remember-me lookup skipped the cookie's token when
+`admin.login_disabled` was set — but that is Wallos's single-user, no-login
+mode, in which `login.php` already authenticates user 1 with no password, and
+which can only be enabled with one user and registrations closed. The OIDC
+"disable password login" setting is a *different* flag
+(`oauth_settings.password_login_disabled`) that this function never read, so an
+OIDC-only installation was never exposed. Proven both directions in the test,
+and both our instances have `admin.login_disabled = 0` regardless.
+
+So this is a defense-in-depth / correctness fix. It can be released normally
+whenever Thorsten wants; the only reason it is still on a branch rather than
+`main` is that he was mid-decision. A short, non-alarming note to the upstream
+maintainer is drafted in the iCloud file `wallos-security-email.md` (root and
+`Documents/`) — his to send, low urgency, not a disclosure.
+
+**No daily embargo watch is needed anymore.** If anything, the open follow-up
+is the more interesting one the review pointed at: `oidc_login.php` mints a
+30-day `login_tokens` row and cookie on *every* OIDC sign-in, with no "remember
+me" choice — worth taking apart alongside the back-channel-logout work (#144),
+because it means re-entry for up to 30 days is authenticated by Wallos's own
+token rather than by the IdP.
+
 ## The state right now
 
 Released: **5.9.0** (2026-08-31, as authorised),
