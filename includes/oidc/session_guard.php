@@ -15,13 +15,27 @@
  */
 
 require_once __DIR__ . '/backchannel.php';
+require_once __DIR__ . '/refresh.php';
 
 /**
  * Whether the current session is still one the provider vouches for.
  *
  * Non-OIDC sessions are unaffected: there is no provider to have ended them.
  *
- * @param SQLite3|WallosDatabase $db
+ * It also keeps the provider able to answer that question at all. The identity
+ * provider builds a back-channel logout out of the access tokens belonging to a
+ * session, so a session whose access token has expired is one it stops
+ * notifying anybody about — silently, five minutes after login, while the
+ * session itself lives thirty days (#144). Refreshing before that happens is
+ * what keeps the two lifetimes in the same order of magnitude.
+ *
+ * The refresh is here, in the guard, rather than at each entry point, because
+ * this is the one function every authenticated request already reaches. Putting
+ * it anywhere else means one path getting it and another not — which is exactly
+ * how 112 endpoints once went unguarded with the suite green. It costs no query
+ * when nothing is due; see wallos_oidc_maintain_access_token().
+ *
+ * @param WallosDatabase $db
  * @return bool
  */
 function wallos_oidc_current_session_is_valid($db)
@@ -30,7 +44,16 @@ function wallos_oidc_current_session_is_valid($db)
         return true;
     }
 
-    return wallos_oidc_session_is_active($db, session_id());
+    if (!wallos_oidc_session_is_active($db, session_id())) {
+        return false;
+    }
+
+    // Never allowed to change the verdict: a refresh that fails leaves the
+    // session valid and records that it can no longer be revoked remotely. A
+    // provider having a bad minute must not sign anybody out.
+    wallos_oidc_maintain_access_token($db, session_id());
+
+    return true;
 }
 
 /**

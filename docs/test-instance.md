@@ -696,6 +696,17 @@ that had correctly taken German.
 
 **Still open:**
 
+* **back-channel logout reached a session only for the first few minutes after
+  login** ([#144](https://github.com/thorstenhornung1/Wallos/issues/144)) — the
+  Wallos side is done: the authorization request asks for `offline_access`, the
+  refresh token is stored per session, and the access token is replaced halfway
+  through its own life so a live one exists for as long as the session is used.
+  What is *not* done is the measurement. Whether a refreshed access token stays
+  bound to the same provider session is an Authentik implementation detail, and
+  it has so far only been confirmed by reading Authentik's source on `main`
+  rather than on the tag this instance runs. Section 7.4 has the exact run;
+  until it has been done, this stays here rather than under Fixed.
+
 * **an auto-created user always gets EUR**
   ([#40](https://github.com/thorstenhornung1/Wallos/issues/40)) —
   `includes/oidc/oidc_create_user.php` sets `$main_currency_id = 1` and then
@@ -720,8 +731,8 @@ that had correctly taken German.
   back-channel logout addresses; verified end to end on 2026-08-20, including
   the endpoint path rather than only the page
 
-Apart from #40, a failure in section 7 is a finding rather than something
-already recorded.
+Apart from #40 and the unmeasured half of #144, a failure in section 7 is a
+finding rather than something already recorded.
 
 ### 7.3 Logout
 
@@ -821,19 +832,108 @@ To check it end to end: sign in through Authentik, then terminate that session
 in Authentik's admin interface, then reload any Wallos page. You should land on
 the login screen.
 
-**Do it within a few minutes of signing in, or the test will quietly do
-nothing.** Authentik builds the back-channel notification from the *access
-tokens* that belong to the session
+**This used to work only for the first few minutes of a session, and the fix
+for it is not yet confirmed in the field.** Authentik builds the back-channel
+notification from the *access tokens* that belong to the session
 (`authentik/providers/oauth2/signals.py`, the `pre_delete` receiver on
 `AuthenticatedSession`). Access tokens live minutes; sessions live hours to
-days. With none left, the list is empty, no request is sent, and the admin
-interface reports success either way — measured on two attempts, one with zero
-access tokens and no request at all, one with a token expiring in four minutes
-and a revocation that arrived.
+days. Measured on 2026-09-02: seventy-two minutes after a login, deleting the
+session in Authentik succeeded with HTTP 204 and sent nothing at all — no worker
+task, no line in the Wallos log, the `oidc_sessions` row still there. Within
+five minutes of a fresh login the same action produced the whole chain in under
+two seconds ([#144](https://github.com/thorstenhornung1/Wallos/issues/144)).
 
-This is Authentik behaviour rather than a Wallos defect, and it is worth knowing
-before treating "end session" as a control: for most of a session's life it does
-not reach a relying party using back-channel logout.
+Two corrections to that reading, both worth having before you test:
+
+* The receiver's filter has **no expiry condition**. An expired access token
+  still appears in its list until Authentik's `clean_expired_models` task
+  deletes the row, so the real window is the token's validity *plus* however
+  long that cleanup takes to come round. In the failing run the cleanup happened
+  to run 24 seconds before the deletion; the other order would probably have
+  delivered the notification. It is not a clean edge, and it is not something to
+  reason about from the Wallos side.
+* The window being short is Authentik's design rather than a Wallos defect, but
+  keeping a live token inside it is Wallos's job, and until #144 it was not
+  doing it.
+
+**What Wallos does now.** The authorization request asks for `offline_access`,
+the refresh token is stored on the `oidc_sessions` row beside the id token, and
+the access token is replaced **halfway through its own life** — derived from
+`expires_in`, never from a number written down, so a provider issuing
+five-minute tokens and one issuing hour-long tokens both work. The refresh runs
+on the user's own next request rather than in a cron job, so it costs nothing
+for accounts nobody is using and never keeps an abandoned session looking alive
+at the provider.
+
+The trade-off, stated so a run is not read as a failure: a session left **idle**
+longer than its access token's life is unreachable again until its next request.
+A revocation issued during that idle stretch can still be lost. The session
+becomes reachable the moment it is used again.
+
+**The assumption this rests on, and the measurement that settles it.** The fix
+works only if a refreshed access token stays bound to the same provider session
+— otherwise the receiver still finds an empty list. Authentik's refresh grant
+does carry it over: the new access token takes its session straight from the
+refresh token it was issued against (`AccessToken(…,
+session=self.params.refresh_token.session)` in
+`providers/oauth2/views/token.py`, and the rotated refresh token carries the
+same). That was read on `main`, **not** on the 2026.8.1 tag this instance runs,
+so it is confirmed by reading and not by measurement. Until the run below
+exists, do not describe #144 as fixed end to end.
+
+The run, in order:
+
+1. Sign in to Wallos through Authentik in a fresh private window.
+2. Wait longer than the provider's `access_token_validity` — for the default
+   that is more than five minutes, and thirty is a comfortable margin. Keep the
+   Wallos tab alive and reload it once or twice in that time, because the
+   refresh happens on a request; a tab that is never touched is testing the idle
+   case instead.
+3. Confirm a refresh actually happened before going further:
+
+   ```sh
+   $EXEC php -r '
+   require "/var/www/html/includes/database/connection.php";
+   $db = wallos_database_connect();
+   $latest = "SELECT %s FROM oidc_sessions ORDER BY id DESC LIMIT 1";
+   foreach ([
+       "refresh token stored" => "CASE WHEN LENGTH(refresh_token) > 0 THEN 1 ELSE 0 END",
+       "access token issued"  => "access_token_issued_at",
+       "access token expires" => "access_token_expires_at",
+       "refresh failed at"    => "refresh_failed_at",
+       "refresh error"        => "refresh_error",
+   ] as $label => $expression) {
+       printf("%-22s %s\n", $label, (string) $db->scalar(sprintf($latest, $expression)));
+   }'
+   ```
+
+   "refresh token stored" must be 1, "access token issued" must be **later than
+   the login** (it is a Unix timestamp; `date -d @<value>`), and "refresh failed
+   at" must be 0. The query deliberately never selects the token itself.
+4. Now delete that session in Authentik's admin interface.
+5. Expect, within seconds: `send_backchannel_logout_request` in Authentik's
+   worker log, `Wallos OIDC back-channel logout: 1 session(s) revoked.` in the
+   Wallos log, the `oidc_sessions` row gone, and the browser on the login screen
+   after a reload.
+
+Step 5 arriving is the whole result. Step 5 silent, with step 3 showing a
+refreshed token, would mean the refreshed access token is **not** bound to the
+same provider session on this version — which is the one thing the code cannot
+work around and the reason this run exists.
+
+**When a refresh fails.** Nobody is signed out — a provider having a bad minute
+must not become a logout storm — and the failure is recorded rather than
+swallowed: `refresh_failed_at` and `refresh_error` on the row, plus a line in
+the container log saying the session stays signed in but can no longer be ended
+by back-channel logout. A session showing a non-zero `refresh_failed_at` is
+exactly the state this issue was about, now visible instead of silent. The next
+attempt is one token lifetime after the failure, so an unreachable provider is
+not asked once per page load.
+
+**Sessions that signed in before this** carry no refresh token: their row shows
+`has_token` 0, they keep working, and they stay unreachable until the user signs
+in again. That is the state every session was in before, so it is not a
+regression to find one.
 
 ### 7.5 The three fixes from 5.8.0, checked deliberately
 

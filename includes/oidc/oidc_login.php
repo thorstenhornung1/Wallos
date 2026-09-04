@@ -60,6 +60,30 @@ if (isset($_SESSION['oidc_id_token'])) {
 }
 wallos_oidc_register_session($db, $userId, $oidcSessionId, session_id(), $token,
     $_SESSION['oidc_id_token'] ?? null);
+
+// The refresh token, and when the access token it belongs to dies.
+//
+// Without this the provider stops being able to end this session about five
+// minutes from now — it builds a back-channel logout out of the access tokens
+// belonging to the session, and until #144 Wallos took the one it was handed at
+// login and never spoke to the token endpoint again. The credential is stored
+// with the session row, never in the PHP session and never in a cookie: it is
+// longer-lived than the id token beside it, because it can mint new access
+// tokens for as long as the provider's session lasts.
+//
+// A provider that granted no offline_access sends none, which is recorded as
+// honestly as one that did: the row then says this session has nothing to
+// refresh with.
+require_once __DIR__ . '/refresh.php';
+$tokenResponse = isset($tokenData) && is_array($tokenData) ? $tokenData : [];
+if (!wallos_oidc_record_access_token($db, session_id(), $tokenResponse, time())) {
+    // Logged inside, and not fatal: the sign-in is complete and refusing it
+    // would be a worse answer than a session that cannot be refreshed. What it
+    // costs is remote revocability, which is what the log line says.
+    error_log('Wallos OIDC: signed user ' . $userId . ' in without recording the refresh token, so '
+        . 'the identity provider will lose the ability to end this session when the access token '
+        . 'expires.');
+}
 $cookieValue = $username . "|" . $token . "|" . $main_currency;
 setcookie('wallos_login', $cookieValue, [
     'expires' => $cookieExpire,

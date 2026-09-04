@@ -774,6 +774,15 @@ function wallos_pgsql_schema_reference_database()
     symlink($root . '/includes/database', $sandbox . '/includes/database');
     symlink($root . '/includes/config_helper.php', $sandbox . '/includes/config_helper.php');
 
+    // A third time, found while regenerating the baseline for migration 000074:
+    // createdatabase.php reports itself like every other scheduled job and
+    // requires includes/cron_run.php, which the sandbox did not have. The
+    // generator died on it while tests/cases/pgsql_schema_test.php — which
+    // builds its own sandbox, and does symlink this — went on passing, so once
+    // again the tool the instructions at the top of this file point at was the
+    // broken one.
+    symlink($root . '/includes/cron_run.php', $sandbox . '/includes/cron_run.php');
+
     // The reference is always SQLite: this whole function exists to walk the
     // migration chain forward, and the chain is SQLite statements. Without
     // saying so, createdatabase.php reads the environment — and inside a
