@@ -99,35 +99,55 @@ wallos_test('the four causes do not share a sentence', function () {
 wallos_test('every provider request lets the error body through', function () {
     // The ratchet. Adding a provider branch without 'ignore_errors' puts the
     // defect back: the branch answers false for a 401, and the caller is left
-    // blaming the network again. Both files reach the provider on two paths —
-    // apilayer and fixer.io — and the fixer.io one is the one that was
-    // missing a stream context entirely, in both files.
+    // blaming the network again. The shared client reaches the provider on
+    // three paths — apilayer, fixer.io and Frankfurter — and the fixer.io one
+    // was the one that was missing a stream context entirely.
     //
     // Counted as contexts built, not fetch calls: currency_provider.php's one
     // network touch moved behind wallos_provider_http_get() (#117), so the
     // fetch call no longer says how many request paths exist — the context
     // each path builds does.
-    foreach (['includes/currency_provider.php', 'api/fixer/set_fixer.php'] as $path) {
-        $source = file_get_contents(WALLOS_ROOT . '/' . $path);
+    $client = file_get_contents(WALLOS_ROOT . '/includes/currency_provider.php');
 
-        $requests = substr_count($source, 'stream_context_create(');
-        $permits = substr_count($source, "'ignore_errors' => true");
+    $requests = substr_count($client, 'stream_context_create(');
+    $permits = substr_count($client, "'ignore_errors' => true");
 
-        assert_true($requests > 0, $path . ' does reach the provider');
-        assert_same($requests, $permits,
-            $path . ' sets ignore_errors on each of its ' . $requests . ' requests');
-    }
+    assert_true($requests > 0, 'includes/currency_provider.php does reach the provider');
+    assert_same($requests, $permits,
+        'includes/currency_provider.php sets ignore_errors on each of its ' . $requests . ' requests');
+
+    // set_fixer.php no longer builds a request of its own: it validates the key
+    // through the same client, so the ignore_errors rule it depends on — and
+    // the header capture — live in exactly one place (#150). A plaintext
+    // provider URL is what routing through the client removed from this file
+    // (#141), and asserting its absence keeps it gone.
+    $keySave = file_get_contents(WALLOS_ROOT . '/api/fixer/set_fixer.php');
+
+    assert_same(0, substr_count($keySave, 'stream_context_create('),
+        'api/fixer/set_fixer.php builds no provider request of its own');
+    assert_true(strpos($keySave, 'wallos_fetch_exchange_rates') !== false,
+        'api/fixer/set_fixer.php reaches the provider through the shared client');
+    assert_true(strpos($keySave, 'http://') === false,
+        'api/fixer/set_fixer.php keeps no plaintext provider URL');
 });
 
 wallos_test('the message is derived, not asserted', function () {
-    // The old text is gone from both callers. It survives in exactly one place
+    // The old text is gone from every caller. It survives in exactly one place
     // — wallos_provider_failure_message(), for the case where it is true.
-    foreach (['includes/currency_provider.php', 'api/fixer/set_fixer.php'] as $path) {
-        $source = file_get_contents(WALLOS_ROOT . '/' . $path);
+    // currency_provider.php asks that function directly; set_fixer.php reaches
+    // it through the shared client and reads back the message it returned, so
+    // the derivation is still not something set_fixer.php asserts for itself.
+    $client = file_get_contents(WALLOS_ROOT . '/includes/currency_provider.php');
 
-        assert_not_contains('could not be reached', $source,
-            $path . ' no longer hard-codes the outage message');
-        assert_contains('wallos_provider_failure_message', $source,
-            $path . ' asks for the message instead');
-    }
+    assert_not_contains('could not be reached', $client,
+        'includes/currency_provider.php no longer hard-codes the outage message');
+    assert_contains('wallos_provider_failure_message', $client,
+        'includes/currency_provider.php asks for the message instead');
+
+    $keySave = file_get_contents(WALLOS_ROOT . '/api/fixer/set_fixer.php');
+
+    assert_not_contains('could not be reached', $keySave,
+        'api/fixer/set_fixer.php no longer hard-codes the outage message');
+    assert_contains('wallos_fetch_exchange_rates', $keySave,
+        'api/fixer/set_fixer.php takes the message the shared client derived');
 });

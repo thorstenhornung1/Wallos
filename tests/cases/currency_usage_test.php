@@ -272,6 +272,73 @@ wallos_test('the daily rate-limit pair is captured and stored beside the monthly
     $db->close();
 });
 
+wallos_test('the REST key-save records month and day usage and counts the call', function () {
+    // The scheduled refresh has captured APILayer's month-and-day headers
+    // through the shared client since #106; set_fixer.php used to parse them
+    // itself, month-only, over its own request, and never counted the call
+    // (#150). Driving the real endpoint proves it now takes the same path: the
+    // row it writes carries both pairs and one counted call. Reverting the
+    // endpoint to its own month-only parser fails this case — which is the
+    // whole point of asserting on the day figure and the count.
+    if (wallos_test_skip_unless_sqlite(
+        'drives the REST key-save endpoint through the CLI; PostgreSQL is pending for the integrator (#150)')) {
+        return;
+    }
+
+    $db = wallos_test_open_database();
+    wallos_test_create_user($db, 1, 'alice');
+
+    // set_fixer.php authenticates the Wallos request by api_key, not a session.
+    // Bare bindValue keeps this new line off the SQLite boundary audit (#20).
+    $stmt = $db->prepare('UPDATE "user" SET api_key = :key WHERE id = 1');
+    $stmt->bindValue(':key', 'rest-user-key');
+    $stmt->execute();
+
+    // The child stubs the transport, then loads the endpoint exactly as a POST
+    // would — its own requires resolve against its directory, so the run starts
+    // there.
+    $run = usage_run_php(
+        'function wallos_provider_http_get($url, $context) {' . "\n"
+        . '    return ["body" => \'{"success":true,"base":"EUR","rates":{"EUR":1,"USD":1.1}}\',' . "\n"
+        . '            "headers" => ["HTTP/1.1 200 OK",' . "\n"
+        . '                          "x-ratelimit-limit-month: 100", "x-ratelimit-remaining-month: 40",' . "\n"
+        . '                          "x-ratelimit-limit-day: 20", "x-ratelimit-remaining-day: 8"]];' . "\n"
+        . '}' . "\n"
+        . '$_SERVER["REQUEST_METHOD"] = "POST";' . "\n"
+        . '$_POST["api_key"] = "rest-user-key";' . "\n"
+        . '$_POST["provider"] = "1";' . "\n"
+        . '$_POST["fixer_api_key"] = "the-account-key";' . "\n"
+        . 'chdir(' . var_export(WALLOS_ROOT . '/api/fixer', true) . ');' . "\n"
+        . 'require ' . var_export(WALLOS_ROOT . '/api/fixer/set_fixer.php', true) . ';'
+    );
+
+    assert_contains('"success":true', $run['output'],
+        'the key save reported success (got: ' . $run['output'] . ')');
+
+    // Month: 100 - 40. Day: 20 - 8. Both come from the one response, stored
+    // against the account's own row because the key is the account's own.
+    assert_same('60', (string) $db->scalar('SELECT usage_used FROM fixer WHERE user_id = 1'),
+        'the monthly used figure is stored');
+    assert_same('100', (string) $db->scalar('SELECT usage_limit FROM fixer WHERE user_id = 1'),
+        'the monthly limit is stored');
+    assert_same('12', (string) $db->scalar('SELECT usage_used_day FROM fixer WHERE user_id = 1'),
+        'the daily used figure the old month-only parser dropped is stored');
+    assert_same('20', (string) $db->scalar('SELECT usage_limit_day FROM fixer WHERE user_id = 1'),
+        'the daily limit is stored');
+
+    // provider_mode decides whether the saved key is read at all, and the call
+    // went over the wire, so the local counter the settings twin keeps must see
+    // it too (#106).
+    assert_same('custom', (string) $db->scalar('SELECT provider_mode FROM fixer WHERE user_id = 1'),
+        "the saved key is the account's own, so config resolution reads it");
+    assert_same('1', (string) $db->scalar('SELECT local_calls FROM fixer WHERE user_id = 1'),
+        'the verification request is counted');
+    assert_same(date('Y-m'), (string) $db->scalar('SELECT local_calls_month FROM fixer WHERE user_id = 1'),
+        'and counted in the current month');
+
+    $db->close();
+});
+
 wallos_test('the page escalates before exhaustion and shows the stall and daily limit', function () {
     $endpoint = file_get_contents(WALLOS_ROOT . '/endpoints/settings/fixer_usage.php');
     $page = file_get_contents(WALLOS_ROOT . '/settings.php');
