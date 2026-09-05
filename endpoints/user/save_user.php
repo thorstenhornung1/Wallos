@@ -3,6 +3,8 @@ require_once '../../includes/connect_endpoint.php';
 require_once '../../includes/inputvalidation.php';
 require_once '../../includes/reference_validation.php';
 require_once '../../includes/validate_endpoint.php';
+require_once '../../includes/oidc_settings.php';
+require_once '../../includes/oidc/oidc_profile_sync.php';
 
 if (!file_exists('../../images/uploads/logos')) {
     mkdir('../../images/uploads/logos', 0777, true);
@@ -212,13 +214,43 @@ if (
     $lastname = validate($_POST['lastname']);
     $email = validate($_POST['email']);
 
-    $query = "SELECT email FROM \"user\" WHERE id = :user_id";
+    $query = "SELECT firstname, lastname, email, language, oidc_sub FROM \"user\" WHERE id = :user_id";
     $stmt = $db->prepare($query);
     $stmt->bindValue(':user_id', $userId, SQLITE3_TEXT);
     $result = $stmt->execute();
     $user = $result->fetchArray(SQLITE3_ASSOC);
 
     $oldEmail = $user['email'];
+
+    // OIDC governs a linked account's profile fields centrally (#154):
+    // profile.php shows firstname/lastname/email/language read-only for a
+    // linked user and the login re-asserts the IdP claims. A crafted POST could
+    // still bypass the client-side readonly and change one of them until the
+    // next login (#156), so for a linked user on an OIDC-effective instance the
+    // stored value wins for every field in the SAME managed set profile.php
+    // locks -- the submitted value is ignored, silently, without ever failing
+    // the save. Non-managed fields and local users are untouched. The managed
+    // set is resolved exactly as profile.php resolves it, reusing the one
+    // helper so the server lock matches the UI lock field-for-field.
+    $oidcConfiguration = wallos_get_effective_oidc_configuration($db);
+    $oidcSettings = $oidcConfiguration['settings'];
+    $oidcLinked = trim((string) ($user['oidc_sub'] ?? '')) !== '';
+    $oidcEffective = (int) $oidcConfiguration['enabled'] === 1 && $oidcConfiguration['is_configured'];
+    $providerManagedFields = ($oidcEffective && $oidcLinked)
+        ? wallos_oidc_managed_profile_fields($oidcSettings)
+        : [];
+
+    // Applied before the e-mail uniqueness check below so a tampered address
+    // reverts to the stored one and never trips a false email_exists.
+    if (in_array('firstname', $providerManagedFields, true)) {
+        $firstname = (string) ($user['firstname'] ?? '');
+    }
+    if (in_array('lastname', $providerManagedFields, true)) {
+        $lastname = (string) ($user['lastname'] ?? '');
+    }
+    if (in_array('email', $providerManagedFields, true)) {
+        $email = (string) ($user['email'] ?? '');
+    }
 
     if ($oldEmail != $email) {
         $query = "SELECT email FROM \"user\" WHERE email = :email AND id != :userId";
@@ -256,6 +288,9 @@ if (
 
     $main_currency = (int) $_POST['main_currency'];
     $language = wallos_resolve_language($_POST['language'] ?? null);
+    if (in_array('language', $providerManagedFields, true)) {
+        $language = (string) ($user['language'] ?? '');
+    }
 
     if (!empty($_FILES['profile_pic']["name"])) {
         $file = $_FILES['profile_pic'];
