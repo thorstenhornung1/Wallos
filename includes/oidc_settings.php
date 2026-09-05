@@ -386,22 +386,43 @@ function wallos_get_effective_oidc_configuration($db)
             if ($discoveryError !== null) {
                 $notes[] = $discoveryError;
             } elseif ($discoveryDocument !== null) {
-                $discoveryMap = [
-                    'authorization_url' => 'authorization_endpoint',
-                    'token_url' => 'token_endpoint',
-                    'user_info_url' => 'userinfo_endpoint',
-                ];
+                // OIDC Discovery §4.3 (MUST): the document's issuer must
+                // equal the issuer URL it was fetched from. A mismatch is a
+                // substituted or misconfigured document, so it is refused
+                // whole rather than read from — failing closed keeps a wrong
+                // document from redirecting the token, userinfo and signing-key
+                // endpoints under us. Trailing slashes are normalised the way
+                // the fetch and the cache key already are; the document itself
+                // is never logged, only the two issuer values.
+                $configuredIssuer = rtrim(trim((string) $issuer), '/');
+                $documentIssuer = rtrim(trim((string) ($discoveryDocument['issuer'] ?? '')), '/');
 
-                foreach ($discoveryMap as $field => $documentField) {
-                    if (!isset($discoveryDocument[$documentField])) {
-                        continue;
-                    }
-                    // A stored issuer fills in only what was left blank, so an
-                    // operator whose provider needs a hand-written endpoint can
-                    // still write one. An issuer from the environment replaces
-                    // them, which is the behaviour that already existed.
-                    if ($issuerFromEnvironment || trim((string) $settings[$field]) === '') {
-                        $settings[$field] = $discoveryDocument[$documentField];
+                if ($documentIssuer !== $configuredIssuer) {
+                    error_log('Wallos OIDC discovery: issuer mismatch. Configured '
+                        . $configuredIssuer . ' but the document declares '
+                        . ($documentIssuer === '' ? '(none)' : $documentIssuer)
+                        . '; the document is refused.');
+                    $notes[] = 'OIDC discovery document rejected: its issuer does not '
+                        . 'match the configured issuer.';
+                    $discoveryDocument = null;
+                } else {
+                    $discoveryMap = [
+                        'authorization_url' => 'authorization_endpoint',
+                        'token_url' => 'token_endpoint',
+                        'user_info_url' => 'userinfo_endpoint',
+                    ];
+
+                    foreach ($discoveryMap as $field => $documentField) {
+                        if (!isset($discoveryDocument[$documentField])) {
+                            continue;
+                        }
+                        // A stored issuer fills in only what was left blank, so
+                        // an operator whose provider needs a hand-written
+                        // endpoint can still write one. An issuer from the
+                        // environment replaces them, the behaviour that existed.
+                        if ($issuerFromEnvironment || trim((string) $settings[$field]) === '') {
+                            $settings[$field] = $discoveryDocument[$documentField];
+                        }
                     }
                 }
             }

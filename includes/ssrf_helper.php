@@ -259,6 +259,31 @@ function validate_smtp_host($host, $port, $db) {
 }
 
 /**
+ * Whether a host is a loopback address, the one plaintext OIDC endpoint a
+ * developer legitimately runs without TLS. Literal only: 'localhost', the
+ * IPv6 loopback, or 127.0.0.0/8, so a public name that merely resolves to
+ * loopback cannot slip a plaintext endpoint past the TLS requirement (and it
+ * would still meet the reserved-range check either way).
+ *
+ * @param string $host
+ * @return bool
+ */
+function wallos_oidc_endpoint_host_is_loopback($host)
+{
+    $host = strtolower(trim((string) $host, '[]'));
+
+    if ($host === 'localhost' || $host === '::1') {
+        return true;
+    }
+
+    if (filter_var($host, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4) !== false) {
+        return strncmp($host, '127.', 4) === 0;
+    }
+
+    return false;
+}
+
+/**
  * Validates an OIDC endpoint URL (token_url, user_info_url) against SSRF.
  * Private/reserved IPs (RFC-1918, link-local, loopback, CGNAT) are only
  * allowed if the host or IP appears in the admin Security Settings allowlist.
@@ -283,6 +308,16 @@ function validate_oidc_endpoint_url($url, $db) {
 
     $scheme = strtolower($parsed['scheme'] ?? '');
     if (!in_array($scheme, ['http', 'https'], true)) return false;
+
+    // OIDC endpoints carry tokens and identity, so plaintext is refused:
+    // OIDC Core requires TLS on the token and userinfo endpoints, and the
+    // fork's "identity from UserInfo over TLS" argument rests on it. The one
+    // exception is a loopback host a developer runs a provider on without a
+    // certificate; every other private address still answers to the
+    // reserved-range check and its allowlist below.
+    if ($scheme !== 'https' && !wallos_oidc_endpoint_host_is_loopback($parsed['host'])) {
+        return false;
+    }
 
     $host = $parsed['host'];
     $port = $parsed['port'] ?? '';

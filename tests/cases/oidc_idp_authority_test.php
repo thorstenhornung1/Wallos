@@ -84,7 +84,7 @@ function idp_fixture($db, $sessionId, $token = 'remember-token', $markOidc = tru
         'name' => 'Test provider',
         'client_id' => 'wallos',
         'client_secret' => 'confidential',
-        'token_url' => 'http://93.184.216.34/token',
+        'token_url' => 'https://93.184.216.34/token',
     ], []);
 
     assert_true($saved['success'], 'the fixture configured a provider: ' . (string) $saved['error']);
@@ -551,8 +551,8 @@ wallos_test('the single-user no-login mode cannot be enabled while OIDC is enabl
         'client_id' => 'wallos',
         'client_secret' => 'confidential',
         'authorization_url' => 'http://93.184.216.34/authorize',
-        'token_url' => 'http://93.184.216.34/token',
-        'user_info_url' => 'http://93.184.216.34/userinfo',
+        'token_url' => 'https://93.184.216.34/token',
+        'user_info_url' => 'https://93.184.216.34/userinfo',
         'redirect_url' => 'http://93.184.216.34/login.php',
         'user_identifier_field' => 'email',
     ], []);
@@ -636,8 +636,8 @@ wallos_test('OIDC cannot be enabled through the API while the no-login mode is a
         'client_id' => 'wallos',
         'client_secret' => 'confidential',
         'authorization_url' => 'http://93.184.216.34/authorize',
-        'token_url' => 'http://93.184.216.34/token',
-        'user_info_url' => 'http://93.184.216.34/userinfo',
+        'token_url' => 'https://93.184.216.34/token',
+        'user_info_url' => 'https://93.184.216.34/userinfo',
         'redirect_url' => 'http://93.184.216.34/login.php',
         'user_identifier_field' => 'email',
     ], []);
