@@ -129,9 +129,22 @@ WALLOS_PASSWORD=… dev/benchmark.sh \
     --exec 'docker exec wallos-test_wallos.1.abc'    a remote instance
 ```
 
-Two tables: one account's subscription list at 100, 1000 and 5000 entries, and
-the notification cron at 1, 10 and 100 accounts. Every figure is the median of
-five runs, and the header names the database the figures were measured against.
+Two tables: one account's subscription list at 100, 1000 and 10 000 entries
+(timed over HTTP), and the notification cron's load phase at 1, 10 and 100
+accounts (timed in-process, with peak memory). Every figure is the median of five
+runs, and the header names the database the figures were measured against.
+
+Each table prints, beneath the medians, a **normalized growth factor** F/R for
+every ×10 step — how fast a figure grew divided by how fast the size grew. That
+factor, not any absolute figure, is the point: it cancels the environment's
+constant overhead, so a super-linear path shows as a factor climbing above 1
+rather than as a wall-clock number nobody can calibrate. It is a trend instrument
+run by hand, never a CI gate. `docs/perf-trend-benchmark.md` is the reading guide
+— what F/R means, why peak memory is reported only for the in-process cron, and a
+dated table extended over time to show drift. `--big` adds the largest, slow step
+of each ladder (the 100 000-row list and the cron over a million active
+subscriptions, which is the >128 MB case); a normal run stays household-sized and
+quick.
 
 Everything that writes goes through `dev/bench.php`, which connects with
 `wallos_database_connect()` and has no way to name a database. That is the fix

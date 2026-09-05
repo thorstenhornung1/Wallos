@@ -628,6 +628,94 @@ function bench_rates_preflight($seconds)
     return ['verdict' => 'ok', 'note' => 'the provider answered', 'ms' => $run['ms']];
 }
 
+/**
+ * The notification cron's load/build phase, run in-process, network-free.
+ *
+ * This is endpoints/cronjobs/sendnotifications.php lines 31-163: the bulk loads
+ * that build the in-memory maps the send loop then reads. It stops exactly where
+ * the send loop begins, so it touches no SMTP server and no provider — the same
+ * quota-free, network-free guarantee the rates gate gives the currency column,
+ * here by construction rather than by a timeout. The send loop is where the
+ * effective SMTP transport is resolved and mail is dispatched; none of that runs.
+ *
+ * Kept in step with that file by hand: it calls the same loader functions in the
+ * same order, not a reimplementation of them.
+ *
+ * Measured over USER COUNT, because the account count is the one dimension that
+ * grows past a household — the cron runs over every user. Its peak memory is the
+ * figure the query-count curves cannot show: wallos_load_rows_by_user() pulls
+ * every work account's active subscriptions into one PHP array, which is the
+ * >128 MB blow-up documented in docs/perf-hot-paths-postgresql.md.
+ *
+ * @param WallosDatabase $db
+ * @return int the number of accounts found to have work (a sanity anchor)
+ */
+function bench_cron_load_phase($db)
+{
+    require_once __DIR__ . '/../includes/notification_settings.php';
+    require_once __DIR__ . '/../includes/notification_due.php';
+    require_once __DIR__ . '/../includes/budget_period_calculations.php';
+
+    // One query per provider table for everybody, then the accounts with any
+    // channel enabled at all — the cheap question, asked before any expensive
+    // load.
+    $notificationSettings = wallos_load_notification_settings($db);
+    $notificationTiming = wallos_load_notification_timing($db);
+    $usersWithNotifications = wallos_users_with_notifications($notificationSettings, $db);
+    $notifiedUserIds = array_keys($usersWithNotifications);
+
+    // The two loads the "who has work today" question needs, for everybody.
+    $notifySubscriptionsByUser = wallos_load_rows_by_user($db, 'subscriptions', $notifiedUserIds,
+        '*', 'user_id', 'notify = 1 AND inactive = 0');
+
+    $budgetByUser = [];
+    $budgetRows = wallos_load_rows_by_user($db, 'user', $notifiedUserIds,
+        'id AS user_id, main_currency, period_budget, budget_period_type, budget_period_anchor_date',
+        'id');
+    foreach ($budgetRows as $userId => $rows) {
+        $budgetByUser[$userId] = $rows[0];
+    }
+
+    // Accounts owed a period-start summary even with no payment due today.
+    $prefilterDate = new DateTime('now');
+    $periodStartUserIds = [];
+    foreach ($notifiedUserIds as $userId) {
+        if (($notificationTiming[$userId]['period_summary_at_period_start'] ?? 0) !== 1) {
+            continue;
+        }
+        $userBudgetConfig = $budgetByUser[$userId] ?? [];
+        $budgetPeriodType = sanitizeBudgetPeriodType($userBudgetConfig['budget_period_type'] ?? 'monthly');
+        $budgetPeriodAnchorDate = sanitizeBudgetAnchorDate(
+            $userBudgetConfig['budget_period_anchor_date'] ?? getDefaultBudgetAnchorDate());
+        $activeBudgetPeriod = getActiveBudgetPeriod($prefilterDate, $budgetPeriodType, $budgetPeriodAnchorDate);
+        if ($activeBudgetPeriod['start']->format('Y-m-d') === $prefilterDate->format('Y-m-d')) {
+            $periodStartUserIds[] = $userId;
+        }
+    }
+
+    $accountsWithWork = wallos_notification_accounts_with_work(
+        $notifySubscriptionsByUser, $notificationTiming, $prefilterDate, $periodStartUserIds);
+    $workUserIds = array_keys($accountsWithWork);
+
+    // The expensive loads, for the accounts with work alone. The active-
+    // subscription load is the memory-heavy one: every work account's active
+    // rows held in a single array at once.
+    $currenciesByUser = wallos_index_rows_by(
+        wallos_load_rows_by_user($db, 'currencies', $workUserIds), 'id');
+    $householdByUser = wallos_index_rows_by(
+        wallos_load_rows_by_user($db, 'household', $workUserIds), 'id');
+    $categoriesByUser = wallos_index_rows_by(
+        wallos_load_rows_by_user($db, 'categories', $workUserIds), 'id');
+    $activeSubscriptionsByUser = wallos_load_rows_by_user($db, 'subscriptions', $workUserIds,
+        'user_id, price, currency_id, next_payment, cycle, frequency, inactive, auto_renew',
+        'user_id', 'inactive = 0');
+
+    // The four maps stay referenced to here, so the peak reading sees them all
+    // alive at once — which is the memory characteristic being measured.
+    return count($accountsWithWork) + count($currenciesByUser) + count($householdByUser)
+        + count($categoriesByUser) + count($activeSubscriptionsByUser);
+}
+
 // ------------------------------------------------------------------ dispatch
 
 // Only when invoked directly, so that a test can include this file for the
@@ -722,8 +810,83 @@ switch ($command) {
         printf("%d\n", (int) round($times[intdiv(count($times), 2)]));
         break;
 
+    case 'cron-load':
+        // One in-process run of the notification cron's load phase, printing its
+        // wall time in milliseconds and its peak memory in bytes, tab-separated.
+        //
+        // A fresh process per run is the production shape — each cron run is a
+        // cold CLI process with a cold connection cache — so there is nothing to
+        // warm here; measure-cron-load spawns five of these and takes the median.
+        //
+        // memory_limit is lifted so a large load can be measured rather than
+        // fataling before its peak is read: the point is to observe the >128 MB
+        // blow-up, not to reproduce the crash. That the figure exceeds the
+        // default limit is itself the finding.
+        @ini_set('memory_limit', '-1');
+
+        $db = bench_connect();
+
+        // Exclude the require/connect baseline so the peak is the load phase's
+        // own footprint; the benchmark's noop row carries that interpreter
+        // baseline separately for comparison.
+        if (function_exists('memory_reset_peak_usage')) {
+            memory_reset_peak_usage();
+        }
+
+        $started = microtime(true);
+        bench_cron_load_phase($db);
+        $ms = (microtime(true) - $started) * 1000;
+        $peak = memory_get_peak_usage(true);
+
+        $db->close();
+        printf("%d\t%d\n", (int) round($ms), $peak);
+        break;
+
+    case 'measure-cron-load':
+        // Median of $runs cold runs of the cron load phase: median time and
+        // median peak memory, tab-separated, or a single word when a run did not
+        // produce a figure. Each run is its own bounded process, so a load that
+        // never returns costs one bound rather than the whole benchmark, exactly
+        // as the currency-cron measurement is bounded.
+        $runs = max(1, (int) ($argv[2] ?? 5));
+        $seconds = max(1, (int) ($argv[3] ?? 120));
+
+        $times = [];
+        $peaks = [];
+
+        for ($i = 0; $i < $runs; $i++) {
+            $run = bench_run_bounded([PHP_BINARY, __FILE__, 'cron-load'], $seconds, true);
+
+            if ($run['timedOut']) {
+                // One bounded run is enough to know the rest would be the same.
+                echo "timeout\n";
+                exit(0);
+            }
+
+            // The figure is the last line: an included file may print a notice
+            // ahead of it, and the tab-separated pair is always printed last.
+            $lines = array_values(array_filter(explode("\n", trim($run['output'])), 'strlen'));
+            $parts = $lines === [] ? [] : explode("\t", end($lines));
+
+            if (count($parts) !== 2 || !ctype_digit($parts[0]) || !ctype_digit($parts[1])) {
+                // A run that fataled — most likely the memory blow-up hitting a
+                // limit the -1 above did not lift on this build. Name it rather
+                // than printing a figure that was never measured.
+                echo "error\n";
+                exit(0);
+            }
+
+            $times[] = (int) $parts[0];
+            $peaks[] = (int) $parts[1];
+        }
+
+        sort($times);
+        sort($peaks);
+        printf("%d\t%d\n", $times[intdiv(count($times), 2)], $peaks[intdiv(count($peaks), 2)]);
+        break;
+
     default:
         fwrite(STDERR, "Usage: php dev/bench.php <target|account|subscriptions|notifications|cleanup"
-            . "|rates-preflight|measure> [arguments]\n");
+            . "|rates-preflight|measure|cron-load|measure-cron-load> [arguments]\n");
         exit(2);
 }
