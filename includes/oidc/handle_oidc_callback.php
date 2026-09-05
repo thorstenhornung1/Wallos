@@ -31,20 +31,17 @@ if ($tokenUrlInfo === false) {
     exit();
 }
 
-$postFields = [
-    'grant_type' => 'authorization_code',
-    'code' => $_GET['code'],
-    'redirect_uri' => $redirectUri,
-    'client_id' => $oidcSettings['client_id'],
-];
-
-// A public client has no secret, and sending client_secret= as an empty
-// parameter is not the same as not authenticating with one: strict providers
-// read the empty value as a failed client authentication. Omitted entirely,
-// the request is a plain public-client token exchange.
-if ((string) $oidcSettings['client_secret'] !== '') {
-    $postFields['client_secret'] = $oidcSettings['client_secret'];
-}
+// The exchange fields, including the PKCE verifier consume_oidc_callback.php
+// took out of the session (single-use, in lockstep with the state) and left
+// in $codeVerifier. Built by a pure helper so the request body is checkable
+// without a socket; the empty-secret and absent-verifier omissions live there.
+require_once __DIR__ . '/pkce.php';
+$postFields = wallos_oidc_token_request_fields(
+    $oidcSettings,
+    $_GET['code'],
+    $redirectUri,
+    $codeVerifier ?? null
+);
 
 $ch = curl_init($tokenUrl);
 curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);

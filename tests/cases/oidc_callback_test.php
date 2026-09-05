@@ -38,8 +38,8 @@ wallos_test('the state is compared in constant time and consumed once', function
 
     assert_contains('hash_equals($expectedState, $state)', $source,
         'the state comparison is not vulnerable to timing');
-    assert_contains("unset(\$_SESSION['oidc_state'])", $source,
-        'the state is cleared so it cannot be replayed');
+    assert_contains("unset(\$_SESSION['oidc_state'], \$_SESSION['oidc_code_verifier'])", $source,
+        'the state is cleared so it cannot be replayed (with the PKCE verifier, in lockstep)');
     assert_contains('oidc_state_mismatch', $source,
         'a mismatch is reported rather than ignored');
 });

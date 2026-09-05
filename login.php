@@ -161,6 +161,16 @@ if ($oidcEnabled) {
     $state = bin2hex(random_bytes(16));
     $_SESSION['oidc_state'] = $state;
 
+    // PKCE (RFC 7636, S256): a per-login secret whose hash rides the
+    // authorization request and whose value rides the token exchange,
+    // binding the code to this browser independently of the client secret.
+    // It lives in the session beside the state and is consumed with it, in
+    // one single-use lifecycle (includes/oidc/consume_oidc_callback.php).
+    require_once __DIR__ . '/includes/oidc/pkce.php';
+    $codeVerifier = wallos_oidc_generate_code_verifier();
+    $_SESSION['oidc_code_verifier'] = $codeVerifier;
+    $codeChallenge = wallos_oidc_code_challenge($codeVerifier);
+
     // Build the OIDC authorization URL
     //
     // The scope list is the configured one plus offline_access, which is what
@@ -174,6 +184,8 @@ if ($oidcEnabled) {
         'redirect_uri' => $oidcSettings['redirect_url'],
         'scope' => wallos_oidc_authorization_scopes($oidcSettings['scopes']),
         'state' => $state,
+        'code_challenge' => $codeChallenge,
+        'code_challenge_method' => 'S256',
     ]);
 
     $oidc_auth_url = rtrim($oidcSettings['authorization_url'], '?') . '?' . $params;
