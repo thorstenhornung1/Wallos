@@ -621,6 +621,10 @@ $i18n = [
     "oidc_token_exchange_failed" => "Wallos could not complete the login with the identity provider. Please contact your administrator; the server log has the details.",
     "oidc_userinfo_failed" => "Wallos could not read your profile from the identity provider. Please contact your administrator; the server log has the details.",
     "remove_stored_secret" => "Remove the stored value",
+    // Profile fields governed by the OIDC identity provider. %s is the
+    // configured provider display name, or a neutral fallback when none is set.
+    "field_managed_by_provider" => "Managed by %s",
+    "your_login_provider" => "your login provider",
 ];
 
 
