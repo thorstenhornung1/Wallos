@@ -120,6 +120,12 @@ $userData = $result->fetchArray(SQLITE3_ASSOC);
 
 if ($userData) {
     // User exists, log the user in
+    // A returning user's provider picture may update their avatar, within the
+    // strict policy in includes/oidc/oidc_avatar.php: only the default or a
+    // previously imported avatar is ever replaced, and only by a changed
+    // picture. A bad picture is ignored and never fails the login.
+    require_once __DIR__ . '/oidc_avatar.php';
+    wallos_oidc_maybe_update_avatar($db, $userData, $userInfo['picture'] ?? null, $oidcSub);
     require_once('oidc_login.php');
 
 } else {

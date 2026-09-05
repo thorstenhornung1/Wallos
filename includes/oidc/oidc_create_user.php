@@ -16,7 +16,26 @@ $language = wallos_resolve_language(
     $userInfo['locale'] ?? null,
     wallos_instance_default_language($db)
 );
+require_once __DIR__ . '/oidc_avatar.php';
+
+// Default avatar. Replaced below when the provider sends an importable raster
+// `picture` claim (see includes/oidc/oidc_avatar.php); a bad or absent picture
+// leaves this default in place and never fails account creation.
 $avatar = "images/avatars/0.svg";
+$avatarImportOutcome = null;
+$pictureClaim = $userInfo['picture'] ?? null;
+$decodedPicture = wallos_oidc_decode_picture($pictureClaim);
+if ($decodedPicture !== null) {
+    $importedAvatar = wallos_oidc_write_avatar($oidcSub, $decodedPicture);
+    if ($importedAvatar !== null) {
+        $avatar = $importedAvatar;
+        $avatarImportOutcome = 'imported (' . $decodedPicture['ext'] . ')';
+    } else {
+        $avatarImportOutcome = 'skipped (could not store the decoded image)';
+    }
+} elseif (is_string($pictureClaim) && $pictureClaim !== '') {
+    $avatarImportOutcome = 'skipped (not an importable raster data-URI)';
+}
 $budget = 0;
 $main_currency_id = 1; // Euro
 $password = bin2hex(random_bytes(16)); // 32-character random password
@@ -48,6 +67,19 @@ $stmt->bindValue(':username', $username, SQLITE3_TEXT);
 $result = $stmt->execute();
 $userData = $result->fetchArray(SQLITE3_ASSOC);
 $newUserId = $userData['id'];
+
+// Record ownership of an imported avatar now that the account has an id, and
+// log the outcome the way the rest of the OIDC code does: the user id, never
+// the image bytes.
+if ($avatar !== "images/avatars/0.svg") {
+    if (!wallos_oidc_register_avatar($db, $newUserId, $avatar)) {
+        error_log('[Wallos OIDC] imported the avatar for new user ' . $newUserId
+            . ' but could not record ownership');
+    }
+}
+if ($avatarImportOutcome !== null) {
+    error_log('[Wallos OIDC] profile picture ' . $avatarImportOutcome . ' for new user ' . $newUserId);
+}
 
 require_once __DIR__ . '/../user_provisioning.php';
 
