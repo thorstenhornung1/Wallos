@@ -11,7 +11,7 @@
 #
 # Do not edit by hand — run dev/db-audit.sh --update and commit the diff.
 #
-# total: 1541 matches in 235 file(s)
+# total: 1533 matches in 235 file(s)
 admin.php	5
 api/admin/get_admin_settings.php	1
 api/admin/set_admin_settings.php	2
@@ -22,7 +22,7 @@ api/categories/set_categories.php	19
 api/currencies/get_currencies.php	3
 api/currencies/set_currencies.php	22
 api/fixer/get_fixer.php	2
-api/fixer/set_fixer.php	13
+api/fixer/set_fixer.php	5
 api/household/get_household.php	3
 api/household/set_household.php	18
 api/notifications/get_notification_settings.php	6

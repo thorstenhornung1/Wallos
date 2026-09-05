@@ -22,7 +22,7 @@ Example response:
 */
 
 require_once '../../includes/connect_endpoint.php';
-require_once '../../includes/http_status.php';
+require_once '../../includes/currency_provider.php';
 
 header('Content-Type: application/json; charset=UTF-8');
 
@@ -160,136 +160,113 @@ if ($fixerApiKey === '') {
     exit;
 }
 
-// Validate the API key against the provider
-if ($provider === 1) {
-    $testKeyUrl = "https://api.apilayer.com/fixer/latest?base=USD&symbols=EUR";
-    $context = stream_context_create([
-        'http' => [
-            'method' => 'GET',
-            'header' => 'apikey: ' . $fixerApiKey,
-            'ignore_errors' => true
-        ]
-    ]);
-    $response = @file_get_contents($testKeyUrl, false, $context);
-} else {
-    $testKeyUrl = "http://data.fixer.io/api/latest?access_key=" . urlencode($fixerApiKey);
-    $context = stream_context_create([
-        'http' => [
-            'method' => 'GET',
-            'ignore_errors' => true
-        ]
-    ]);
-    $response = @file_get_contents($testKeyUrl, false, $context);
-}
+// Validate the API key against the provider through the same client the
+// scheduled and manual refreshes use. It makes the one request, reports whether
+// it succeeded, and returns the APILayer rate-limit headers it read — the
+// monthly pair and the daily one beside it — so that parsing lives in exactly
+// one place and no plaintext fixer.io test URL survives here (#150). mode
+// 'custom' attributes the figure to this account's own key rather than to the
+// instance settings.
+$config = [
+    'valid' => true,
+    'mode' => 'custom',
+    'values' => ['provider' => $provider, 'api_key' => $fixerApiKey],
+    'notes' => [],
+];
+$test = wallos_fetch_exchange_rates($config, 'EUR,USD');
 
-// Populated by PHP only when a response arrived. With ignore_errors set above,
-// a false response now means nothing answered at all, rather than answering no.
-$status = wallos_http_status_code(isset($http_response_header) ? $http_response_header : null);
-
-if ($response === false) {
-    echo json_encode([
-        'success' => false,
-        'title' => 'Validation error',
-        'message' => wallos_provider_failure_message($status, null)
-    ]);
-    exit;
-}
-
-// Parse headers for APILayer limit info
-$usageLimit = null;
-$usageRemaining = null;
-if ($provider === 1 && isset($http_response_header)) {
-    foreach ($http_response_header as $header) {
-        if (stripos($header, 'x-ratelimit-limit-month:') === 0) {
-            $usageLimit = (int) trim(substr($header, strlen('x-ratelimit-limit-month:')));
-        } elseif (stripos($header, 'x-ratelimit-remaining-month:') === 0) {
-            $usageRemaining = (int) trim(substr($header, strlen('x-ratelimit-remaining-month:')));
-        }
-    }
-}
-
-$apiData = json_decode($response, true);
-if (isset($apiData['success']) && $apiData['success'] == true) {
-    // Delete existing settings first
-    //
-    // Checked, because the insert that follows is: a failed delete leaves the
-    // account with two provider keys and nothing saying which one is used
-    // (issue #87). The insert already reported its own failure, which made this
-    // the one half of the pair that could fail quietly.
-    $removeSql = "DELETE FROM fixer WHERE user_id = :userId";
-    $removeStmt = $db->prepare($removeSql);
-    $removed = false;
-
-    if ($removeStmt !== false) {
-        $removeStmt->bindParam(':userId', $userId, SQLITE3_INTEGER);
-        $removed = $removeStmt->execute() !== false;
-    }
-
-    if (!$removed) {
-        error_log('Wallos set_fixer: could not remove the previous provider key for user '
-            . $userId . ': ' . $db->lastErrorMsg());
-
-        echo json_encode([
-            'success' => false,
-            'title' => 'Database error',
-            'message' => 'The previous provider key could not be replaced.',
-        ]);
-
-        exit;
-    }
-
-    // Insert new settings
-    $insertSql = "INSERT INTO fixer (api_key, provider, user_id) VALUES (:api_key, :provider, :userId)";
-    $stmtInsert = $db->prepare($insertSql);
-    $stmtInsert->bindParam(':api_key', $fixerApiKey, SQLITE3_TEXT);
-    $stmtInsert->bindParam(':provider', $provider, SQLITE3_INTEGER);
-    $stmtInsert->bindParam(':userId', $userId, SQLITE3_INTEGER);
-    $resultInsert = $stmtInsert->execute();
-
-    if ($resultInsert) {
-        // If usage limits are parsed and supported by the db schema
-        if ($usageLimit !== null && $usageRemaining !== null
-            && $db->columnExists('fixer', 'usage_used') > 0) {
-            $usageStmt = $db->prepare("UPDATE fixer SET usage_used = :used, usage_limit = :limit, usage_updated_at = :updatedAt WHERE user_id = :userId");
-            $usageStmt->bindValue(':used', $usageLimit - $usageRemaining, SQLITE3_INTEGER);
-            $usageStmt->bindValue(':limit', $usageLimit, SQLITE3_INTEGER);
-            $usageStmt->bindValue(':updatedAt', date('Y-m-d H:i:s'), SQLITE3_TEXT);
-            $usageStmt->bindValue(':userId', $userId, SQLITE3_INTEGER);
-
-            // Quota is what the settings page shows to explain why refreshes
-            // stopped. A figure that silently stayed where it was is worse than
-            // none at all — but the key itself is saved, so this reports rather
-            // than failing the request.
-            if ($usageStmt->execute() === false) {
-                error_log('Wallos set_fixer: the provider key was saved but its quota was not recorded for user '
-                    . $userId . ': ' . $db->lastErrorMsg());
-            }
-        }
-
-        echo json_encode([
-            'success' => true,
-            'title' => 'Fixer settings updated',
-            'message' => 'Fixer API settings have been saved successfully.'
-        ]);
-    } else {
-        echo json_encode([
-            'success' => false,
-            'title' => 'Database error',
-            'message' => 'Failed to save Fixer API settings.'
-        ]);
-    }
-} else {
+if (!$test['success']) {
     // A quota that ran out and a provider having a bad day are not the key
     // being wrong, and telling an admin to replace a working key is worse than
-    // saying nothing: they will replace it, and the new one will fail too.
-    $providerFault = ($status === 429 || ($status !== null && $status >= 500));
+    // saying nothing: they will replace it, and the new one will fail too. The
+    // shared client already phrased the reason; this only sorts it into the
+    // right title off the status it carried back.
+    $providerFault = ($test['status'] === 429
+        || ($test['status'] !== null && $test['status'] >= 500));
 
     echo json_encode([
         'success' => false,
         'title' => $providerFault ? 'Currency provider unavailable' : 'Invalid Fixer API key',
-        'message' => wallos_provider_failure_message($status, $apiData)
+        'message' => $test['message'],
     ]);
+
+    $db->close();
+    exit;
 }
+
+// Delete existing settings first
+//
+// Checked, because the insert that follows is: a failed delete leaves the
+// account with two provider keys and nothing saying which one is used
+// (issue #87). The insert already reported its own failure, which made this
+// the one half of the pair that could fail quietly.
+$removeSql = "DELETE FROM fixer WHERE user_id = :userId";
+$removeStmt = $db->prepare($removeSql);
+$removed = false;
+
+if ($removeStmt !== false) {
+    // Cast rather than type-declared: both backends infer the type from the PHP
+    // value, and new code has no reason to widen the SQLite boundary the audit
+    // exists to shrink (#20).
+    $removeStmt->bindValue(':userId', (int) $userId);
+    $removed = $removeStmt->execute() !== false;
+}
+
+if (!$removed) {
+    error_log('Wallos set_fixer: could not remove the previous provider key for user '
+        . $userId . ': ' . $db->lastErrorMsg());
+
+    echo json_encode([
+        'success' => false,
+        'title' => 'Database error',
+        'message' => 'The previous provider key could not be replaced.',
+    ]);
+
+    $db->close();
+    exit;
+}
+
+// Insert new settings. provider_mode is written 'custom' so config resolution
+// reads this account's own key; without it the row defaults to 'instance'
+// (migration 000055) and the key just saved is stored and then ignored.
+$insertSql = "INSERT INTO fixer (api_key, provider, provider_mode, user_id)
+              VALUES (:api_key, :provider, 'custom', :userId)";
+$stmtInsert = $db->prepare($insertSql);
+$stmtInsert->bindValue(':api_key', (string) $fixerApiKey);
+$stmtInsert->bindValue(':provider', (int) $provider);
+$stmtInsert->bindValue(':userId', (int) $userId);
+$resultInsert = $stmtInsert->execute();
+
+if (!$resultInsert) {
+    echo json_encode([
+        'success' => false,
+        'title' => 'Database error',
+        'message' => 'Failed to save Fixer API settings.'
+    ]);
+
+    $db->close();
+    exit;
+}
+
+// The verification above was a real provider request with this account's own
+// key, so it counts against them — recorded now that the row exists to keep the
+// figure in. An answer served from the per-run cache carries no transport and
+// is not a request, so it is not counted.
+if ($test['transport']) {
+    wallos_count_currency_call($db, $config, $userId);
+}
+
+// The APILayer month-and-day usage the shared client read from the same
+// response, stored against this account's own fixer row (mode 'custom') so the
+// settings page can show it. The store keeps this path's header capture in step
+// with the scheduled refresh instead of a second, month-only copy of it.
+wallos_store_currency_usage($db, $config, $userId, $test['usage']);
+
+echo json_encode([
+    'success' => true,
+    'title' => 'Fixer settings updated',
+    'message' => 'Fixer API settings have been saved successfully.'
+]);
 
 $db->close();
 ?>
