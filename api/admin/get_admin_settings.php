@@ -54,7 +54,6 @@ if ($_SERVER["REQUEST_METHOD"] === "POST" || $_SERVER["REQUEST_METHOD"] === "GET
 
     $sql = "SELECT * FROM \"admin\"";
     $stmt = $db->prepare($sql);
-    $stmt->bindValue(':userId', $userId);
     $result = $stmt->execute();
     $admin_settings = $result->fetchArray(SQLITE3_ASSOC);
 
