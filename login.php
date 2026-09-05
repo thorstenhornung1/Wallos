@@ -465,20 +465,7 @@ if (isset($_GET['error'])) {
                     </div>
                 <?php } ?>
                 <div class="form-group">
-                    <?php
-                    if ($oidcEnabled) {
-                        if (!$password_login_disabled) {
-                            ?>
-                            <span class="or-separator"><?= translate('or', $i18n) ?></span>
-                            <?php
-                        }
-                        ?>
-                        <a class="button secondary-button" href="<?= htmlspecialchars($oidc_auth_url) ?>">
-                            <?= translate('login_with', $i18n) ?>     <?= htmlspecialchars($oidc_name) ?>
-                        </a>
-                        <?php
-                    }
-                    ?>
+                    <?php include __DIR__ . '/includes/login_oidc_button.php'; ?>
                 </div>
                 <?php
                 // verifyemail.php sends people here with validated=false when the

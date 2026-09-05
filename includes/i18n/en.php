@@ -29,6 +29,7 @@ $i18n = [
     "stay_logged_in" => "Stay logged in (30 days)",
     "login" => "Login",
     "login_with" => "Login with",
+    "login_with_provider" => "Login with your login provider",
     "or" => "or",
     "login_failed" => "Login details are incorrect",
     "registration_successful" => "Registration successful",
