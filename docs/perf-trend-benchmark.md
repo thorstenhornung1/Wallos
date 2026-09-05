@@ -134,6 +134,41 @@ absolute figure is the point: half a million active subscriptions is already pas
 128 MB default, and a million is past a gigabyte. The trade the loader documents,
 made visible.
 
+## Baseline idle RAM — a floor, not a curve
+
+The tables above watch a curve's *shape* as data grows. One cost they cannot show is
+the one that does not move with the data at all: the memory a freshly-started, idle
+instance holds before it serves anything. `dev/benchmark.sh` records that too, as a
+single number beside the backend header — the container's resident memory once the
+pool has been quiesced.
+
+It is measured, not asserted, for the same reason nothing else here is gated. The
+absolute figure drifts with the PHP build, the allocator and the base image, so a
+reading on one machine does not travel to another — only a **same-machine series over
+releases** means anything. What it catches is exactly what a single reading cannot: a
+new always-on worker, a leak, or a bloated default creeping the idle floor from, say,
+18 to 40 MiB across three releases without any single threshold ever breaking. That is
+the growth-factor lesson applied to a number instead of a curve — the drift is only
+visible once it is written down and dated.
+
+There is no F/R here, and there should not be. Idle RAM does not grow with the seed
+size — it is the empty-instance floor — so a ladder would measure nothing. The number
+reflects FPM `pm = ondemand` (Dockerfile): an idle household box holds no pre-forked
+workers, so after `pm.process_idle_timeout` (10s) the floor is the master plus nginx
+alone. The harness waits past that timeout before reading, so the figure is the
+settled floor and not a worker mid-reap.
+
+The reading is the container's own cgroup memory accounting — `memory.current` on
+cgroup v2, `memory/memory.usage_in_bytes` on v1 — read through the same in-container
+exec path everything else here uses, because that is the ground truth, not a reparse
+of `podman stats`. If no cgroup file is readable (an unusual runtime, a host without
+the file, a namespace that hides it), the line reads `idle RAM  unavailable (why)`
+rather than a wrong number, and the run carries on.
+
+**On a jump: investigate, do not gate.** A higher floor across releases means a new
+always-on cost arrived — go and find the worker, the leak or the default. It is never
+a build to fail.
+
 ## A dated record, appended over time
 
 The durable artefact is this table, dated, extended by hand — the same shape
@@ -177,6 +212,20 @@ small end. No bend.
 
 Flat on both backends: the #99/#18 bulk-load fix holds, and on PostgreSQL — where an
 N+1 would show — it stays flat. This is the line a future regression would bend.
+
+**Baseline idle RAM (container cgroup `memory.current`, pool quiesced 12s):**
+
+| date | backend | idle RAM |
+| --- | --- | --- |
+| 2026-09-05 | SQLite (throwaway, `pm=ondemand`) | 17.9 MiB |
+
+The container floor once `pm = ondemand` has reaped every worker: the FPM master and
+nginx, no pre-forked workers held. Read it as a floor across releases, not as an
+absolute — a jump on the same machine is a new always-on cost (a worker, a leak, a
+default) to investigate, never to gate. A single number, not a ladder: idle RAM does
+not grow with the seed, so there is no F/R. Essentially backend-independent in
+practice — the driver loads either way and the idle pool is empty — so this one row
+stands for the container, not per-backend.
 
 ## Reproducing
 
