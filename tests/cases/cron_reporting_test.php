@@ -187,8 +187,37 @@ wallos_test('a job that finishes exits zero and records success', function () {
     assert_same(WALLOS_CRON_OK, $row['status'], 'and recorded success');
     assert_contains('sent=3', $row['detail'], 'the detail carries what it achieved');
     assert_contains('nothing unusual', $row['detail'], 'and the summary it gave');
+    assert_contains('peak=', $row['detail'],
+        'and the peak memory it reached — the one O(rows) load worth being able to watch');
 
     $db->close();
+});
+
+wallos_test('the detail leads with peak memory and its length cap still holds', function () {
+    // Peak is observability, not a gate: it drifts with the PHP build, opcache
+    // and allocator, so nothing here asserts a number — only that the field is
+    // present, that it leads the string beside duration= in the log line, and
+    // that adding it did not disturb the cap that keeps the detail from becoming
+    // a log file.
+    $run = ['counts' => ['sent' => 2], 'summary' => 'the ordinary summary', 'problems' => []];
+    $detail = wallos_cron_detail($run);
+
+    assert_contains('peak=', $detail, 'the detail carries the run\'s peak memory');
+    assert_true(strpos($detail, 'peak=') < strpos($detail, 'sent='),
+        'and carries it first, ahead of the counts, so it sits beside duration=');
+
+    // A stack of problems well past the limit: the cap must still cut it to the
+    // limit and mark the cut, and because peak leads, the field survives.
+    $flood = ['counts' => [], 'summary' => '', 'problems' => []];
+    for ($i = 0; $i < 500; $i++) {
+        $flood['problems']['a reason long enough to matter, number ' . $i] = 1;
+    }
+    $capped = wallos_cron_detail($flood);
+
+    assert_true(strlen($capped) <= WALLOS_CRON_DETAIL_LIMIT,
+        'the detail is still capped at its limit (' . strlen($capped) . ' bytes)');
+    assert_same('...', substr($capped, -3), 'and still says it was cut');
+    assert_contains('peak=', $capped, 'while the leading peak field survives the cut');
 });
 
 wallos_test('a reported problem fails the run even when everything else worked', function () {

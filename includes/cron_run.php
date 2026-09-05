@@ -346,15 +346,22 @@ function wallos_cron_shutdown()
 /**
  * The one string that has to carry both what happened and what was achieved.
  *
- * Counts come first because they are what distinguishes "nothing to do" from
- * "nothing got through", and those two are the same silence today.
+ * Peak resident memory leads it, then the counts: counts are what distinguish
+ * "nothing to do" from "nothing got through", and those two are the same
+ * silence today.
  *
  * @param array $run
  * @return string
  */
 function wallos_cron_detail($run)
 {
-    $parts = [];
+    // Peak resident memory, beside duration= in the log line. The bulk
+    // notification load is the one scheduled path whose footprint grows with the
+    // rows it touches, and this is where an operator can watch it approach the
+    // memory limit before it exhausts it. It leads the detail so the cap below
+    // never truncates it away. Recorded, never gated: peak drifts with the PHP
+    // build, opcache and allocator, so nothing asserts a threshold on it.
+    $parts = ['peak=' . memory_get_peak_usage(true)];
 
     foreach ($run['counts'] as $key => $value) {
         $parts[] = $key . '=' . $value;

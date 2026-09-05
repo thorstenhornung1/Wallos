@@ -4,6 +4,7 @@ require_once 'i18n/getlang.php';
 require_once __DIR__ . '/currency_rates.php';
 require_once __DIR__ . '/subscription_progress.php';
 require_once __DIR__ . '/date_formatter.php';
+require_once __DIR__ . '/currency_symbol_map.php';
 
 function getBillingCycle($cycle, $frequency, $i18n)
 {
@@ -52,16 +53,16 @@ function formatPrice($price, $currencyCode, $currencies)
     $formattedPrice = CurrencyFormatter::format($price, $currencyCode);
     if (strstr($formattedPrice, $currencyCode)) {
         $symbol = $currencyCode;
-        
-        foreach ($currencies as $currency) {
 
-            if ($currency['code'] === $currencyCode) {
-                if ($currency['symbol'] != "") {
-                    $symbol = $currency['symbol'];
-                }
-                break;
-            }
+        // One code => symbol map for the whole request instead of a fresh scan
+        // of every currency on every price: the symbol a code prints as is the
+        // same for every row. An empty stored symbol keeps the code as the
+        // symbol, which is the fallback the scan made on that same row.
+        $symbols = wallos_currency_symbol_map($currencies);
+        if (isset($symbols[$currencyCode]) && $symbols[$currencyCode] != "") {
+            $symbol = $symbols[$currencyCode];
         }
+
         $formattedPrice = str_replace($currencyCode, $symbol, $formattedPrice);
     }
 
