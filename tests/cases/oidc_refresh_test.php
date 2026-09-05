@@ -95,7 +95,7 @@ function refresh_fixture($db, $sessionId)
         'name' => 'Test provider',
         'client_id' => 'wallos',
         'client_secret' => 'confidential',
-        'token_url' => 'http://93.184.216.34/token',
+        'token_url' => 'https://93.184.216.34/token',
     ], []);
 
     assert_true($saved['success'], 'the fixture configured a provider: ' . (string) $saved['error']);

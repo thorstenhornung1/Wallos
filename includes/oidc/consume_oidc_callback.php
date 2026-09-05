@@ -24,6 +24,12 @@ $code = $_GET['code'];
 $state = $_GET['state'];
 $expectedState = $_SESSION['oidc_state'] ?? null;
 
+// The PKCE verifier travels with the state: read it here, and clear it in
+// the same unset below, so a single callback consumes both exactly once.
+// handle_oidc_callback.php, required at the end of the success path, reads
+// this local value for the token exchange after the session copy is gone.
+$codeVerifier = $_SESSION['oidc_code_verifier'] ?? null;
+
 // Three different problems with three different fixes, so they get three
 // different answers rather than one shared "invalid state".
 $failure = null;
@@ -42,12 +48,12 @@ if ($failure !== null) {
     wallos_oidc_log_failure($failure, [
         'had_session_state' => is_string($expectedState) && $expectedState !== '' ? 'yes' : 'no',
     ]);
-    unset($_SESSION['oidc_state']);
+    unset($_SESSION['oidc_state'], $_SESSION['oidc_code_verifier']);
     $db->close();
     header("Location: login.php?error=" . $failure);
     exit();
 }
 
-unset($_SESSION['oidc_state']);
+unset($_SESSION['oidc_state'], $_SESSION['oidc_code_verifier']);
 
 require_once __DIR__ . '/handle_oidc_callback.php';

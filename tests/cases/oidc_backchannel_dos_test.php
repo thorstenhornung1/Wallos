@@ -277,7 +277,7 @@ wallos_test('discovery refuses a disallowed issuer and accepts a public one', fu
 
     // Positive control: the gate the function consults accepts a public issuer.
     assert_true(
-        validate_oidc_endpoint_url('http://93.184.216.34/.well-known/openid-configuration', $db) !== false,
+        validate_oidc_endpoint_url('https://93.184.216.34/.well-known/openid-configuration', $db) !== false,
         'a public issuer address passes the allowlist discovery now consults');
 
     $db->close();

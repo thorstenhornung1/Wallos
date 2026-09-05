@@ -210,7 +210,7 @@ wallos_test('nothing secret is logged', function () {
     assert_true($matches[1] !== [], 'there are log calls to check');
 
     foreach ($matches[1] as $call) {
-        foreach (['client_secret', 'access_token', 'id_token', "\$_GET['code']", '$code'] as $forbidden) {
+        foreach (['client_secret', 'access_token', 'id_token', 'code_verifier', "\$_GET['code']", '$code'] as $forbidden) {
             assert_not_contains($forbidden, $call, 'no credential in a log call');
         }
     }
