@@ -8,8 +8,11 @@ $lastname = $parts[1] ?? '';
 
 // Defaults
 //
-// The provider's locale is used once, when the account is created. From then on
-// the language belongs to the Wallos user and later logins never overwrite it.
+// The provider's locale seeds the language when the account is created. It is no
+// longer the last word: every later OIDC login re-applies the language, along
+// with the name and email, from the userinfo claims (see
+// includes/oidc/oidc_profile_sync.php). A claim the provider omits is left
+// untouched, so a provider that sends no locale leaves the language seeded here.
 require_once __DIR__ . '/../integration_config.php';
 
 $language = wallos_resolve_language(

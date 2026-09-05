@@ -11,6 +11,25 @@ $result = $stmt->execute();
 while ($row = $result->fetchArray(SQLITE3_ASSOC)) {
     $uploadedAvatars[] = $row['path'];
 }
+
+// OIDC-linked accounts have their name, email and language governed by the
+// identity provider. The login refresh in includes/oidc/oidc_profile_sync.php
+// re-applies the userinfo claims on every sign-in, so the fields the provider
+// supplies are shown read-only here rather than inviting an edit the next login
+// would revert. The provider label is the configured display name, with a
+// neutral fallback -- never a hard-wired provider name.
+require_once 'includes/oidc_settings.php';
+require_once 'includes/oidc/oidc_profile_sync.php';
+$oidcConfiguration = wallos_get_effective_oidc_configuration($db);
+$oidcSettings = $oidcConfiguration['settings'];
+$oidcLinked = trim((string) ($userData['oidc_sub'] ?? '')) !== '';
+$oidcEffective = (int) $oidcConfiguration['enabled'] === 1 && $oidcConfiguration['is_configured'];
+$providerManagedFields = ($oidcEffective && $oidcLinked)
+    ? wallos_oidc_managed_profile_fields($oidcSettings)
+    : [];
+$providerName = trim((string) ($oidcSettings['name'] ?? ''));
+$providerLabel = $providerName !== '' ? $providerName : translate('your_login_provider', $i18n);
+$providerManagedNote = sprintf(translate('field_managed_by_provider', $i18n), $providerLabel);
 ?>
 
 <script src="scripts/libs/sortable.min.js"></script>
@@ -18,6 +37,15 @@ while ($row = $result->fetchArray(SQLITE3_ASSOC)) {
 <style>
     .logo-preview:after {
         content: '<?= translate('upload_logo', $i18n) ?>';
+    }
+    .provider-managed-note {
+        display: block;
+        margin: 4px 0 8px;
+        font-size: 12px;
+        opacity: 0.7;
+    }
+    .provider-managed-note i {
+        margin-right: 4px;
     }
 </style>
 <section class="contain settings">
@@ -81,18 +109,21 @@ while ($row = $result->fetchArray(SQLITE3_ASSOC)) {
                         </div>
                         <div class="form-group">
                             <label for="firstname"><?= translate('firstname', $i18n) ?>:</label>
+                            <?php if (in_array('firstname', $providerManagedFields, true)): ?><small class="provider-managed-note"><i class="fa-solid fa-lock"></i> <?= htmlspecialchars($providerManagedNote, ENT_QUOTES, 'UTF-8') ?></small><?php endif ?>
                             <input type="text" id="firstname" name="firstname" autocomplete="given-name"
-                                value="<?= htmlspecialchars($userData['firstname']) ?>">
+                                value="<?= htmlspecialchars($userData['firstname']) ?>"<?= in_array('firstname', $providerManagedFields, true) ? ' readonly' : '' ?>>
                         </div>
                         <div class="form-group">
                             <label for="lastname"><?= translate('lastname', $i18n) ?>:</label>
+                            <?php if (in_array('lastname', $providerManagedFields, true)): ?><small class="provider-managed-note"><i class="fa-solid fa-lock"></i> <?= htmlspecialchars($providerManagedNote, ENT_QUOTES, 'UTF-8') ?></small><?php endif ?>
                             <input type="text" id="lastname" name="lastname" autocomplete="family-name"
-                                value="<?= htmlspecialchars($userData['lastname']) ?>">
+                                value="<?= htmlspecialchars($userData['lastname']) ?>"<?= in_array('lastname', $providerManagedFields, true) ? ' readonly' : '' ?>>
                         </div>
                         <div class="form-group">
                             <label for="email"><?= translate('email', $i18n) ?>:</label>
+                            <?php if (in_array('email', $providerManagedFields, true)): ?><small class="provider-managed-note"><i class="fa-solid fa-lock"></i> <?= htmlspecialchars($providerManagedNote, ENT_QUOTES, 'UTF-8') ?></small><?php endif ?>
                             <input type="email" id="email" name="email" autocomplete="email"
-                                value="<?= htmlspecialchars($userData['email']) ?>" required>
+                                value="<?= htmlspecialchars($userData['email']) ?>"<?= in_array('email', $providerManagedFields, true) ? ' readonly' : '' ?> required>
                         </div>
                         <div class="form-group">
                             <label for="password"><?= translate('password', $i18n) ?>:</label>
@@ -135,7 +166,8 @@ while ($row = $result->fetchArray(SQLITE3_ASSOC)) {
                         </div>
                         <div class="form-group">
                             <label for="language"><?= translate('language', $i18n) ?>:</label>
-                            <select id="language" name="language" placeholder="Language">
+                            <?php if (in_array('language', $providerManagedFields, true)): ?><input type="hidden" name="language" value="<?= htmlspecialchars($lang, ENT_QUOTES, 'UTF-8') ?>"><small class="provider-managed-note"><i class="fa-solid fa-lock"></i> <?= htmlspecialchars($providerManagedNote, ENT_QUOTES, 'UTF-8') ?></small><?php endif ?>
+                            <select id="language" name="language" placeholder="Language"<?= in_array('language', $providerManagedFields, true) ? ' disabled' : '' ?>>
                                 <?php
                                 foreach ($languages as $code => $language) {
                                     $selected = ($code === $lang) ? 'selected' : '';

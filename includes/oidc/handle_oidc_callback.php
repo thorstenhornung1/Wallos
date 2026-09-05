@@ -123,6 +123,8 @@ if ($userData) {
     // picture. A bad picture is ignored and never fails the login.
     require_once __DIR__ . '/oidc_avatar.php';
     wallos_oidc_maybe_update_avatar($db, $userData, $userInfo['picture'] ?? null, $oidcSub);
+    require_once __DIR__ . '/oidc_profile_sync.php';
+    wallos_oidc_maybe_update_profile($db, $userData, $userInfo, $oidcSettings);
     require_once('oidc_login.php');
 
 } else {
@@ -173,6 +175,9 @@ if ($userData) {
 
         require_once __DIR__ . '/oidc_avatar.php';
         wallos_oidc_maybe_update_avatar($db, $userData, $userInfo['picture'] ?? null, $oidcSub);
+        $userData['oidc_sub'] = $oidcSub;
+        require_once __DIR__ . '/oidc_profile_sync.php';
+        wallos_oidc_maybe_update_profile($db, $userData, $userInfo, $oidcSettings);
         // Log the user in
         require_once('oidc_login.php');
     } else {
