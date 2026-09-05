@@ -58,8 +58,15 @@ if (!isset($data["webhook_url"]) || $data["webhook_url"] == "") {
         $stmt->bindValue(':enabled', $enabled, SQLITE3_INTEGER);
         $stmt->bindValue(':webhook_url', $webhook_url, SQLITE3_TEXT);
         $stmt->bindValue(':userId', $userId, SQLITE3_INTEGER);
-        $stmt->bindValue(':bot_username', $bot_username, SQLITE3_TEXT);
-        $stmt->bindValue(':bot_icon_emoji', $bot_iconemoji, SQLITE3_TEXT);
+        // The INSERT above names these two columns; the UPDATE does not. Binding
+        // them on the UPDATE path is a stray parameter: SQLite ignores it, but
+        // PostgreSQL rejects the unknown placeholder, execute() returns false and
+        // an ordinary settings change is reported as a failure. Bind them only on
+        // the branch whose SQL declares them.
+        if ($count == 0) {
+            $stmt->bindValue(':bot_username', $bot_username, SQLITE3_TEXT);
+            $stmt->bindValue(':bot_icon_emoji', $bot_iconemoji, SQLITE3_TEXT);
+        }
 
         if ($stmt->execute()) {
             $response = [
