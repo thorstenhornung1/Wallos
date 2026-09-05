@@ -4,13 +4,36 @@ FROM php:8.3-fpm-alpine
 # Set working directory to /var/www/html
 WORKDIR /var/www/html
 
-# Update packages and install dependencies
+# Update packages and install dependencies.
+#
+# Two groups. The runtime packages stay in the image; the build-only ones go in
+# a virtual package that is deleted in this same layer once the extensions are
+# built, so the compiler headers never ship — they were extra size and extra CVE
+# surface for something no runtime needs (the base image carries no toolchain to
+# rebuild an extension anyway).
+#
+# The catch that makes this more than a one-liner: the extension .so files link
+# libpq (pdo_pgsql), icu-libs (intl), libwebp (gd) and libzip (zip) at runtime,
+# and those four were present only as transitive dependencies of the -dev
+# headers. Deleting the headers would have taken the runtime libraries with them
+# and broken the extension at *runtime*, not at build. They are named explicitly
+# here so `apk del` keeps them. (icu-libs pulls libstdc++/libgcc, libwebp pulls
+# libsharpyuv; keeping the parents keeps those.) Verified against `ldd` of every
+# built .so, not assumed. Every package named is architecture-agnostic — this
+# builds identically on each architecture upstream ships.
 RUN apk upgrade --no-cache && \
-    apk add --no-cache dumb-init shadow sqlite-dev libpng libpng-dev libjpeg-turbo libjpeg-turbo-dev freetype freetype-dev curl autoconf libgomp icu-dev icu-data-full nginx supercronic libcap-setcap tzdata libzip-dev sqlite libwebp-dev libpq-dev && \
+    apk add --no-cache \
+        dumb-init shadow curl libgomp nginx supercronic libcap-setcap tzdata \
+        sqlite libpng libjpeg-turbo freetype icu-data-full icu-libs \
+        libwebp libpq libzip && \
+    apk add --no-cache --virtual .build-deps \
+        autoconf sqlite-dev libpng-dev libjpeg-turbo-dev freetype-dev icu-dev \
+        libwebp-dev libpq-dev libzip-dev && \
     docker-php-ext-install pdo pdo_sqlite pdo_pgsql calendar && \
     docker-php-ext-enable pdo pdo_sqlite pdo_pgsql && \
     docker-php-ext-configure gd --with-freetype --with-jpeg --with-webp && \
-    docker-php-ext-install -j$(nproc) gd intl zip
+    docker-php-ext-install -j$(nproc) gd intl zip && \
+    apk del --no-network .build-deps
 
 # Copy your PHP application files into the container
 COPY . .
