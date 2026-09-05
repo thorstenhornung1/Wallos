@@ -51,6 +51,16 @@ RUNS=5
 # nothing; one that gives up after a bound says which figure is missing.
 RATES_TIMEOUT=${WALLOS_RATES_TIMEOUT:-20}
 CRON_TIMEOUT=${WALLOS_CRON_TIMEOUT:-180}
+
+# Baseline idle RAM (see measure_idle_ram). The pool must sit idle past the FPM
+# ondemand pm.process_idle_timeout — 10s in the Dockerfile — before the reading
+# is the true floor rather than a worker mid-reap, so quiesce a little longer.
+# The cgroup memory file is overridable so the soft-fail path can be exercised
+# against a missing one; the defaults are the v2 and v1 cgroup layouts.
+IDLE_QUIESCE=${WALLOS_IDLE_QUIESCE:-12}
+IDLE_CGROUP_V2=${WALLOS_IDLE_CGROUP_V2:-/sys/fs/cgroup/memory.current}
+IDLE_CGROUP_V1=${WALLOS_IDLE_CGROUP_V1:-/sys/fs/cgroup/memory/memory.usage_in_bytes}
+
 # The rates column is the only part of this script that costs anything: it runs
 # the exchange job once per tier, five runs each, which is roughly 555 calls
 # against the configured provider. A free tier is 100 a month, so a single
@@ -171,6 +181,53 @@ measure_cron_load() {
     $EXEC $BENCH measure-cron-load "$RUNS" "$CRON_TIMEOUT"
 }
 
+# Baseline idle RAM: the container's resident memory once the pool is quiesced.
+#
+# Recorded over releases, never asserted. It is the single-number analogue of the
+# growth-factor tables — a floor to watch, not a curve and not a gate. A new
+# always-on cost (a pre-forked worker, a leak, a bloated default) creeps this
+# floor up across releases with no threshold ever tripping; only a dated series
+# catches that. Absolute RAM drifts with the PHP build, the allocator and the
+# base image, so only a same-machine series over releases means anything —
+# docs/perf-trend-benchmark.md says so beside the number.
+#
+# The ground truth is the container's own cgroup memory accounting, read through
+# the in-container exec path the rest of this script already uses — not a parse
+# of `podman stats`, which reformats a figure this reads at the source. cgroup v2
+# exposes memory.current; the v1 layout exposes memory/memory.usage_in_bytes.
+# Under podman's default private cgroup namespace the file the container sees is
+# its own. The paths are passed as arguments so IDLE_CGROUP_* can point the read
+# at a missing file to exercise the soft-fail.
+#
+# Fails soft: an unreadable cgroup file, or an exec that cannot reach the
+# container, prints "unavailable (why)" rather than a wrong number or a crash.
+measure_idle_ram() {
+    # login has already served requests, so a worker existed; wait past the
+    # ondemand idle timeout for it to be reaped and the pool to become the
+    # master alone before reading the floor.
+    sleep "$IDLE_QUIESCE"
+
+    idle_bytes=$($EXEC sh -c '
+        if [ -r "$1" ]; then cat "$1"
+        elif [ -r "$2" ]; then cat "$2"
+        else echo no-cgroup-file
+        fi
+    ' _ "$IDLE_CGROUP_V2" "$IDLE_CGROUP_V1" 2>/dev/null) || idle_bytes=exec-failed
+
+    case "$idle_bytes" in
+        no-cgroup-file)
+            printf 'unavailable (no readable cgroup memory file in the container)' ;;
+        exec-failed)
+            printf 'unavailable (could not read memory from the container)' ;;
+        ''|*[!0-9]*)
+            printf 'unavailable (cgroup memory value was not a number)' ;;
+        *)
+            printf '%s' "$idle_bytes" |
+                awk -v q="$IDLE_QUIESCE" \
+                    '{ printf "%.1f MiB  (baseline floor; cgroup, idle after %ds quiesce)", $1 / 1048576, q }' ;;
+    esac
+}
+
 # The whole detector: the normalized growth factor F/R = (a figure's x-growth)
 # divided by (the size's x-growth) between two adjacent points. A number, not a
 # threshold, is what survives the environment: the 4x spread between loopback
@@ -243,9 +300,17 @@ cron_tables() {
 TARGET=$($EXEC $BENCH target)
 
 printf '\nWallos benchmark — %s, median of %d runs\n' "$BASE" "$RUNS"
-printf 'database        %s\n\n' "$TARGET"
+printf 'database        %s\n' "$TARGET"
 
 login
+
+# Baseline idle RAM, recorded beside the backend header. login just served two
+# requests, so a worker existed; measure_idle_ram waits past the ondemand idle
+# timeout for it to be reaped, then reads the container's cgroup memory. It is a
+# floor to watch across releases, never a gate — docs/perf-trend-benchmark.md is
+# the reading guide. Measured here, before any seeding, because idle RAM does not
+# grow with the seed size: it is the empty-instance floor, not a curve.
+printf 'idle RAM        %s\n\n' "$(measure_idle_ram)"
 
 # The account is the link between the two halves of this script: the pages are
 # fetched over HTTP as this user, the rows are written over a CLI connection. If
