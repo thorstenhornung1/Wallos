@@ -87,6 +87,18 @@ RUN dos2unix /etc/cron.d/cronjobs && \
     chmod +x /var/www/html/startup.sh && \
     echo 'pm.max_children = 15' >> /usr/local/etc/php-fpm.d/zz-docker.conf && \
     echo 'pm.max_requests = 500' >> /usr/local/etc/php-fpm.d/zz-docker.conf && \
+    # ondemand instead of the base image's dynamic pool. dynamic pre-forks
+    # pm.start_servers workers (2, from www.conf) and holds pm.min_spare of
+    # them for as long as the container lives, whether or not anyone is using
+    # it. A self-hosted household issues a request or two at a time and then
+    # sits idle for minutes; ondemand forks a worker only when a request needs
+    # one and reaps it after pm.process_idle_timeout, so an idle instance holds
+    # the master alone and no worker RAM. pm.max_children = 15 above stays the
+    # ceiling, so a burst still forks up to fifteen workers on demand — the
+    # only cost is one fork's latency on the first hit after an idle spell, and
+    # the opcache is shared, so that worker starts warm, not recompiling.
+    echo 'pm = ondemand' >> /usr/local/etc/php-fpm.d/zz-docker.conf && \
+    echo 'pm.process_idle_timeout = 10s' >> /usr/local/etc/php-fpm.d/zz-docker.conf && \
     # The second half of the nginx rules that refuse PHP under db/ and
     # images/uploads/ (issue #94). nginx decides what it passes to php-fpm;
     # this decides what php-fpm agrees to run when something else asks. Two
