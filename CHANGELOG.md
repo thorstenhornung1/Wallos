@@ -1,5 +1,90 @@
 # Changelog
 
+## [5.12.0](https://github.com/thorstenhornung1/Wallos/releases/tag/v5.12.0) (2026-09-05)
+
+### Added
+
+* **currency:** **Frankfurter v2**, an exchange-rate provider that needs no
+  account, no API key and has no request quota. Selecting it is the whole
+  configuration, so a fresh installation converts currencies without first
+  registering with a rate provider. Fixer stays first-class and nobody is
+  migrated — Frankfurter has no cryptocurrency, so an account tracking a crypto
+  subscription still needs fixer, and choosing Frankfurter no longer deletes a
+  stored fixer key on either the settings page or the API. Frankfurter is asked
+  in the account's own main currency rather than through EUR, and the run cache
+  keys on the base so a non-EUR account is never served EUR rates. A currency
+  it cannot price keeps its previous rate and is named in the cron report
+  (`held=1; not priced: BTC`) rather than moving silently to nothing.
+
+* **notifications:** the instance-configuration resolver now covers
+  **Telegram, Pushover, ntfy and Gotify**. The admin (or an environment secret)
+  supplies the shared credential — the bot token, the application token, the
+  ntfy server and auth headers, the Gotify host — and each user supplies only
+  their own identifier: their chat id, user key, topic or per-user app token.
+  No user configures the shared secret, one user's identifier never reaches
+  another's delivery, and existing per-user configurations keep working
+  untouched.
+
+### Security
+
+* **oidc:** **the identity provider is now authoritative over an OIDC
+  session's lifetime.** Back-channel logout was only delivered while a live
+  access token existed — about five minutes after login — while the Wallos
+  session lived thirty days. Wallos now requests `offline_access`, stores the
+  refresh token per session, and refreshes the access token at half its life
+  from the account's own next request, so the provider can still end the
+  session long after login. A long-idle session proves itself on return: a
+  refresh that returns `invalid_grant` terminates the session (revoke token,
+  delete the row, clear the session, 401) before serving any protected data,
+  while a transient outage keeps it signed in — the provider gets the final
+  word even when a back-channel message was missed. Back-channel logout now
+  takes effect regardless of the cookie's remaining lifetime, and a restored
+  session stays an OIDC session (a `login_tokens.from_oidc` marker; a revoked
+  row refuses restore rather than rebuilding a local session). No refresh cron.
+  The thirty-day maximum is defined in one place. `admin.login_disabled`
+  (single-user no-login mode) can no longer be enabled while OIDC is on, and
+  the two settings are kept explicitly separate.
+
+* **oidc:** the logout-coverage defects are closed. A central logout that
+  named a subject whose stored `sid` was empty used to match nothing and answer
+  HTTP 200 `{"revoked":0}` while the session lived on — a `sub`-scoped fallback
+  now reaches those rows and the session actually ends. Ending one session no
+  longer de-administers the account's surviving sessions; an empty-string
+  `sid`/`sub` is refused as anonymous; a `sid` revoke is scoped to the token's
+  subject so two accounts sharing a provider session id are not swept together.
+
+* **oidc:** hardening from an adversarial audit. A back-channel logout that
+  names a de-provisioned subject now drops that subject's provider-granted
+  admin role even when no session row survived, so an admin whose only reach was
+  a never-expiring API key loses it (the residual — a group removed with no
+  logout sent — is an operational rule: rotate the API key on de-provisioning).
+  The JWKS is cached and a cheap pre-filter rejects a malformed logout token
+  before any outbound fetch, so an anonymous POST cannot force a provider
+  request. JWKS and discovery fetches route through the SSRF allowlist.
+
+* **auth:** a remember-me cookie is always validated against its token
+  (shipped in 5.11.1; carried here). A calibrated log records a rejected
+  cookie only for the forgery shape — a real username with a non-matching
+  token — and never logs the token.
+
+### Fixed
+
+* **currency:** the settings page no longer calls all of this "Fixer" and
+  stops inventing a quota where none exists, telling three states apart: a real
+  figure with a bar, a provider that reports no usage, and a provider with no
+  quota. Warning thresholds escalate at 75 / 90 / 100 % of a real quota, a
+  stalled refresh is made visible, the daily rate-limit headers are captured as
+  a state of their own, and a cached usage figure no longer re-stamps itself as
+  freshly checked. (#106)
+
+* **performance:** the subscription and statistics hot paths were measured
+  against seed sets up to a million rows — every query seeks the `user_id`
+  index, none scans the table, and list load plus converting every price is a
+  constant three queries. The one real per-row cost, a date formatter rebuilt
+  per row, is now built once per request (nineteen times faster, proven
+  result-identical). Query-count regression tests pin the subscription list and
+  the notification cron. No sort, filter or result changed. (#18)
+
 ## [5.11.1](https://github.com/thorstenhornung1/Wallos/releases/tag/v5.11.1) (2026-09-04)
 
 ### Fixed
