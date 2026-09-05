@@ -1,5 +1,74 @@
 # Changelog
 
+## [5.13.0](https://github.com/thorstenhornung1/Wallos/releases/tag/v5.13.0) (2026-09-05)
+
+### Added
+
+* **oidc:** the identity provider now governs a linked account's **living
+  profile**, not only its creation. On every sign-in Wallos refreshes the
+  account's first and last name, email and language from the userinfo claims —
+  where before the provider's values were read once, at account creation, and
+  never again — and imports the provider's `picture` claim as the avatar. The
+  picture is taken only as a size-bounded raster (jpeg/png/webp, verified by
+  magic bytes rather than the declared type), stored under a content-addressed
+  name, and a bad or absent picture is ignored rather than failing the login.
+  The profile page shows the governed fields read-only with a "Managed by
+  {provider}" note that uses the **configured** provider name. A claim the
+  provider omits never overwrites a stored value, an unverified email is never
+  adopted while verification is required, and a local (non-OIDC) account is left
+  entirely alone. The provider name is data throughout — never hard-wired in the
+  code. (#154)
+
+* **oidc:** the login page offers a clear **"Sign in with {provider}"** button,
+  labelled from the configured provider name with a neutral fallback when none
+  is set, and no provider name hard-wired anywhere in the markup or code. It
+  respects the password-login-disabled setting — the sole path when password
+  login is off, alongside the form with a separator when it is on. (#155)
+
+### Security
+
+* **oidc:** **PKCE** (RFC 7636, S256) now binds the authorization code to the
+  browser that began the login. A per-login secret's hash rides the
+  authorization request and its value rides the token exchange, so a code
+  intercepted in transit cannot be redeemed by anyone else — protection that
+  does not depend on the client secret. (#152)
+
+* **oidc:** the provider endpoints are required to be **https** (loopback
+  excepted for local development), and the discovery document's `issuer` must
+  **match** the configured issuer or the configuration fails closed. A provider
+  URL downgraded to http, or a discovery document that names a different issuer,
+  is refused rather than trusted. (#153)
+
+### Changed
+
+* **image:** the shipped container is about **25% smaller** (239.8 &rarr; 179.5
+  MB). The build-only headers used to compile the PHP extensions are dropped
+  from the final image while every extension and its runtime library stays,
+  verified by the container-mode checks. Nothing an operator runs changed.
+
+* **php-fpm:** the pool now idles **down to the master** (`pm = ondemand`,
+  `process_idle_timeout = 10s`). A household box that serves one household holds
+  no pre-forked worker processes at rest and spawns them on demand, giving back
+  the idle memory an always-on pool reserved.
+
+### Fixed
+
+* **currency:** the Fixer/APILayer REST key-save is routed through the **shared
+  exchange-rate client** rather than a second, ad-hoc request path. A saved
+  key's usage is recorded centrally the same way a cron refresh records it, the
+  plaintext http fallback URL is gone, and the provider mode is stored with the
+  key. (#150)
+
+### Performance
+
+* **cron &amp; tooling:** an **off-CI growth-curve trend benchmark** measures how
+  a metric grows against input size (a factor near 1 is linear; a bend is a
+  regression), recorded across releases rather than gated, with a recorded
+  **idle-RAM floor** to watch. The cron run detail now records **peak memory**,
+  the per-row price-symbol lookup is built **once per run** instead of once per
+  row, and the #18 subscription and statistics hot paths were verified
+  **constant on PostgreSQL**, not only on SQLite.
+
 ## [5.12.0](https://github.com/thorstenhornung1/Wallos/releases/tag/v5.12.0) (2026-09-05)
 
 ### Added
