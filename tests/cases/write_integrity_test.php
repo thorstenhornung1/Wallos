@@ -103,9 +103,16 @@ function wi_input_wrapper($body)
  * @param string|null $body     a php://input body, or null to leave it empty
  * @return string
  */
-function wi_invoke($endpoint, $userId, array $post, $body = null)
+function wi_invoke($endpoint, $userId, array $post, $body = null, $preamble = null)
 {
     $lines = [];
+
+    if ($preamble !== null) {
+        // Runs in the child before the endpoint loads — used to pre-define a
+        // guarded seam (e.g. wallos_serpapi_key_is_valid) so an outbound call
+        // is answered without touching the network.
+        $lines[] = $preamble;
+    }
 
     if ($body !== null) {
         $lines[] = wi_input_wrapper($body);
@@ -232,6 +239,46 @@ wallos_test('google_search reports a failed key clear as failure (#137)', functi
 
     assert_contains('"success":false', $out,
         'a failed clear is reported as failure on ' . $db->driver() . ' (' . $out . ')');
+
+    $db->close();
+});
+
+wallos_test('google_search keeps the working key when the candidate is rejected (#142 shape)', function () {
+    // Broken-to-count: main deletes the stored credential up front and only then
+    // validates the candidate, so a rejected key leaves the account with none.
+    // The fix validates first and touches the row only once the key is accepted.
+    $db = wallos_test_open_database();
+    wallos_test_create_user($db, 1, 'alice');
+    $db->exec("INSERT INTO google_search (api_key, user_id) VALUES ('old-serp-key', 1)");
+
+    $out = wi_invoke(WALLOS_ROOT . '/endpoints/settings/google_search.php', 1,
+        ['api_key' => 'rejected-candidate'], null,
+        'function wallos_serpapi_key_is_valid($k) { return false; }');
+
+    assert_contains('"success":false', $out,
+        'a rejected key is reported as failure on ' . $db->driver() . ' (' . $out . ')');
+    assert_same('old-serp-key',
+        (string) $db->scalar('SELECT api_key FROM google_search WHERE user_id = 1'),
+        'the working key survives a rejected candidate on ' . $db->driver());
+
+    $db->close();
+});
+
+wallos_test('google_search replaces the key when the candidate is accepted', function () {
+    // The happy path still stores the new key once validation passes.
+    $db = wallos_test_open_database();
+    wallos_test_create_user($db, 1, 'alice');
+    $db->exec("INSERT INTO google_search (api_key, user_id) VALUES ('old-serp-key', 1)");
+
+    $out = wi_invoke(WALLOS_ROOT . '/endpoints/settings/google_search.php', 1,
+        ['api_key' => 'accepted-candidate'], null,
+        'function wallos_serpapi_key_is_valid($k) { return true; }');
+
+    assert_contains('"success":true', $out,
+        'an accepted key is reported as success on ' . $db->driver() . ' (' . $out . ')');
+    assert_same('accepted-candidate',
+        (string) $db->scalar('SELECT api_key FROM google_search WHERE user_id = 1'),
+        'the accepted key replaces the old one on ' . $db->driver());
 
     $db->close();
 });
