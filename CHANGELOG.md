@@ -1,5 +1,77 @@
 # Changelog
 
+## [5.14.0](https://github.com/thorstenhornung1/Wallos/releases/tag/v5.14.0) (2026-09-06)
+
+### Security
+
+* **oidc:** **the identity provider is now authoritative for the whole lifetime
+  of an OIDC session** — a successful token refresh can no longer, by itself,
+  keep an ended session alive (OIDC Session Authority v2, phases 1 and 2). The
+  guard is a four-state machine (valid / revalidation-required / suspended /
+  revoked): past the back-channel coverage boundary an idle session must
+  re-prove itself, and a refresh after that boundary never returns it to valid.
+  Recovery is a silent browser round-trip — `/oidc/revalidate` does a
+  `prompt=none` + `id_token_hint` authorization bound to the same `(iss, sub)`;
+  the provider ending the session returns `login_required` and the session ends,
+  a provider outage suspends (503) without spending anything, and a different
+  subject is refused rather than switched. This closes the idle-session half of
+  the back-channel-logout gap: an inactive account ended at the provider after
+  its access token expired is no longer re-admitted on return (a permanent
+  regression test is the anchor of the suite). A mid-session back-channel logout
+  now sends an XHR caller to re-authenticate instead of showing a data error.
+  (#159, #161)
+
+* **oidc:** IdP-managed profile fields are enforced server-side (#156). The
+  fields the login provider governs — name, email, language — are refused at
+  `save_user.php` for a linked account even against a crafted request that
+  bypasses the client-side lock; the provider's values win, as they already do
+  on the next login.
+
+### Added
+
+* **notifications:** a **Web Push** channel (#162) — direct browser/PWA push
+  (including iOS Home-Screen web apps), a sibling of Telegram/Pushover/ntfy/
+  Gotify. An instance VAPID keypair (generated on first use, env-overridable),
+  per-user device subscriptions, a service worker, and dispatch that drops a
+  subscription on 404/410. Self-contained RFC 8291 crypto on OpenSSL — no
+  Composer, no new runtime dependency; outbound push is SSRF-guarded.
+
+* **currency:** **currency names and symbols now come from Unicode CLDR** (#163),
+  pinned at release 48.2.1 and shipped offline for all 28 supported languages —
+  no runtime call to Unicode, no ICU or Symfony requirement. A reproducible
+  generator produces the byte-identical dataset; the runtime resolves through
+  `wallos_currency_name`/`wallos_currency_symbol` with a locale → English →
+  provider → ISO-code fallback that never errors. Unicode-3.0 attribution is
+  included.
+
+* **i18n:** default currency and payment-method names are **localized at account
+  creation** into the account's language (#160) — the way categories already
+  were — instead of stored English literals, wired through every provisioning
+  path. The code is the canonical identity; the localized name is user-owned
+  data from then on.
+
+* **i18n:** a fresh install's **first-admin account is localized from the start**
+  (to the instance default language), and an **opt-in Settings action localizes
+  an existing account's still-default names** with a per-row preview (#164).
+  Detection is data-driven (a row must still exactly equal a known default), the
+  rewrite touches only the cosmetic `name` column (FK-safe), user-renamed values
+  are never touched — no migration, no schema change.
+
+### Fixed
+
+* **postgresql:** two admin-settings endpoints answered 500 on PostgreSQL — one
+  from a table name in single quotes (a string literal on PG), the other from a
+  stray `:userId` bind on a placeholderless query (SQLite tolerates it, PDO
+  rejects it). Both fixed and pinned by an end-to-end test on both backends
+  (#147).
+
+### Changed
+
+* **tests:** a **`dev/bind-audit` gate** now flags any prepared statement whose
+  binds and placeholders disagree — the "SQLite tolerates, PostgreSQL rejects"
+  class — across api/endpoints/includes; a sweep fixed the real instances it
+  found (a Mattermost notification path among them) (#157).
+
 ## [5.13.0](https://github.com/thorstenhornung1/Wallos/releases/tag/v5.13.0) (2026-09-05)
 
 ### Added
