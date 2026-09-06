@@ -158,18 +158,17 @@ if ($oidcEnabled) {
         ]);
         session_start();
     }
-    $state = bin2hex(random_bytes(16));
-    $_SESSION['oidc_state'] = $state;
-
-    // PKCE (RFC 7636, S256): a per-login secret whose hash rides the
-    // authorization request and whose value rides the token exchange,
-    // binding the code to this browser independently of the client secret.
-    // It lives in the session beside the state and is consumed with it, in
-    // one single-use lifecycle (includes/oidc/consume_oidc_callback.php).
     require_once __DIR__ . '/includes/oidc/pkce.php';
-    $codeVerifier = wallos_oidc_generate_code_verifier();
-    $_SESSION['oidc_code_verifier'] = $codeVerifier;
-    $codeChallenge = wallos_oidc_code_challenge($codeVerifier);
+    require_once __DIR__ . '/includes/oidc/transactions.php';
+
+    // A login transaction (WP1): its own 256-bit state, nonce and PKCE
+    // verifier, stored under the state so two tabs starting a login do not
+    // overwrite each other and a silent resume (WP5) can be in flight beside
+    // it. The challenge rides the authorization request and the verifier the
+    // token exchange â one single-use lifecycle, consumed in
+    // includes/oidc/consume_oidc_callback.php.
+    $oidcTransaction = wallos_oidc_create_transaction('login', 'index.php');
+    $codeChallenge = wallos_oidc_code_challenge($oidcTransaction['pkce_verifier']);
 
     // Build the OIDC authorization URL
     //
@@ -183,7 +182,8 @@ if ($oidcEnabled) {
         'client_id' => $oidcSettings['client_id'],
         'redirect_uri' => $oidcSettings['redirect_url'],
         'scope' => wallos_oidc_authorization_scopes($oidcSettings['scopes']),
-        'state' => $state,
+        'state' => $oidcTransaction['state'],
+        'nonce' => $oidcTransaction['nonce'],
         'code_challenge' => $codeChallenge,
         'code_challenge_method' => 'S256',
     ]);
