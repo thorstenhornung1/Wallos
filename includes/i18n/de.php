@@ -392,6 +392,14 @@ $i18n = [
     // Notifications
     "error_saving_notifications" => "Benachrichtigungsangaben konnten nicht gespeichert werden.",
     "wallos_notification" => "Wallos Benachrichtigung",
+    // Text der Verlängerungs-Benachrichtigung, je Empfänger in dessen Kontosprache (#130).
+    // "notify_in_days" erhält die Tageszahl über sprintf() und wird nur ab zwei Tagen
+    // verwendet (0 und 1 nutzen "notify_today"/"notify_tomorrow").
+    "subscriptions_up_for_renewal" => "Die folgenden Abonnements stehen zur Verlängerung an:",
+    "notify_for" => "für",
+    "notify_today" => "Heute",
+    "notify_tomorrow" => "Morgen",
+    "notify_in_days" => "In %d Tagen",
     "test_notification" => "Dies ist eine Test-Benachrichtigung. Wenn du das hier siehst, sind deine Konfigurationen korrekt.",
     "email_error" => "E-Mail konnte nicht gesendet werden",
     "notification_sent_successfuly" => "Benachrichtigung erfolgreich gesendet",
@@ -637,6 +645,45 @@ $i18n = [
     "web_push_not_configured" => "Web Push ist auf dem Server nicht konfiguriert.",
     "web_push_enabled" => "Web Push auf diesem Gerät aktiviert.",
     "web_push_disabled" => "Web Push auf diesem Gerät deaktiviert.",
+
+    // #160 Phase 2 (nur Deutsch): Schlüssel, die en.php definiert, de.php aber
+    // noch fehlten — jetzt übersetzt. Andere Sprachen greifen bewusst weiterhin
+    // auf das englische Original zurück.
+    "login_with_provider" => "Mit dem Login-Anbieter anmelden",
+    "totp_too_many_attempts" => "Zu viele fehlgeschlagene Versuche. Bitte warten Sie einen Moment und versuchen Sie es erneut.",
+    "fixer_http_only_warning" => "Dieser direkte fixer.io-Schlüssel gehört zu einem Tarif, der nur http bereitstellt, sodass er bei jeder Anfrage im Klartext übertragen wird. Fixer bietet https nur in einem kostenpflichtigen Tarif an. Für https ohne Kosten wechseln Sie zum kostenlosen Tarif von apilayer.com, der den Schlüssel in einem Header sendet, oder zum schlüssellosen Frankfurter-Anbieter.",
+    "error_not_an_image" => "Die URL hat kein Bild zurückgegeben.",
+    "could_not_resolve_host" => "Host konnte nicht aufgelöst werden",
+    "currency_quota_warning" => "Das monatliche Kontingent geht zur Neige",
+    "currency_quota_high_warning" => "Das monatliche Kontingent ist fast aufgebraucht — die Aktualisierung stoppt, sobald es erreicht ist",
+    "currency_daily_requests_used" => "Genutzte Tagesanfragen",
+    "currency_daily_limit_reached" => "Das tägliche Anfragelimit des Anbieters ist erreicht — die Aktualisierung sollte morgen fortgesetzt werden",
+    "currency_refresh_stalled" => "Die automatische Aktualisierung scheint zu stocken — die Kurse wurden kürzlich nicht aktualisiert",
+    "notification_providers" => "Benachrichtigungsanbieter",
+    "telegram_bot" => "Telegram-Bot",
+    "use_instance_bot" => "Bot der Instanz verwenden",
+    "use_custom_bot" => "Eigenen Bot verwenden",
+    "instance_telegram_not_configured" => "Der Telegram-Bot der Instanz ist nicht konfiguriert.",
+    "pushover_application" => "Pushover-Anwendung",
+    "pushover_application_token" => "Pushover-Anwendungstoken",
+    "use_instance_application" => "Anwendung der Instanz verwenden",
+    "use_custom_application" => "Eigene Anwendung verwenden",
+    "instance_pushover_not_configured" => "Die Pushover-Anwendung der Instanz ist nicht konfiguriert.",
+    "ntfy_server" => "ntfy-Server",
+    "ntfy_shared_headers" => "Gemeinsame Authentifizierungs-Header",
+    "ntfy_shared_headers_placeholder" => "Gemeinsame Authentifizierungs-Header (JSON)",
+    "ntfy_authentication" => "Authentifizierung",
+    "ntfy_auth_instance" => "Von der Instanz verwaltet",
+    "ntfy_auth_absent" => "Keine",
+    "use_instance_server" => "Server der Instanz verwenden",
+    "use_custom_server" => "Eigenen Server verwenden",
+    "instance_ntfy_not_configured" => "Der ntfy-Server der Instanz ist nicht konfiguriert.",
+    "gotify_server" => "Gotify-Server",
+    "gotify_instance_token_info" => "Nur die Adresse des Gotify-Servers wird geteilt. Jeder Benutzer behält seinen eigenen Anwendungstoken, sodass seine Nachrichten über seine eigene Gotify-Anwendung ankommen.",
+    "gotify_token_stays_yours" => "Sie geben unten weiterhin Ihren eigenen Anwendungstoken ein; nur die Serveradresse stammt von der Instanz.",
+    "instance_gotify_not_configured" => "Der Gotify-Server der Instanz ist nicht konfiguriert.",
+    "field_managed_by_provider" => "Verwaltet von %s",
+    "your_login_provider" => "Ihrem Login-Anbieter",
 ];
 
 
