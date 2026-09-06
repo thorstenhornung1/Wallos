@@ -603,6 +603,35 @@ function wallos_default_name_localization_candidates($db, $userId, $language)
 }
 
 /**
+ * Whether the dashboard should show the discovery banner that points an account
+ * at the Settings localizer (issue #165).
+ *
+ * A thin decision over #164's detection, no new logic of its own: the banner is
+ * offered only while the account still has rows the localizer could rename and
+ * has not dismissed the offer. The candidate helper already encodes the rest —
+ * it returns nothing for an English account (a language that resolves to 'en'),
+ * nothing once every default row is renamed, and nothing for a target that
+ * would equal the stored name — so an empty list is exactly "there is nothing
+ * to offer". The banner only ever offers; showing it changes nothing.
+ *
+ * A dismissed account is answered without touching the database.
+ *
+ * @param WallosDatabase $db
+ * @param int            $userId
+ * @param string         $language  account/target language
+ * @param bool           $dismissed the account's saved dismissal (a cookie)
+ * @return bool
+ */
+function wallos_should_offer_default_localization_banner($db, $userId, $language, $dismissed = false)
+{
+    if ($dismissed) {
+        return false;
+    }
+
+    return wallos_default_name_localization_candidates($db, $userId, $language) !== [];
+}
+
+/**
  * Whether a candidate is in the caller's confirmed selection.
  *
  * A null selection means "all of them" — the automatic first-admin path, which

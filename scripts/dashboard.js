@@ -49,3 +49,17 @@ document.addEventListener("DOMContentLoaded", function () {
 
 });
 
+// Discovery banner (issue #165): remember the dismissal in a cookie the same
+// way the dashboard remembers language/sortOrder/colorTheme, then drop the
+// banner from the page. The banner is re-evaluated server-side on every load,
+// so once the account has no still-default names left it stops appearing on
+// its own; the cookie only silences it while candidates still exist.
+function dismissLocalizerBanner() {
+  document.cookie =
+    "localizerBannerDismissed=1; expires=Fri, 31 Dec 9999 23:59:59 GMT; path=/; SameSite=Lax";
+  const banner = document.getElementById("localizer-banner");
+  if (banner) {
+    banner.remove();
+  }
+}
+

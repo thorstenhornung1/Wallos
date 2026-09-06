@@ -3178,6 +3178,23 @@ input[type="radio"]:checked+label::after {
   text-decoration: underline;
 }
 
+.localizer-banner {
+  position: relative;
+}
+
+.localizer-banner-dismiss {
+  position: absolute;
+  top: 8px;
+  right: 12px;
+  padding: 0;
+  background: none;
+  border: none;
+  color: inherit;
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
+}
+
 .demo-banner {
   padding: 15px 20px;
   background-color: rgba(var(--error-color-rgb), 0.2);

@@ -3,6 +3,7 @@
 require_once 'includes/header.php';
 require_once 'includes/getdbkeys.php';
 require_once 'includes/logo_theme_variant.php';
+require_once 'includes/user_provisioning.php';
 
 function formatPrice($price, $currencyCode, $currencies)
 {
@@ -66,11 +67,24 @@ function formatDate($date, $lang = 'en')
 }
 
 // Get the first name of the user
-$stmt = $db->prepare("SELECT username, firstname FROM \"user\" WHERE id = :userId");
+$stmt = $db->prepare("SELECT username, firstname, language FROM \"user\" WHERE id = :userId");
 $stmt->bindValue(':userId', $userId, SQLITE3_INTEGER);
 $result = $stmt->execute();
 $user = $result->fetchArray(SQLITE3_ASSOC);
 $first_name = $user['firstname'] ?? $user['username'] ?? '';
+
+// Discovery banner for the currency/payment-method localizer (issue #165):
+// offered to an account that still holds the English default names and could
+// localize them to its own language. It reuses #164's detection wholesale -
+// wallos_default_name_localization_candidates, resolved to the account language
+// the same way settings.php does - so an English account, a fully-renamed
+// account, and a no-op target all produce no candidates and no banner. A
+// dismissal is remembered in a cookie, following language/sortOrder/colorTheme;
+// once set, the decision is answered without a query. The banner only offers.
+$localizerBannerDismissed = ($_COOKIE['localizerBannerDismissed'] ?? '') === '1';
+$accountLanguage = wallos_resolve_language($user['language'] ?? 'en');
+$showLocalizerBanner = wallos_should_offer_default_localization_banner(
+    $db, $userId, $accountLanguage, $localizerBannerDismissed);
 
 // Today, as SQLite's date('now') answered it. next_payment is stored as
 // 'YYYY-MM-DD' text, so PostgreSQL cannot compare it against CURRENT_DATE and
@@ -131,6 +145,17 @@ while ($row = $result->fetchArray(SQLITE3_ASSOC)) {
                     <?php
                 }
             }
+        }
+        if ($showLocalizerBanner) {
+            ?>
+            <div class="update-banner localizer-banner" id="localizer-banner">
+                <?= translate('localize_banner_offer', $i18n) ?>
+                <span><a href="settings.php#localize-currencies"><?= translate('localize_banner_action', $i18n) ?></a></span>
+                <button type="button" class="localizer-banner-dismiss" onClick="dismissLocalizerBanner()"
+                    aria-label="<?= htmlspecialchars(translate('localize_banner_dismiss', $i18n)) ?>"
+                    title="<?= htmlspecialchars(translate('localize_banner_dismiss', $i18n)) ?>">&times;</button>
+            </div>
+            <?php
         }
         if ($demoMode) {
             ?>
