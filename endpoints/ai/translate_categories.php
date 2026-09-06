@@ -100,7 +100,13 @@ foreach ($translated as $item) {
     $update->bindValue(':name', $categoryName, SQLITE3_TEXT);
     $update->bindValue(':id', $categoryId, SQLITE3_INTEGER);
     $update->bindValue(':user_id', $userId, SQLITE3_INTEGER);
-    $update->execute();
+    if ($update->execute() === false) {
+        echo json_encode([
+            "success" => false,
+            "message" => translate('error', $i18n),
+        ]);
+        exit;
+    }
     $update->reset();
 
     $translations[$categoryId] = $categoryName;
