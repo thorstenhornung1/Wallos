@@ -58,7 +58,6 @@ $updateQuery = "UPDATE subscriptions SET next_payment = :nextPaymentDate WHERE i
 $updateStmt = $db->prepare($updateQuery);
 $updateStmt->bindValue(':nextPaymentDate', $nextPaymentDate->format('Y-m-d'));
 $updateStmt->bindValue(':subscriptionId', $subscriptionId);
-$updateStmt->execute();
 
 if ($updateStmt->execute()) {
     $response = [
