@@ -625,6 +625,13 @@ $i18n = [
     "localize_defaults_nothing_selected" => "Nothing was selected to localize.",
     "localize_defaults_failed" => "Could not localize the names. Please try again.",
     "localize_defaults_done" => "Localized {count} name(s) to your language.",
+    // Dashboard discovery banner (issue #165): a dismissible one-line offer that
+    // points an account still holding the English defaults at the Settings
+    // localizer above. It only ever offers; nothing changes until the user
+    // confirms per row there.
+    "localize_banner_offer" => "Your default currency and payment method names are still in English. You can localize them to your language.",
+    "localize_banner_action" => "Localize my default names",
+    "localize_banner_dismiss" => "Dismiss",
     // Currency names and symbols are no longer maintained here: they come from
     // Unicode CLDR at account-creation time (includes/currency_localization.php,
     // issue #163). The "currency_name" label below is the UI field caption, not

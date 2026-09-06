@@ -594,6 +594,13 @@ $i18n = [
     "localize_defaults_nothing_selected" => "Es wurde nichts zum Lokalisieren ausgewählt.",
     "localize_defaults_failed" => "Die Namen konnten nicht lokalisiert werden. Bitte versuche es erneut.",
     "localize_defaults_done" => "{count} Name(n) in deine Sprache lokalisiert.",
+    // Entdeckungs-Banner auf dem Dashboard (Issue #165): ein ausblendbarer
+    // einzeiliger Hinweis, der ein Konto mit noch englischen Standardnamen auf
+    // den Lokalisierer oben in den Einstellungen verweist. Er bietet nur an; erst
+    // die zeilenweise Bestätigung dort ändert etwas.
+    "localize_banner_offer" => "Deine Standardnamen für Währungen und Zahlungsmethoden sind noch auf Englisch. Du kannst sie in deine Sprache übersetzen.",
+    "localize_banner_action" => "Meine Standardnamen lokalisieren",
+    "localize_banner_dismiss" => "Ausblenden",
     // Währungsnamen und -symbole werden hier nicht mehr gepflegt: sie kommen zur
     // Kontoerstellung aus Unicode CLDR (includes/currency_localization.php,
     // Issue #163). Das "currency_name" unten ist die Feldbeschriftung, kein
