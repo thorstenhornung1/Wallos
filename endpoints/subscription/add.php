@@ -34,17 +34,33 @@ function getLogoFromUrl($url, $uploadDir, $name, $settings, $i18n)
 
     for ($i = 0; $i <= $maxRedirects; $i++) {
         if (!filter_var($currentUrl, FILTER_VALIDATE_URL) || !preg_match('/^https?:\/\//i', $currentUrl)) {
+            error_log('Wallos: subscription logo fetch rejected a malformed URL');
             return ['success' => false, 'message' => 'Invalid URL format.'];
         }
 
         $parts = parse_url($currentUrl);
         $host = $parts['host'];
         $port = $parts['port'] ?? ($parts['scheme'] === 'https' ? 443 : 80);
-        
+
+        // Log the host only, never $currentUrl: the URL can carry a query
+        // secret and this line lands in a shared log. Strip anything that is
+        // not part of a hostname so a crafted host cannot forge a log line.
+        $logHost = preg_replace('/[^A-Za-z0-9._:\[\]-]/', '', (string) $host);
+
         $ip = gethostbyname($host);
 
-        if (filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE) === false 
+        // gethostbyname() hands back the name unchanged when it cannot resolve
+        // it, so a name that does not resolve arrives here as a non-IP string.
+        // That is a DNS failure, not the SSRF reject below, and the operator
+        // should be told which one happened.
+        if (filter_var($ip, FILTER_VALIDATE_IP) === false) {
+            error_log("Wallos: subscription logo fetch could not resolve host '$logHost'");
+            return ['success' => false, 'message' => translate('error_fetching_image', $i18n) . ': ' . translate('could_not_resolve_host', $i18n)];
+        }
+
+        if (filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE) === false
             || is_cgnat_ip($ip)) {
+            error_log("Wallos: subscription logo fetch blocked a non-public address for host '$logHost'");
             return ['success' => false, 'message' => 'Invalid IP Address.'];
         }
 
@@ -52,11 +68,13 @@ function getLogoFromUrl($url, $uploadDir, $name, $settings, $i18n)
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1);
         curl_setopt($ch, CURLOPT_TIMEOUT, 5);
         curl_setopt($ch, CURLOPT_FOLLOWLOCATION, false); // Manual handling to re-validate IPs
-        
+
         curl_setopt($ch, CURLOPT_RESOLVE, ["$host:$port:$ip"]);
 
         $imageData = curl_exec($ch);
         $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $contentType = curl_getinfo($ch, CURLINFO_CONTENT_TYPE);
+        $curlError = curl_error($ch);
 
         if ($httpCode >= 300 && $httpCode < 400) {
             $redirectUrl = curl_getinfo($ch, CURLINFO_REDIRECT_URL);
@@ -67,29 +85,53 @@ function getLogoFromUrl($url, $uploadDir, $name, $settings, $i18n)
             }
 
             $currentUrl = $redirectUrl;
-            continue; 
+            continue;
         }
 
-        if ($imageData !== false && $httpCode === 200) {
-            $timestamp = time();
-            $fileName = $timestamp . '-' . sanitizeFilename($name) . '.png';
-            $uploadFile = $uploadDir . $fileName; // Note: Use the provided $uploadDir variable
-
-            if (saveLogo($imageData, $uploadFile, $name, $settings)) {
-                unset($ch);
-                return ['success' => true, 'filename' => $fileName];
-            }
-
+        // No body came back at all: connection refused, TLS failure, or the 5s
+        // timeout. curl_error() names which, and it is source-specific, so it
+        // belongs in the message the user sees.
+        if ($imageData === false) {
             unset($ch);
-            return ['success' => false, 'message' => translate('error_saving_logo', $i18n)];
+            error_log("Wallos: subscription logo fetch transport error for host '$logHost': $curlError");
+            return ['success' => false, 'message' => translate('error_fetching_image', $i18n) . ': ' . $curlError];
         }
 
-        $error = curl_error($ch);
+        // The source answered, but not with 200 — a 4xx/5xx, including the
+        // anti-scraping 403 a public news site returns to a bot. Name the
+        // status instead of collapsing it into a generic fetch error.
+        if ($httpCode !== 200) {
+            unset($ch);
+            error_log("Wallos: subscription logo fetch got HTTP $httpCode from host '$logHost'");
+            return ['success' => false, 'message' => translate('error_fetching_image', $i18n) . ' (HTTP ' . $httpCode . ')'];
+        }
+
+        // A 200 that is not an image — an HTML error page, a JSON body, a
+        // captcha — is the other way a public site refuses a scrape. saveLogo
+        // would only report a generic save error, so name it here.
+        $normalizedType = strtolower(trim((string) $contentType));
+        if ($normalizedType !== '' && strpos($normalizedType, 'image/') !== 0) {
+            unset($ch);
+            error_log("Wallos: subscription logo fetch got non-image content-type '$normalizedType' from host '$logHost'");
+            return ['success' => false, 'message' => translate('error_not_an_image', $i18n)];
+        }
+
+        $timestamp = time();
+        $fileName = $timestamp . '-' . sanitizeFilename($name) . '.png';
+        $uploadFile = $uploadDir . $fileName; // Note: Use the provided $uploadDir variable
+
+        if (saveLogo($imageData, $uploadFile, $name, $settings)) {
+            unset($ch);
+            return ['success' => true, 'filename' => $fileName];
+        }
+
         unset($ch);
-        return ['success' => false, 'message' => translate('error_fetching_image', $i18n) . ': ' . $error];
+        error_log("Wallos: subscription logo fetch could not decode the image from host '$logHost'");
+        return ['success' => false, 'message' => translate('error_saving_logo', $i18n)];
     }
 
-    return ['success' => false, 'message' => translate('error_fetching_image', $i18n)];
+    error_log('Wallos: subscription logo fetch gave up after too many redirects');
+    return ['success' => false, 'message' => translate('error_fetching_image', $i18n) . ' (too many redirects)'];
 }
 
 function saveLogo($imageData, $uploadFile, $name, $settings)
