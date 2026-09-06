@@ -41,12 +41,12 @@ define('WALLOS_OIDC_JWKS_TTL', 3600);
  * @param array  $expectations ['issuer' => string, 'audience' => string]
  * @param int    $now          unix timestamp
  * @param int    $leeway       seconds of clock skew tolerated
- * @return array{valid: bool, error: string|null, sub: string|null, sid: string|null}
+ * @return array{valid: bool, error: string|null, sub: string|null, sid: string|null, jti: string|null, exp: int|null}
  */
 function wallos_oidc_validate_logout_token($token, $jwks, $expectations, $now, $leeway = 120)
 {
     $reject = function ($error) {
-        return ['valid' => false, 'error' => $error, 'sub' => null, 'sid' => null];
+        return ['valid' => false, 'error' => $error, 'sub' => null, 'sid' => null, 'jti' => null, 'exp' => null];
     };
 
     $parsed = wallos_jwt_parse($token);
@@ -90,8 +90,24 @@ function wallos_oidc_validate_logout_token($token, $jwks, $expectations, $now, $
         return $reject('token_too_old');
     }
 
-    if (isset($claims['exp']) && is_int($claims['exp']) && $claims['exp'] < $now - $leeway) {
+    // exp is mandatory (§18). A logout token with no expiry cannot bound its own
+    // entry in the (issuer, jti) replay cache — the cache TTL is the token's exp
+    // — so a missing exp is refused rather than cached forever.
+    $expiresAt = $claims['exp'] ?? null;
+    if (!is_int($expiresAt)) {
+        return $reject('missing_exp');
+    }
+    if ($expiresAt < $now - $leeway) {
         return $reject('expired');
+    }
+
+    // jti is mandatory (§18): it is the key the replay cache is built on, so a
+    // token without one could be acted on again and again. An empty string names
+    // no token, so it is read as absent here.
+    $jti = isset($claims['jti']) && is_string($claims['jti']) && $claims['jti'] !== ''
+        ? $claims['jti'] : null;
+    if ($jti === null) {
+        return $reject('missing_jti');
     }
 
     // A nonce is forbidden in a logout token. Its presence means this is an ID
@@ -120,7 +136,92 @@ function wallos_oidc_validate_logout_token($token, $jwks, $expectations, $now, $
         return $reject('no_subject_or_session');
     }
 
-    return ['valid' => true, 'error' => null, 'sub' => $sub, 'sid' => $sid];
+    return ['valid' => true, 'error' => null, 'sub' => $sub, 'sid' => $sid, 'jti' => $jti, 'exp' => $expiresAt];
+}
+
+/**
+ * Drops replay-cache entries whose token can no longer be presented.
+ *
+ * A logout token past its exp is rejected as expired before the replay check is
+ * ever reached, so an entry whose expires_at has passed guards nothing. Pruning
+ * them here — on each valid token, no cron — keeps the table from growing without
+ * bound, the same opportunistic housekeeping the JWKS and discovery caches use.
+ *
+ * @param WallosDatabase $db
+ * @param int            $now unix timestamp
+ * @return void
+ */
+function wallos_oidc_logout_replay_prune($db, $now)
+{
+    if (!$db->tableExists('oidc_logout_replay')) {
+        return;
+    }
+
+    $stmt = $db->prepare('DELETE FROM oidc_logout_replay WHERE expires_at < :now');
+    if ($stmt === false) {
+        return;
+    }
+    $stmt->bindValue(':now', (int) $now);
+    if ($stmt->execute() === false) {
+        // Best-effort housekeeping: a prune that fails leaves stale rows behind
+        // but changes no decision, so it is logged rather than propagated.
+        error_log('Wallos OIDC: could not prune the logout replay cache: ' . $db->lastErrorMsg());
+    }
+}
+
+/**
+ * Records a (issuer, jti) the first time it is seen, and reports whether this was
+ * the first time.
+ *
+ * The heart of the replay guard (§18). A valid logout token's revocation must run
+ * exactly once: the provider re-POSTs the same token — it does not retry a
+ * success, but a network hiccup or a duplicate delivery can present it twice — and
+ * the second delivery must have no second side-effect. The INSERT ... ON CONFLICT
+ * DO NOTHING writes one row the first time and zero rows on a duplicate, and the
+ * boundary's changes() reports which happened, atomically, on both backends.
+ *
+ * Returns true when the pair was newly recorded (act on the token) and false when
+ * it was already present (a replay — skip the side-effect, but the caller still
+ * answers 200). Failing to record is deliberately treated as "first seen": the
+ * revocation it guards is itself idempotent — a second pass finds the sessions
+ * already ended — so a cache that cannot be written must not block a real logout.
+ *
+ * @param WallosDatabase $db
+ * @param string         $issuer
+ * @param string         $jti
+ * @param int            $exp the token's exp, kept as the entry's TTL
+ * @param int            $now unix timestamp
+ * @return bool whether the token was seen for the first time
+ */
+function wallos_oidc_logout_replay_record($db, $issuer, $jti, $exp, $now)
+{
+    if (!$db->tableExists('oidc_logout_replay')) {
+        // The migration has not run: no cache to consult, so treat every token as
+        // first-seen and let the idempotent revocation stand on its own.
+        return true;
+    }
+
+    // Expired entries first, so the table never grows without bound. The current
+    // token's exp is in the future (an expired one is refused before this), so
+    // this never prunes the entry the INSERT below is about to write.
+    wallos_oidc_logout_replay_prune($db, $now);
+
+    $stmt = $db->prepare('INSERT INTO oidc_logout_replay (issuer, jti, expires_at)
+                          VALUES (:issuer, :jti, :expiresAt)
+                          ON CONFLICT (issuer, jti) DO NOTHING');
+    if ($stmt === false) {
+        return true;
+    }
+    $stmt->bindValue(':issuer', (string) $issuer);
+    $stmt->bindValue(':jti', (string) $jti);
+    $stmt->bindValue(':expiresAt', (int) $exp);
+    if ($stmt->execute() === false) {
+        return true;
+    }
+
+    // One row written the first time, zero on a duplicate that ON CONFLICT left
+    // alone. changes() reads the most recent write on both backends.
+    return $db->changes() > 0;
 }
 
 /**
@@ -563,12 +664,12 @@ function wallos_oidc_logout_token_prefilter($token, $expectedIssuer, $now, $leew
  * @param array       $expectations ['issuer' => string, 'audience' => string]
  * @param int         $now
  * @param int         $leeway
- * @return array{valid: bool, error: string|null, sub: string|null, sid: string|null}
+ * @return array{valid: bool, error: string|null, sub: string|null, sid: string|null, jti: string|null, exp: int|null}
  */
 function wallos_oidc_authorize_logout_token($db, $token, $jwksUri, $expectations, $now, $leeway = 120)
 {
     $reject = function ($error) {
-        return ['valid' => false, 'error' => $error, 'sub' => null, 'sid' => null];
+        return ['valid' => false, 'error' => $error, 'sub' => null, 'sid' => null, 'jti' => null, 'exp' => null];
     };
 
     $prefilterError = wallos_oidc_logout_token_prefilter(

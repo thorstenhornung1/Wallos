@@ -127,6 +127,9 @@ function logout_matrix_token($claims)
         'iss' => 'https://auth.matrix.example.com',
         'aud' => 'wallos-matrix-client',
         'iat' => time(),
+        // exp is mandatory now (§18/WP8); the well-formed base carries one, and a
+        // fresh jti per token keeps each post clear of the replay cache.
+        'exp' => time() + 300,
         'jti' => uniqid('', true),
         'events' => [WALLOS_BACKCHANNEL_LOGOUT_EVENT => new stdClass()],
     ], $claims);
@@ -674,5 +677,83 @@ wallos_test('a session rebuilt from a remember-me cookie is never exempt from ba
         assert_contains('restored=no', $text,
             'the revoked cookie is refused outright, not rebuilt as a session (got: '
                 . str_replace("\n", ' ', $text) . ')');
+    }
+);
+
+// ------------------------------------------------- WP8: the replay guard (O, P)
+
+wallos_test('the same logout token presented twice revokes once (O: replay)',
+    function () {
+        // Back-Channel Logout 1.0's replay guard, break-detecting. Deleting the
+        // named session is idempotent on its own, so to SEE the forbidden second
+        // side-effect a fresh session is seeded under the same (sub, sid) BETWEEN
+        // the two identical deliveries: with the (issuer, jti) replay cache the
+        // second delivery does nothing and that session survives; without one the
+        // revocation runs again and ends it. The second delivery still answers
+        // 200 either way — a replayed valid token is not an error.
+        $db = wallos_test_open_database();
+        logout_matrix_configure($db);
+        logout_matrix_user($db, 1, 'sub-alice');
+        wallos_oidc_register_session($db, 1, 'sid-phone', 'php-phone-first', '');
+        $db->close();
+
+        // Minted once so both deliveries carry the identical jti.
+        $token = logout_matrix_token(['sub' => 'sub-alice', 'sid' => 'sid-phone']);
+
+        $first = logout_matrix_post($token);
+        assert_same('{"revoked":1}', $first, 'the first delivery revokes the session');
+
+        // The first delivery recorded the pair, and a new session now appears
+        // under the same subject and provider session id.
+        $db = wallos_database_connect();
+        assert_true(!wallos_oidc_session_is_active($db, 'php-phone-first'),
+            'the first session is gone');
+        assert_same(1, (int) $db->scalar('SELECT COUNT(*) FROM oidc_logout_replay'),
+            'the first delivery recorded the (issuer, jti)');
+        wallos_oidc_register_session($db, 1, 'sid-phone', 'php-phone-second', '');
+        $db->close();
+
+        $second = logout_matrix_post($token);
+        assert_same('{"revoked":0}', $second,
+            'the replay is a no-op that still answers 200 with a body');
+
+        $db = wallos_database_connect();
+        assert_true(wallos_oidc_session_is_active($db, 'php-phone-second'),
+            'the session seeded after the first delivery is untouched by the replay — '
+                . 'no second revocation ran');
+        assert_same(1, (int) $db->scalar('SELECT COUNT(*) FROM oidc_logout_replay'),
+            'and the replay did not add a duplicate cache row');
+        $db->close();
+    }
+);
+
+wallos_test('the endpoint refuses a logout token that omits jti or exp (P: 400)',
+    function () {
+        // Both are mandatory now (§18/WP8). Each clears the cheap pre-filter
+        // (right issuer, fresh iat, the logout event) and is then refused by the
+        // full validator, so the endpoint answers invalid_request and the session
+        // it named keeps running. A well-formed token in the same setup does
+        // revoke, which is the positive control that this refuses the malformed
+        // pair rather than everything.
+        $db = wallos_test_open_database();
+        logout_matrix_configure($db);
+        logout_matrix_user($db, 1, 'sub-alice');
+        wallos_oidc_register_session($db, 1, 'sid-phone', 'php-phone', '');
+        $db->close();
+
+        // null overrides the well-formed default; the key is then present-but-null,
+        // which the validator reads as absent (isset is false for null).
+        $missingJti = logout_matrix_post(
+            logout_matrix_token(['sub' => 'sub-alice', 'sid' => 'sid-phone', 'jti' => null]));
+        assert_contains('invalid_request', $missingJti, 'a token without a jti is refused');
+
+        $missingExp = logout_matrix_post(
+            logout_matrix_token(['sub' => 'sub-alice', 'sid' => 'sid-phone', 'exp' => null]));
+        assert_contains('invalid_request', $missingExp, 'a token without an exp is refused');
+
+        $db = wallos_database_connect();
+        assert_true(wallos_oidc_session_is_active($db, 'php-phone'),
+            'and neither refusal ended the session');
+        $db->close();
     }
 );
