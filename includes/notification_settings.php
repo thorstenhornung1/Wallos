@@ -125,6 +125,16 @@ function wallos_users_with_notifications($settings, $db)
         $users[(int) $row['user_id']] = true;
     }
 
+    // Web Push has no per-user enabled flag: a stored subscription is the
+    // opt-in. An account with at least one subscribed device wants push. Guarded
+    // in case an installation is part-way through the migration chain.
+    if ($db->tableExists('push_subscriptions')) {
+        $result = $db->query('SELECT DISTINCT user_id FROM push_subscriptions');
+        while ($row = wallos_notification_fetch($result)) {
+            $users[(int) $row['user_id']] = true;
+        }
+    }
+
     return $users;
 }
 

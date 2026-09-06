@@ -270,3 +270,48 @@ self.addEventListener('fetch', function (event) {
         })
     );
 });
+
+// Web Push: show the renewal reminder the notification cron delivered. Added
+// for issue #162; the manifest and the caching handlers above are unchanged.
+self.addEventListener('push', function (event) {
+    let payload = { title: 'Wallos', body: '', url: './' };
+    if (event.data) {
+        try {
+            payload = Object.assign(payload, event.data.json());
+        } catch (e) {
+            payload.body = event.data.text();
+        }
+    }
+
+    const options = {
+        body: payload.body,
+        icon: 'images/icon/android-chrome-192x192.png',
+        badge: 'images/icon/favicon-32x32.png',
+        tag: 'wallos-renewal',
+        data: { url: payload.url || './' }
+    };
+
+    event.waitUntil(self.registration.showNotification(payload.title || 'Wallos', options));
+});
+
+// Focus an existing Wallos window (or open one) when the notification is clicked.
+self.addEventListener('notificationclick', function (event) {
+    event.notification.close();
+    const target = (event.notification.data && event.notification.data.url) || './';
+
+    event.waitUntil(
+        self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(function (clientList) {
+            for (const client of clientList) {
+                if ('focus' in client) {
+                    if ('navigate' in client) {
+                        client.navigate(target);
+                    }
+                    return client.focus();
+                }
+            }
+            if (self.clients.openWindow) {
+                return self.clients.openWindow(target);
+            }
+        })
+    );
+});

@@ -592,6 +592,15 @@ $i18n = [
     "oidc_token_exchange_failed" => "Wallos konnte die Anmeldung beim Identitätsanbieter nicht abschließen. Bitte wenden Sie sich an Ihre Administration; Einzelheiten stehen im Serverprotokoll.",
     "oidc_userinfo_failed" => "Wallos konnte Ihr Profil nicht vom Identitätsanbieter lesen. Bitte wenden Sie sich an Ihre Administration; Einzelheiten stehen im Serverprotokoll.",
     "remove_stored_secret" => "Gespeicherten Wert entfernen",
+    "web_push" => "Web Push",
+    "web_push_description" => "Erinnerungen an anstehende Verlängerungen direkt an diesen Browser oder die installierte App senden.",
+    "web_push_enable_device" => "Auf diesem Gerät aktivieren",
+    "web_push_disable_device" => "Auf diesem Gerät deaktivieren",
+    "web_push_unsupported" => "Web Push wird von diesem Browser nicht unterstützt.",
+    "web_push_permission_denied" => "Die Benachrichtigungsberechtigung wurde verweigert.",
+    "web_push_not_configured" => "Web Push ist auf dem Server nicht konfiguriert.",
+    "web_push_enabled" => "Web Push auf diesem Gerät aktiviert.",
+    "web_push_disabled" => "Web Push auf diesem Gerät deaktiviert.",
 ];
 
 

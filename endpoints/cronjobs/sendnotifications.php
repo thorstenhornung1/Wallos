@@ -13,6 +13,7 @@ require_once __DIR__ . '/../../includes/webhook_headers.php';
 require_once __DIR__ . '/../../includes/mailer.php';
 require_once __DIR__ . '/../../includes/notification_settings.php';
 require_once __DIR__ . '/../../includes/notification_due.php';
+require_once __DIR__ . '/../../includes/webpush.php';
 wallos_cron_database($db);
 
 require __DIR__ . '/../../includes/currency_formatter.php';
@@ -179,6 +180,7 @@ while ($userToNotify = $usersToNotify->fetchArray(SQLITE3_ASSOC)) {
     $discordNotificationsEnabled = false;
     $ntfyNotificationsEnabled = false;
     $serverchanNotificationsEnabled = false;
+    $webPushNotificationsEnabled = false;
 
     if (!isset($usersWithNotifications[$userId])) {
         if (php_sapi_name() !== 'cli') {
@@ -295,9 +297,21 @@ while ($userToNotify = $usersToNotify->fetchArray(SQLITE3_ASSOC)) {
         $serverchan['sendkey'] = $row['sendkey'];
     }
 
+    // Web Push: the instance VAPID keypair (the shared credential) plus this
+    // account's own browser subscriptions, one per device. Loaded here, while
+    // $userId is still the account id, because the send loops below reuse
+    // $userId for the household payer.
+    $webPush = ['account_user_id' => $userId, 'subscriptions' => []];
+    $webPushConfig = wallos_get_instance_webpush_config($db);
+    if (!empty($webPushConfig['values']['deliverable'])) {
+        $webPush['subscriptions'] = wallos_webpush_user_subscriptions($db, $userId);
+        $webPushNotificationsEnabled = count($webPush['subscriptions']) > 0;
+    }
+
     $notificationsEnabled = $emailNotificationsEnabled || $gotifyNotificationsEnabled || $telegramNotificationsEnabled ||
         $webhookNotificationsEnabled || $pushoverNotificationsEnabled || $discordNotificationsEnabled || $pushplusNotificationsEnabled ||
-        $mattermostNotificationsEnabled || $ntfyNotificationsEnabled || $serverchanNotificationsEnabled;
+        $mattermostNotificationsEnabled || $ntfyNotificationsEnabled || $serverchanNotificationsEnabled ||
+        $webPushNotificationsEnabled;
 
     // If no notifications are enabled, no need to run
     if (!$notificationsEnabled) {
@@ -902,6 +916,49 @@ while ($userToNotify = $usersToNotify->fetchArray(SQLITE3_ASSOC)) {
                         }
 
                         unset($ch);
+                    }
+                }
+            }
+
+            // Web Push notifications if enabled
+            if ($webPushNotificationsEnabled) {
+                $webPushUserId = $webPush['account_user_id'];
+                $webPushTitle = translate('wallos_notification', $i18n);
+
+                foreach ($notify as $payerUserId => $perUser) {
+                    $member = $household[$payerUserId] ?? [];
+                    $memberName = $member['name'] ?? "";
+                    $message = buildNotificationMessage($memberName, $perUser, $periodSummaryLine, $sendPeriodStartSummaryOnly);
+                    if ($message === "") {
+                        continue;
+                    }
+
+                    $webPushPayload = json_encode([
+                        'title' => $webPushTitle,
+                        'body' => $message,
+                        'url' => './',
+                    ]);
+
+                    // One message per subscribed device. The endpoint is
+                    // client-supplied, so wallos_webpush_deliver() routes it
+                    // through the SSRF allowlist before sending.
+                    foreach ($webPush['subscriptions'] as $webPushSubscription) {
+                        $delivery = wallos_webpush_deliver($db, $webPushSubscription, $webPushPayload, $webPushUserId);
+
+                        if ($delivery['sent']) {
+                            wallos_cron_count('sent');
+                            echo "Web Push Notifications sent<br />";
+                        } elseif ($delivery['expired']) {
+                            // 404/410 Gone: the browser dropped this
+                            // subscription, so it is removed and never tried
+                            // again.
+                            wallos_webpush_delete_by_endpoint($db, $webPushUserId, $webPushSubscription['endpoint']);
+                            echo "Web Push subscription expired and was removed<br />";
+                        } else {
+                            wallos_cron_problem('a web push notification was not delivered: '
+                                . $delivery['error']);
+                            echo "Error sending Web Push notification: " . $delivery['error'] . "<br />";
+                        }
                     }
                 }
             }

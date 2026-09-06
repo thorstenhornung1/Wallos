@@ -20,7 +20,7 @@
 --   * Every identifier is quoted, because "user" and "order" are reserved words
 --     and a keyword list kept in the generator would be wrong eventually.
 
--- 43 tables, 81 migrations recorded as applied.
+-- 44 tables, 82 migrations recorded as applied.
 
 CREATE TABLE "admin" (
     "id" SERIAL PRIMARY KEY,
@@ -315,6 +315,15 @@ CREATE TABLE "payment_methods" (
     "user_id" INTEGER DEFAULT 1
 );
 
+CREATE TABLE "push_subscriptions" (
+    "endpoint" TEXT,
+    "user_id" INTEGER NOT NULL,
+    "p256dh" TEXT NOT NULL,
+    "auth" TEXT NOT NULL,
+    "created_at" INTEGER DEFAULT 0 NOT NULL,
+    PRIMARY KEY ("endpoint")
+);
+
 CREATE TABLE "pushover_notifications" (
     "enabled" INTEGER DEFAULT 0,
     "user_key" TEXT DEFAULT '',
@@ -461,6 +470,8 @@ ALTER TABLE "ntfy_notifications" ADD CONSTRAINT "ntfy_notifications_user_id_fkey
     FOREIGN KEY ("user_id") REFERENCES "user" ("id");
 ALTER TABLE "oidc_sessions" ADD CONSTRAINT "oidc_sessions_user_id_fkey"
     FOREIGN KEY ("user_id") REFERENCES "user" ("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "push_subscriptions" ADD CONSTRAINT "push_subscriptions_user_id_fkey"
+    FOREIGN KEY ("user_id") REFERENCES "user" ("id");
 ALTER TABLE "serverchan_notifications" ADD CONSTRAINT "serverchan_notifications_user_id_fkey"
     FOREIGN KEY ("user_id") REFERENCES "user" ("id");
 ALTER TABLE "subscriptions" ADD CONSTRAINT "subscriptions_category_id_fkey"
@@ -490,6 +501,7 @@ CREATE UNIQUE INDEX "idx_ntfy_notifications_user" ON "ntfy_notifications" ("user
 CREATE INDEX "idx_oidc_sessions_session" ON "oidc_sessions" ("session_id");
 CREATE INDEX "idx_oidc_sessions_sid" ON "oidc_sessions" ("sid");
 CREATE INDEX "idx_oidc_sessions_user" ON "oidc_sessions" ("user_id");
+CREATE INDEX "idx_push_subscriptions_user" ON "push_subscriptions" ("user_id");
 CREATE UNIQUE INDEX "idx_pushover_notifications_user" ON "pushover_notifications" ("user_id");
 CREATE INDEX "idx_subscriptions_user_inactive_next_payment" ON "subscriptions" ("user_id", "inactive", "next_payment");
 CREATE INDEX "idx_subscriptions_user_notify_inactive" ON "subscriptions" ("user_id", "notify", "inactive");
@@ -680,7 +692,8 @@ INSERT INTO "migrations" ("id", "migration") VALUES
     (78, 'migrations/000079.php'),
     (79, 'migrations/000080.php'),
     (80, 'migrations/000081.php'),
-    (81, 'migrations/000082.php');
+    (81, 'migrations/000082.php'),
+    (82, 'migrations/000083.php');
 
 INSERT INTO "payment_methods" ("id", "name", "icon", "enabled", "order", "user_id") VALUES
     (1, 'PayPal', 'images/uploads/icons/paypal.png', 1, 1, 1),

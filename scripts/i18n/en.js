@@ -50,4 +50,9 @@ let i18n = {
   invalid_budget: "Budget must be a non-negative number",
   invalid_budget_period: "Invalid budget period selected",
   invalid_budget_anchor_date: "Anchor date must be a valid date",
+  web_push_unsupported: "Web Push is not supported in this browser.",
+  web_push_permission_denied: "Notification permission was denied.",
+  web_push_not_configured: "Web Push is not configured on the server.",
+  web_push_enabled: "Web Push enabled on this device.",
+  web_push_disabled: "Web Push disabled on this device.",
 }

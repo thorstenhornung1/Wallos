@@ -1052,6 +1052,31 @@ if ($budgetPeriodAnchorDate === '1970-01-01' || !preg_match('/^\d{4}-\d{2}-\d{2}
             </section>
 
             <section class="account-notifications-section">
+                <header class="account-notification-section-header" onclick="openNotificationsSettings('webpush');">
+                    <h3>
+                        <i class="fa-solid fa-bell"></i>
+                        <?= translate('web_push', $i18n) ?>
+                    </h3>
+                </header>
+                <div class="account-notification-section-settings" data-type="webpush">
+                    <div class="settings-notes">
+                        <p>
+                            <i class="fa-solid fa-circle-info"></i>
+                            <?= translate('web_push_description', $i18n) ?>
+                        </p>
+                    </div>
+                    <div class="settings-notes" id="webPushStatus"></div>
+                    <div class="buttons">
+                        <input type="button" class="thin mobile-grow" id="webPushEnable"
+                            value="<?= translate('web_push_enable_device', $i18n) ?>" onClick="enableWebPush()" />
+                        <input type="button" class="secondary-button thin mobile-grow" id="webPushDisable"
+                            style="display:none" value="<?= translate('web_push_disable_device', $i18n) ?>"
+                            onClick="disableWebPush()" />
+                    </div>
+                </div>
+            </section>
+
+            <section class="account-notifications-section">
                 <header class="account-notification-section-header" onclick="openNotificationsSettings('serverchan');">
                     <h3>
                         <i class="fa-solid fa-code"></i>
@@ -2126,6 +2151,7 @@ if ($budgetPeriodAnchorDate === '1970-01-01' || !preg_match('/^\d{4}-\d{2}-\d{2}
 <script src="scripts/settings.js?<?= $version ?>"></script>
 <script src="scripts/theme.js?<?= $version ?>"></script>
 <script src="scripts/notifications.js?<?= $version ?>"></script>
+<script src="scripts/webpush.js?<?= $version ?>"></script>
 
 <?php
 require_once 'includes/footer.php';
