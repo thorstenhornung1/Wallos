@@ -77,6 +77,8 @@ function bcdos_token($overrides = [])
         'iss' => 'https://auth.dos.example.com',
         'aud' => 'wallos-dos-client',
         'iat' => time(),
+        // exp is mandatory now (§18/WP8); the well-formed base carries one.
+        'exp' => time() + 300,
         'jti' => uniqid('', true),
         'events' => [WALLOS_BACKCHANNEL_LOGOUT_EVENT => new stdClass()],
         'sub' => 'dos-subject-1',

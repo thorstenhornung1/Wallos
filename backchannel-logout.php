@@ -82,6 +82,19 @@ if (!$verdict['valid']) {
     $fail(400);
 }
 
+// Replay guard (§18): record this token's (issuer, jti). A pair already recorded
+// means this exact logout token was already acted on — the provider re-delivered
+// it — so the revocation must NOT run a second time. It is still a valid token and
+// the desired state already holds, so the answer is 200, not an error.
+$firstSighting = wallos_oidc_logout_replay_record($db, $issuer, $verdict['jti'], $verdict['exp'], time());
+if (!$firstSighting) {
+    error_log('Wallos OIDC back-channel logout: a token already processed was replayed; no second revocation.');
+    http_response_code(200);
+    echo json_encode(['revoked' => 0]);
+    $db->close();
+    exit();
+}
+
 $revoked = wallos_oidc_revoke_sessions($db, $verdict['sub'], $verdict['sid']);
 
 // A token that identifies no current session is still a valid token, and the

@@ -87,6 +87,9 @@ function backchannel_claims($overrides = [])
         'iss' => 'https://auth.example.com',
         'aud' => 'wallos-client',
         'iat' => 1000000,
+        // exp is mandatory now (§18/WP8): a token without it is refused, so the
+        // well-formed base carries one comfortably ahead of the default now.
+        'exp' => 1000300,
         'jti' => 'unique-id',
         'events' => [WALLOS_BACKCHANNEL_LOGOUT_EVENT => new stdClass()],
         'sid' => 'provider-session-1',
@@ -118,6 +121,10 @@ wallos_test('a properly signed logout token is accepted', function () {
     assert_true($verdict['valid'], 'accepted: ' . ($verdict['error'] ?? ''));
     assert_same('provider-session-1', $verdict['sid'], 'the session it names');
     assert_same('user-subject-1', $verdict['sub'], 'and the subject');
+    // The replay guard reads these off the verdict, so a valid token hands them
+    // back rather than making the endpoint re-parse the token.
+    assert_same('unique-id', $verdict['jti'], 'the jti it carries');
+    assert_same(1000300, $verdict['exp'], 'and the exp that becomes the cache TTL');
 });
 
 wallos_test('an audience array containing the client is accepted', function () {
@@ -239,6 +246,34 @@ wallos_test('an expired token is refused', function () {
     $token = backchannel_token(backchannel_claims(['iat' => 1000000, 'exp' => 1000060]));
 
     assert_same('expired', backchannel_validate($token, [], 1000260)['error'], 'past exp');
+});
+
+wallos_test('a token without an exp is refused (P: missing exp)', function () {
+    // exp is mandatory now: the replay cache TTL is the token's own exp, so a
+    // token that never expires cannot be cached with a bounded lifetime. A
+    // missing exp, and an exp that is not an integer, are both refused.
+    $claims = backchannel_claims();
+    unset($claims['exp']);
+    assert_same('missing_exp', backchannel_validate(backchannel_token($claims))['error'],
+        'no exp claim at all');
+
+    assert_same('missing_exp',
+        backchannel_validate(backchannel_token(backchannel_claims(['exp' => 'soon'])))['error'],
+        'a non-integer exp is no exp');
+});
+
+wallos_test('a token without a jti is refused (P: missing jti)', function () {
+    // jti is mandatory now: it is the key the (issuer, jti) replay cache is built
+    // on, so a token without one could be acted on repeatedly. An empty-string
+    // jti names no token and is refused the same way.
+    $claims = backchannel_claims();
+    unset($claims['jti']);
+    assert_same('missing_jti', backchannel_validate(backchannel_token($claims))['error'],
+        'no jti claim at all');
+
+    assert_same('missing_jti',
+        backchannel_validate(backchannel_token(backchannel_claims(['jti' => ''])))['error'],
+        'an empty jti is no jti');
 });
 
 wallos_test('a token naming neither subject nor session is refused', function () {
