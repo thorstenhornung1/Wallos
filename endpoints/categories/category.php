@@ -151,6 +151,13 @@ function handleSortCategories($db, $userId, $i18n)
         $stmt->bindParam(':categoryId', $categoryId, SQLITE3_INTEGER);
         $stmt->bindParam(':userId', $userId, SQLITE3_INTEGER);
         $result = $stmt->execute();
+        if ($result === false) {
+            echo json_encode([
+                "success" => false,
+                "message" => translate("error", $i18n)
+            ]);
+            return;
+        }
         $order++;
     }
 
