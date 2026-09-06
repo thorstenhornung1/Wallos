@@ -133,6 +133,8 @@ function wallos_test_reset_env()
         'WALLOS_PUSHOVER_APP_TOKEN', 'WALLOS_PUSHOVER_APP_TOKEN_FILE',
         'WALLOS_NTFY_BASE_URL', 'WALLOS_NTFY_HEADERS', 'WALLOS_NTFY_HEADERS_FILE',
         'WALLOS_GOTIFY_BASE_URL',
+        'WALLOS_VAPID_PUBLIC_KEY', 'WALLOS_VAPID_PRIVATE_KEY', 'WALLOS_VAPID_PRIVATE_KEY_FILE',
+        'WALLOS_VAPID_SUBJECT',
         'WALLOS_DEFAULT_LANGUAGE',
         'SSRF_ALLOWLIST',
         // A variable missing from this list leaks into the next case and makes

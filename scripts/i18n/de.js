@@ -52,4 +52,9 @@ let i18n = {
   invalid_budget_period: "Ungültiger Budgetzeitraum ausgewählt",
   invalid_budget_anchor_date: "Das Ankerdatum muss ein gültiges Datum sein",
   no_results_found: "Keine Ergebnisse gefunden",
+  web_push_unsupported: "Web Push wird von diesem Browser nicht unterstützt.",
+  web_push_permission_denied: "Die Benachrichtigungsberechtigung wurde verweigert.",
+  web_push_not_configured: "Web Push ist auf dem Server nicht konfiguriert.",
+  web_push_enabled: "Web Push auf diesem Gerät aktiviert.",
+  web_push_disabled: "Web Push auf diesem Gerät deaktiviert.",
 }

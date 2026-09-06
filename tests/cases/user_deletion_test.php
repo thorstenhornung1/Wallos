@@ -73,6 +73,12 @@ function deletion_fixture_rows($references, $currencyId)
                                      VALUES (1, \'k\', \'t\', :u)',
         'pushplus_notifications' => 'INSERT INTO pushplus_notifications (enabled, token, user_id)
                                      VALUES (1, \'t\', :u)',
+        // The endpoint is unique across the table, so it carries the per-account
+        // currency id (which differs per account) the way subscriptions below
+        // embeds its references, rather than a constant that would collide when
+        // two accounts are seeded.
+        'push_subscriptions' => 'INSERT INTO push_subscriptions (user_id, endpoint, p256dh, auth, created_at)
+                                 VALUES (:u, \'https://push.example/device-' . (int) $currencyId . '\', \'p\', \'a\', 0)',
         'serverchan_notifications' => 'INSERT INTO serverchan_notifications (enabled, sendkey, user_id)
                                        VALUES (1, \'k\', :u)',
         'settings' => 'INSERT INTO settings (dark_theme, color_theme, user_id) VALUES (1, \'blue\', :u)',

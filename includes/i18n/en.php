@@ -626,6 +626,15 @@ $i18n = [
     // configured provider display name, or a neutral fallback when none is set.
     "field_managed_by_provider" => "Managed by %s",
     "your_login_provider" => "your login provider",
+    "web_push" => "Web Push",
+    "web_push_description" => "Get renewal reminders pushed straight to this browser or installed app.",
+    "web_push_enable_device" => "Enable on this device",
+    "web_push_disable_device" => "Disable on this device",
+    "web_push_unsupported" => "Web Push is not supported in this browser.",
+    "web_push_permission_denied" => "Notification permission was denied.",
+    "web_push_not_configured" => "Web Push is not configured on the server.",
+    "web_push_enabled" => "Web Push enabled on this device.",
+    "web_push_disabled" => "Web Push disabled on this device.",
 ];
 
 
