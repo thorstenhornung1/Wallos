@@ -67,14 +67,37 @@ fi
 # The binary switches with the port: the capped one cannot even be exec'd
 # once the bounding set lost the bind capability, and the uncapped copy could
 # not bind 80. A high port needs no capability, so the copy serves it.
+#
+# The shipped config listens on '[::]:80 ipv6only=off' — one dual-stack socket
+# that also accepts IPv4. On a kernel booted with ipv6.disable=1 that socket
+# fails with "Address family not supported" and nginx exits before serving a
+# single request (#129). /proc/net/if_inet6 exists exactly when the kernel has
+# IPv6, so its absence is the signal to rewrite the listen to plain IPv4, which
+# binds on any host. Port and address are decided independently and applied by
+# one rewrite, so the two reasons compose: a v4-only host on a custom port gets
+# the copy once, with both changes in it.
 NGINX_CONF=/etc/nginx/nginx.conf
 NGINX_BIN=/usr/sbin/nginx
 WALLOS_HTTP_PORT=${WALLOS_HTTP_PORT:-80}
+listen_addr="[::]:$WALLOS_HTTP_PORT ipv6only=off"
+rewrite_conf=0
+
 if [ "$WALLOS_HTTP_PORT" != "80" ]; then
-    sed "s/listen       \[::\]:80 /listen       [::]:$WALLOS_HTTP_PORT /" /etc/nginx/nginx.conf > /tmp/nginx/nginx.conf
-    NGINX_CONF=/tmp/nginx/nginx.conf
+    rewrite_conf=1
     NGINX_BIN=/usr/sbin/nginx-nocap
     echo "Listening on port $WALLOS_HTTP_PORT instead of 80."
+fi
+
+if [ ! -e /proc/net/if_inet6 ]; then
+    rewrite_conf=1
+    listen_addr="0.0.0.0:$WALLOS_HTTP_PORT"
+    echo "No IPv6 on this host; nginx will listen on IPv4 only."
+fi
+
+if [ "$rewrite_conf" = "1" ]; then
+    sed "s|listen       \[::\]:80 ipv6only=off;|listen       $listen_addr;|" \
+        /etc/nginx/nginx.conf > /tmp/nginx/nginx.conf
+    NGINX_CONF=/tmp/nginx/nginx.conf
 fi
 
 # PIDs we’ll track
