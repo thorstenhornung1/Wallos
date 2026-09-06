@@ -351,65 +351,91 @@ wallos_test('the OIDC login path marks its remember-me token as OIDC-derived', f
     assert_contains('from_oidc = 1', $source, 'and marks the token it mints');
 });
 
-// ---------------------- Req 4/5: the long-idle gap, both directions
+// ---------------------- Req 4/5: the idle gap, and the refresh-oracle it hid
 
-wallos_test('a long-idle session refreshes before it is granted access, and stays valid on success',
+wallos_test('Test H: an idle session past coverage requires revalidation, and a still-usable '
+    . 'refresh token does not make it valid',
     function () {
-        // The first request after the PHP session was collected past the point
-        // its access token should have refreshed. Through the guard — the one
-        // gate every request passes — the refresh happens before access is
-        // granted, and a success keeps the session valid and records the new
-        // timing. This is the positive control for the definitive case below.
-        // A session id unique to this case: the child processes share PHP's
-        // session store keyed by id, and maintain() caches its next-due moment in
-        // the session — a reused id would let one case's "not due yet" mask the
-        // next case's refresh.
+        // THE MANDATORY PERMANENT REGRESSION (OIDC Session Authority v2, Test H).
+        //
+        // This case INVERTS what it used to assert. Until v2 it read "a long-idle
+        // session refreshes before it is granted access, and stays valid on
+        // success": the first request after the PHP session was collected past
+        // the access token's life triggered a refresh through the guard, the
+        // refresh succeeded, and the session was granted access. That is the
+        // refresh-oracle #144 relied on — a refresh token authentik keeps usable
+        // after the AuthenticatedSession is deleted made a killed session valid
+        // again. The behaviour change IS the spec: past the back-channel coverage
+        // boundary the session must require a fresh browser proof, and a refresh
+        // that WOULD still succeed must neither be attempted nor believed.
+        //
+        // A session id unique to this case (#148): the child processes share
+        // PHP's session store keyed by id, and maintain() caches its next-due
+        // moment there.
         $db = wallos_test_open_database();
-        idp_fixture($db, 'idle-success');
-        wallos_oidc_record_access_token($db, 'idle-success', [
+        idp_fixture($db, 'idp-h-idle');
+        wallos_oidc_record_access_token($db, 'idp-h-idle', [
             'access_token' => 'expired-access-token',
             'refresh_token' => 'stored-refresh-token',
             'expires_in' => 300,
-        ], time() - 600); // issued ten minutes ago, a five-minute token: long past due
+        ], time() - 600); // issued ten minutes ago, a five-minute token: past the coverage boundary
 
+        // A success answer is queued so the refresh WOULD grant if it ran. It
+        // must not run: calls=0 is the proof the guard never consulted the
+        // refresh credential once revalidation was required.
         $out = idp_provider_child([idp_success_answer('rotated-refresh-token')],
-            'session_id("idle-success");' . "\n"
+            'session_id("idp-h-idle");' . "\n"
             . 'session_start();' . "\n"
             . '$_SESSION["from_oidc"] = true;' . "\n"
             . 'require ' . var_export(WALLOS_ROOT . '/includes/oidc/session_guard.php', true) . ';' . "\n"
+            . '$state = wallos_oidc_session_authority($db);' . "\n"
             . '$valid = wallos_oidc_current_session_is_valid($db);' . "\n"
+            . 'echo "state=" . $state . "\n";' . "\n"
             . 'echo "valid=" . ($valid ? "yes" : "no") . "\n";' . "\n"
             . 'echo "calls=" . $GLOBALS["calls"];');
 
-        assert_contains('valid=yes', $out, 'the session stays valid when the refresh succeeds (' . $out . ')');
-        assert_contains('calls=1', $out, 'and the refresh happened, once');
+        assert_contains('state=revalidation_required', $out,
+            'the idle session resolves to REVALIDATION_REQUIRED, not VALID (' . $out . ')');
+        assert_contains('valid=no', $out, 'so it is refused protected access');
+        assert_contains('calls=0', $out,
+            'and the refresh was NOT attempted — the guard must not refresh once revalidation is required');
 
-        assert_same('rotated-refresh-token', idp_session_column($db, 'refresh_token', 'idle-success'),
-            'the rotated credential replaced the spent one');
-        assert_true((int) idp_session_column($db, 'access_token_expires_at', 'idle-success') > time(),
-            'and the new access token expiry moved into the future');
+        assert_same(1, (int) $db->scalar('SELECT COUNT(*) FROM oidc_sessions WHERE session_id = :s',
+            [':s' => 'idp-h-idle']), 'the row PERSISTS through revalidation_required (it is not deleted)');
+        assert_same('stored-refresh-token', idp_session_column($db, 'refresh_token', 'idp-h-idle'),
+            'and the refresh credential was neither spent nor rotated');
+        assert_same('revalidation_required', idp_session_column($db, 'status', 'idp-h-idle'),
+            'the transition is persisted, so every later request stays out of the refresh path');
         $db->close();
     });
 
-wallos_test('a long-idle session the provider definitively rejects is ended before the request proceeds',
+wallos_test('a session due for refresh that the provider definitively rejects is ended before the '
+    . 'request proceeds',
     function () {
-        // Same first request, but the provider answers invalid_grant: the
-        // credential is gone. The IdP gets the final word even though no
-        // back-channel message ever arrived — the request is refused before it
-        // reaches anything it protects, the row and its token are removed, and a
-        // fresh OIDC sign-in is the only way back in.
+        // invalid_grant is the one refresh outcome that still ends a session, and
+        // it happens on the PROACTIVE path: a session INSIDE its coverage window
+        // but past the refresh-due moment is refreshed by the guard, and the
+        // provider answering invalid_grant means the credential is gone. The IdP
+        // gets the final word even though no back-channel message arrived — the
+        // request is refused before it reaches anything it protects, the row and
+        // its token are removed, and a fresh OIDC sign-in is the only way back
+        // in. (Past the coverage boundary there is no refresh at all — that is
+        // Test H — so this rejection is proven where a refresh legitimately
+        // runs: still inside coverage.)
         $db = wallos_test_open_database();
-        idp_fixture($db, 'idle-definitive');
-        wallos_oidc_record_access_token($db, 'idle-definitive', [
-            'access_token' => 'expired-access-token',
+        idp_fixture($db, 'idp-def-due');
+        // Issued 200s ago, a 300s token: expires 100s from now (still covered),
+        // and past the 150s halfway mark, so a refresh is due right now.
+        wallos_oidc_record_access_token($db, 'idp-def-due', [
+            'access_token' => 'ageing-access-token',
             'refresh_token' => 'stored-refresh-token',
             'expires_in' => 300,
-        ], time() - 600);
+        ], time() - 200);
 
         // Driven through wallos_oidc_require_valid_session(): it is what an
         // endpoint calls, and it must end the request rather than return.
         $out = idp_provider_child([idp_invalid_grant_answer()],
-            'session_id("idle-definitive");' . "\n"
+            'session_id("idp-def-due");' . "\n"
             . 'session_start();' . "\n"
             . '$_SESSION["from_oidc"] = true;' . "\n"
             . 'require ' . var_export(WALLOS_ROOT . '/includes/oidc/session_guard.php', true) . ';' . "\n"
@@ -422,49 +448,83 @@ wallos_test('a long-idle session the provider definitively rejects is ended befo
             'the caller is told the identity provider ended the session');
 
         assert_same(0, (int) $db->scalar('SELECT COUNT(*) FROM oidc_sessions WHERE session_id = :s',
-            [':s' => 'idle-definitive']), 'the oidc_sessions row was removed');
+            [':s' => 'idp-def-due']), 'the oidc_sessions row was removed');
         assert_same(0, (int) $db->scalar('SELECT COUNT(*) FROM login_tokens WHERE token = :t',
             [':t' => 'remember-token']), 'the login_tokens token was removed, so it must re-auth via OIDC');
         $db->close();
     });
 
-wallos_test('a long-idle session whose refresh only times out is kept, not signed out', function () {
-    // Req 5 — no logout storm. "Provider unavailable" is not "provider rejected
-    // this credential". A transient failure leaves the session valid and the row
-    // and token intact, and records the failure for diagnosis. This is the
-    // #144 behaviour, preserved exactly.
-    $db = wallos_test_open_database();
-    idp_fixture($db, 'idle-transient');
-    wallos_oidc_record_access_token($db, 'idle-transient', [
-        'access_token' => 'expired-access-token',
-        'refresh_token' => 'stored-refresh-token',
-        'expires_in' => 300,
-    ], time() - 600);
+wallos_test('Test M: a transient refresh outage inside coverage keeps the session valid without '
+    . 'extending its deadline, and the deadline then forces revalidation',
+    function () {
+        // The coverage boundary is what governs, not the refresh. A transient
+        // refresh failure while coverage is still valid leaves the session valid
+        // — "provider unavailable" is not "provider rejected this credential", so
+        // no logout storm (Req 5, the #144 behaviour) — but it MUST NOT extend
+        // the deadline: the boundary stays exactly where the last real token put
+        // it. When that boundary passes, the very next request requires
+        // revalidation and does not refresh, even though the credential is still
+        // in hand.
+        $db = wallos_test_open_database();
+        idp_fixture($db, 'idp-m-deadline');
+        // Issued 200s ago, a 300s token: covered until 100s from now, and past
+        // the 150s halfway mark, so a refresh is due now.
+        wallos_oidc_record_access_token($db, 'idp-m-deadline', [
+            'access_token' => 'ageing-access-token',
+            'refresh_token' => 'stored-refresh-token',
+            'expires_in' => 300,
+        ], time() - 200);
 
-    $timeout = ['body' => false, 'status' => 0, 'error' => 'Operation timed out'];
+        $coverageBefore = (int) idp_session_column($db, 'backchannel_coverage_until', 'idp-m-deadline');
 
-    $out = idp_provider_child([$timeout],
-        'session_id("idle-transient");' . "\n"
-        . 'session_start();' . "\n"
-        . '$_SESSION["from_oidc"] = true;' . "\n"
-        . 'require ' . var_export(WALLOS_ROOT . '/includes/oidc/session_guard.php', true) . ';' . "\n"
-        . '$valid = wallos_oidc_current_session_is_valid($db);' . "\n"
-        . 'echo "valid=" . ($valid ? "yes" : "no") . "\n";' . "\n"
-        . 'echo "calls=" . $GLOBALS["calls"];');
+        $timeout = ['body' => false, 'status' => 0, 'error' => 'Operation timed out'];
 
-    assert_contains('valid=yes', $out, 'an unreachable provider does not end the session (' . $out . ')');
-    assert_contains('calls=1', $out, 'the guard did try to refresh');
+        // Phase 1: inside coverage, refresh due, provider unreachable.
+        $covered = idp_provider_child([$timeout],
+            'session_id("idp-m-deadline");' . "\n"
+            . 'session_start();' . "\n"
+            . '$_SESSION["from_oidc"] = true;' . "\n"
+            . 'require ' . var_export(WALLOS_ROOT . '/includes/oidc/session_guard.php', true) . ';' . "\n"
+            . '$valid = wallos_oidc_current_session_is_valid($db);' . "\n"
+            . 'echo "valid=" . ($valid ? "yes" : "no") . "\n";' . "\n"
+            . 'echo "calls=" . $GLOBALS["calls"];');
 
-    assert_same(1, (int) $db->scalar('SELECT COUNT(*) FROM oidc_sessions WHERE session_id = :s',
-        [':s' => 'idle-transient']), 'the row is kept');
-    assert_same(1, (int) $db->scalar('SELECT COUNT(*) FROM login_tokens WHERE token = :t',
-        [':t' => 'remember-token']), 'the token is kept');
-    assert_true((int) idp_session_column($db, 'refresh_failed_at', 'idle-transient') > 0,
-        'and the failure is recorded, so an operator can see the session is no longer remotely revocable');
-    assert_same('stored-refresh-token', idp_session_column($db, 'refresh_token', 'idle-transient'),
-        'the credential that may still work is kept, not discarded');
-    $db->close();
-});
+        assert_contains('valid=yes', $covered,
+            'inside coverage a transient failure does not end the session (' . $covered . ')');
+        assert_contains('calls=1', $covered, 'the guard did try to refresh, once');
+
+        assert_true((int) idp_session_column($db, 'refresh_failed_at', 'idp-m-deadline') > 0,
+            'the failure is recorded, so an operator sees the session is no longer remotely revocable');
+        $coverageAfter = (int) idp_session_column($db, 'backchannel_coverage_until', 'idp-m-deadline');
+        assert_same($coverageBefore, $coverageAfter,
+            'and the coverage deadline was NOT extended by the failed refresh');
+
+        // Phase 2: time moves the deadline into the past. The next request must
+        // require revalidation and must NOT refresh — a success answer is queued
+        // to prove it is never consulted.
+        $expireStmt = $db->prepare('UPDATE oidc_sessions
+                                       SET access_token_expires_at = :past,
+                                           backchannel_coverage_until = :past2
+                                     WHERE session_id = :s');
+        $expireStmt->bindValue(':past', time() - 10);
+        $expireStmt->bindValue(':past2', time() - 10);
+        $expireStmt->bindValue(':s', 'idp-m-deadline');
+        $expireStmt->execute();
+
+        $expired = idp_provider_child([idp_success_answer('rotated-refresh-token')],
+            'session_id("idp-m-deadline");' . "\n"
+            . 'session_start();' . "\n"
+            . '$_SESSION["from_oidc"] = true;' . "\n"
+            . 'require ' . var_export(WALLOS_ROOT . '/includes/oidc/session_guard.php', true) . ';' . "\n"
+            . '$state = wallos_oidc_session_authority($db);' . "\n"
+            . 'echo "state=" . $state . "\n";' . "\n"
+            . 'echo "calls=" . $GLOBALS["calls"];');
+
+        assert_contains('state=revalidation_required', $expired,
+            'at the deadline the session requires revalidation (' . $expired . ')');
+        assert_contains('calls=0', $expired, 'and no refresh is attempted past the boundary');
+        $db->close();
+    });
 
 wallos_test('the endpoint and page bootstraps both run the guard, so the idle gap is closed everywhere',
     function () {
@@ -480,6 +540,110 @@ wallos_test('the endpoint and page bootstraps both run the guard, so the idle ga
             'the page bootstrap restores an idle session');
         assert_true(wallos_test_file_calls('includes/checksession.php', 'wallos_oidc_current_session_is_valid'),
             'and then runs the guard on it');
+    });
+
+wallos_test('Test J: a refresh that would still return 200 cannot resurrect a session past the '
+    . 'coverage boundary',
+    function () {
+        // The Definition of Done, stated as a case: a successful refresh token
+        // exchange must NEVER transition an uncertain session to VALID. The OP
+        // browser session may be gone while the refresh token still works
+        // (authentik keeps it usable after the AuthenticatedSession is deleted),
+        // so the guard past the coverage boundary must not let a 200 from the
+        // token endpoint mean anything. It proves it by never asking: calls=0.
+        $db = wallos_test_open_database();
+        idp_fixture($db, 'idp-j-oracle');
+        wallos_oidc_record_access_token($db, 'idp-j-oracle', [
+            'access_token' => 'expired-access-token',
+            'refresh_token' => 'stored-refresh-token',
+            'expires_in' => 300,
+        ], time() - 600); // past the coverage boundary
+
+        // The stubbed token endpoint would hand back a fresh, valid token pair.
+        $out = idp_provider_child([idp_success_answer('rotated-refresh-token')],
+            'session_id("idp-j-oracle");' . "\n"
+            . 'session_start();' . "\n"
+            . '$_SESSION["from_oidc"] = true;' . "\n"
+            . 'require ' . var_export(WALLOS_ROOT . '/includes/oidc/session_guard.php', true) . ';' . "\n"
+            . '$state = wallos_oidc_session_authority($db);' . "\n"
+            . 'echo "state=" . $state . "\n";' . "\n"
+            . 'echo "valid=" . (wallos_oidc_current_session_is_valid($db) ? "yes" : "no") . "\n";' . "\n"
+            . 'echo "calls=" . $GLOBALS["calls"];');
+
+        assert_not_contains('state=valid', $out,
+            'a working refresh credential does not make the session VALID (' . $out . ')');
+        assert_contains('valid=no', $out, 'so protected access is refused');
+        assert_contains('calls=0', $out,
+            'and the token endpoint that would answer 200 is never even consulted');
+        $db->close();
+    });
+
+wallos_test('Test R: with the schema present, an unreadable authority store refuses access rather '
+    . 'than failing open',
+    function () {
+        // §17. Reading the authority state is security-critical, so a read
+        // FAILURE must not be read as permission. Before v2 the check returned
+        // true on a failed prepare — fail OPEN. With the columns present, a store
+        // that cannot be read is SUSPENDED: HTTP 503, no protected data, and the
+        // local state kept so the next request can retry. The pre-migration
+        // bypass survives only while the table is genuinely absent, which is not
+        // this case.
+        $db = wallos_test_open_database();
+        idp_fixture($db, 'idp-r-suspended');
+        // A live, in-coverage session, so the positive control is genuinely VALID
+        // (issued 10s ago, a 300s token: covered and not yet due to refresh).
+        wallos_oidc_record_access_token($db, 'idp-r-suspended', [
+            'access_token' => 'live-access-token',
+            'refresh_token' => 'stored-refresh-token',
+            'expires_in' => 300,
+        ], time() - 10);
+
+        $before = idp_db_child(
+            'session_id("idp-r-suspended");' . "\n"
+            . 'session_start();' . "\n"
+            . '$_SESSION["from_oidc"] = true;' . "\n"
+            . 'require ' . var_export(WALLOS_ROOT . '/includes/oidc/session_guard.php', true) . ';' . "\n"
+            . 'echo "valid=" . (wallos_oidc_current_session_is_valid($db) ? "yes" : "no");');
+        assert_contains('valid=yes', $before,
+            'the positive control: a live session is admitted (' . $before . ')');
+
+        // Make the authority record unreadable while the table and the status
+        // column both remain: dropping a column the guard's SELECT needs stands
+        // in for a store whose read of the authority row fails. The read now
+        // fails, but status still exists, so this is "store broken", not
+        // "migration not run" — the guard must suspend, not bypass.
+        $db->exec('ALTER TABLE oidc_sessions DROP COLUMN backchannel_coverage_until');
+
+        $after = idp_db_child(
+            'session_id("idp-r-suspended");' . "\n"
+            . 'session_start();' . "\n"
+            . '$_SESSION["from_oidc"] = true;' . "\n"
+            . 'require ' . var_export(WALLOS_ROOT . '/includes/oidc/session_guard.php', true) . ';' . "\n"
+            . '$state = wallos_oidc_session_authority($db);' . "\n"
+            . 'echo "state=" . $state . "\n";' . "\n"
+            . 'echo "valid=" . (wallos_oidc_current_session_is_valid($db) ? "yes" : "no");');
+        assert_contains('state=suspended', $after,
+            'a read failure with the schema present resolves to SUSPENDED, never VALID (' . $after . ')');
+        assert_contains('valid=no', $after, 'so the request is refused');
+
+        // And the endpoint enforcement refuses with 503 rather than reaching
+        // anything protected — never fail open — while keeping the session.
+        $enforced = idp_db_child(
+            'session_id("idp-r-suspended");' . "\n"
+            . 'session_start();' . "\n"
+            . '$_SESSION["from_oidc"] = true;' . "\n"
+            . 'require ' . var_export(WALLOS_ROOT . '/includes/oidc/session_guard.php', true) . ';' . "\n"
+            . 'wallos_oidc_require_valid_session($db);' . "\n"
+            . 'echo "REACHED-PROTECTED-LOGIC";');
+        assert_not_contains('REACHED-PROTECTED-LOGIC', $enforced,
+            'the endpoint does not reach protected logic under SUSPENDED (' . $enforced . ')');
+        assert_contains('temporarily unavailable', $enforced,
+            'the caller is told to retry, not that it succeeded');
+
+        assert_same(1, (int) $db->scalar('SELECT COUNT(*) FROM oidc_sessions WHERE session_id = :s',
+            [':s' => 'idp-r-suspended']),
+            'SUSPENDED keeps the local state — the row is not deleted');
+        $db->close();
     });
 
 // ------------------------------------- Req 6: no periodic refresh cron

@@ -22,6 +22,19 @@
  * (wallos_oidc_record_access_token), and spend it before the access token dies
  * (wallos_oidc_maintain_access_token).
  *
+ * WHAT THIS FILE IS NOT (OIDC Session Authority v2). A successful refresh means
+ * only "the provider accepted this OAuth credential" — never "the user's
+ * provider session still exists". authentik's refresh tokens are configured to
+ * outlive the AuthenticatedSession they were minted for, so a refresh can
+ * succeed against a session an administrator has already ended. The proactive
+ * refresh here is therefore an OPTIMISATION — it keeps the provider able to
+ * reach a still-live session by back-channel logout — and NOT a proof of
+ * authority. The session guard treats a session past its back-channel coverage
+ * boundary as needing a fresh browser revalidation regardless of whether a
+ * refresh would succeed, and never calls the maintenance below once that
+ * boundary has passed. Nothing a refresh returns can make an uncertain session
+ * valid; only an Authorization Code login or a browser revalidation can.
+ *
  * THE ASSUMPTION THE WHOLE FIX RESTS ON, stated here because this is where a
  * reader will look for it: a refreshed access token stays bound to the same
  * provider session, so the receiver that iterates over live access tokens for
@@ -277,12 +290,26 @@ function wallos_oidc_record_access_token($db, $sessionId, $tokenData, $now)
         ? $tokenData['refresh_token']
         : '';
 
+    // The back-channel coverage boundary tracks the access token's own expiry:
+    // while a live access token exists the provider can still build a logout
+    // notification from it, and once it dies the guard must require a browser
+    // revalidation before any protected work. A refresh recorded here BEFORE the
+    // boundary therefore legitimately extends coverage; a refresh cannot be
+    // recorded after it, because the guard stops calling maintenance once
+    // revalidation is required. authority_confirmed_at is deliberately NOT
+    // touched: a refresh maintains the infrastructure around a session, it does
+    // not re-establish the authority behind it. Guarded on the column so an
+    // install still mid-migration keeps working.
+    $hasCoverage = $db->columnExists('oidc_sessions', 'backchannel_coverage_until');
+
+    $coverageClause = $hasCoverage ? ', backchannel_coverage_until = :coverageUntil' : '';
+
     $stmt = $db->prepare('UPDATE oidc_sessions
                              SET refresh_token = :refreshToken,
                                  access_token_issued_at = :issuedAt,
                                  access_token_expires_at = :expiresAt,
                                  refresh_failed_at = 0,
-                                 refresh_error = \'\'
+                                 refresh_error = \'\'' . $coverageClause . '
                            WHERE session_id = :sessionId');
     if ($stmt === false) {
         error_log('Wallos OIDC: could not record the access token state, so this session cannot be '
@@ -294,6 +321,9 @@ function wallos_oidc_record_access_token($db, $sessionId, $tokenData, $now)
     $stmt->bindValue(':refreshToken', $refreshToken);
     $stmt->bindValue(':issuedAt', $validity['issued_at']);
     $stmt->bindValue(':expiresAt', $validity['expires_at']);
+    if ($hasCoverage) {
+        $stmt->bindValue(':coverageUntil', $validity['expires_at']);
+    }
     $stmt->bindValue(':sessionId', $sessionId);
 
     // Read, because a session whose refresh token was not stored is one that
