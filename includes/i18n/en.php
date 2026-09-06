@@ -612,6 +612,18 @@ $i18n = [
     "payment_method_bank_transfer" => "Bank Transfer",
     "payment_method_direct_debit" => "Direct Debit",
     "payment_method_money" => "Money",
+    // Opt-in localizer for a still-default account's default currency and
+    // payment-method names (issue #164 part B). Shown in the Currencies and
+    // Payment Methods settings sections only while English defaults are still
+    // present; it renames them to the account language on explicit, per-row
+    // confirmation and never touches a renamed or custom entry.
+    "localize_currencies_button" => "Localize default currency names to my language",
+    "localize_payments_button" => "Localize default payment method names to my language",
+    "localize_defaults_info" => "These entries still use the English default names. You can rename them to your language. Renamed and custom entries are never changed.",
+    "localize_defaults_apply" => "Localize selected",
+    "localize_defaults_nothing_selected" => "Nothing was selected to localize.",
+    "localize_defaults_failed" => "Could not localize the names. Please try again.",
+    "localize_defaults_done" => "Localized {count} name(s) to your language.",
     // Currency names and symbols are no longer maintained here: they come from
     // Unicode CLDR at account-creation time (includes/currency_localization.php,
     // issue #163). The "currency_name" label below is the UI field caption, not
