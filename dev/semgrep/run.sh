@@ -94,9 +94,21 @@ ARGS="--config $CONFIG --metrics=off --disable-version-check --quiet"
 [ "$FORMAT" = json ] && ARGS="$ARGS --json"
 [ "$MODE" = check ] && ARGS="$ARGS --error --strict"
 
+# A scan must prove it ran. Semgrep can run, fail internally, print its
+# complaint and still return 0 — a worktree's .git *file* trips its
+# safe-directory check and that is exactly what happened (#145). Exit code alone
+# then cannot tell "checked everything, all clean" from "checked nothing". So
+# every invocation also writes its JSON to a file the guard below reads: the JSON
+# carries the list of paths Semgrep scanned, and a count of zero is a failure no
+# matter what the exit code said. The container writes into a mounted directory
+# so the host can read it after the container is gone.
+SCAN_DIR=$(mktemp -d "${TMPDIR:-/tmp}/semgrep-gate.XXXXXX")
+SCAN_JSON=$SCAN_DIR/scan.json
+trap 'rm -rf "$SCAN_DIR"' EXIT INT TERM
+
 run_local() {
     # shellcheck disable=SC2086
-    semgrep $ARGS "$@"
+    semgrep $ARGS --json-output="$SCAN_JSON" "$@"
 }
 
 run_container() {
@@ -105,9 +117,25 @@ run_container() {
     # shellcheck disable=SC2086
     "$engine" run --rm \
         -v "$ROOT:/src:ro" \
+        -v "$SCAN_DIR:/semgrep-out:rw" \
         -w /src \
         -e SEMGREP_SEND_METRICS=off \
-        "$IMAGE" semgrep $ARGS "$@"
+        "$IMAGE" semgrep $ARGS --json-output=/semgrep-out/scan.json "$@"
+}
+
+# How many files Semgrep reports it actually scanned, from its JSON output.
+# POSIX text munging rather than a JSON dependency, in keeping with the rest of
+# dev/: flatten to one line, isolate the "scanned" array, count the quoted paths
+# in it. An empty array — "scanned":[] — or no file at all is zero.
+count_scanned() {
+    _json=$1
+    [ -f "$_json" ] || { printf '0'; return; }
+    _frag=$(tr '\n' ' ' < "$_json" | sed -n 's/.*"scanned"[[:space:]]*:[[:space:]]*\[//p')
+    _frag=${_frag%%]*}
+    case $_frag in
+        *[!\ ]*) printf '%s' "$_frag" | grep -o '"' | wc -l | awk '{ print int($1 / 2) }' ;;
+        *) printf '0' ;;
+    esac
 }
 
 STATUS=0
@@ -125,6 +153,15 @@ elif command -v docker >/dev/null 2>&1; then
     run_container docker "$@" || STATUS=$?
 else
     die 'neither semgrep, podman nor docker is available — the gate did not run'
+fi
+
+# The proof that the gate ran, checked before anything trusts $STATUS: a run
+# that scanned nothing is not a clean run, whatever exit code Semgrep returned.
+# This is the one answer a gate must never give by accident (#145), and it
+# applies to --report as much as to a check — a report of nothing is no report.
+SCANNED=$(count_scanned "$SCAN_JSON")
+if [ "$SCANNED" -eq 0 ]; then
+    die 'Semgrep scanned no files — the gate did not run. A scan of nothing reads as clean from the exit code alone, so it fails here loudly instead. Run it from a git checkout of the source tree (see dev/README.md for the worktree case).'
 fi
 
 if [ "$MODE" = report ]; then

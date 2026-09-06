@@ -24,6 +24,13 @@ if (is_dir(WALLOS_TEST_TMP)) {
     mkdir(WALLOS_TEST_TMP, 0700, true);
 }
 
+// The PHP session store is shared across runs. A subprocess case that writes
+// sess_<id> under a fixed id leaves it behind, and read back next time a stale
+// value masks the behaviour a later case checks (#148). Own it here: make sure
+// it exists — so a run does not depend on startup.sh having created it — and
+// clear it before any case runs, so no sess_* has to be removed by hand.
+wallos_test_reset_session_store();
+
 $files = glob(__DIR__ . '/cases/*_test.php');
 sort($files);
 

@@ -49,7 +49,11 @@ function inline_handler_index()
     foreach ($iterator as $file) {
         $path = str_replace(WALLOS_ROOT . '/', '', $file->getPathname());
 
-        if ($file->getExtension() !== 'php' || preg_match('#^(libs|tests|dev|\.)#', $path) === 1) {
+        // The nested-checkout and vendored exclusion is the shared rule
+        // (wallos_test_repo_excluded, #146); this walk adds tests/ and dev/ to it.
+        if ($file->getExtension() !== 'php'
+            || wallos_test_repo_excluded($path)
+            || preg_match('#^(tests|dev)/#', $path) === 1) {
             continue;
         }
 

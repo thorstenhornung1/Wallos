@@ -485,6 +485,195 @@ function wallos_test_skip_unless_pgsql($reason)
 }
 
 /**
+ * Whether a repository-relative path belongs to something a walk over "this
+ * repository's own source" must never descend into.
+ *
+ * The one shared definition, so a new walker inherits the exclusion rather than
+ * re-deciding it and getting it wrong by default (#146). A dot directory is a
+ * nested whole checkout — .git, and the agent worktrees under .claude that are
+ * entire copies of this repository — and libs/ is vendored code. Reading either
+ * as if it were ours loads a second copy of a file already loaded from
+ * WALLOS_ROOT (the "Cannot redeclare …" that a nested worktree produces), or
+ * measures a dependency as though this project wrote it. A walk with its own
+ * further skips (tests/, dev/, migrations/) adds them to this; it does not
+ * restate it.
+ *
+ * @param string $relativePath path relative to WALLOS_ROOT, forward slashes
+ * @return bool
+ */
+function wallos_test_repo_excluded($relativePath)
+{
+    $first = strtok($relativePath, '/');
+
+    return $first !== false && ($first === 'libs' || $first[0] === '.');
+}
+
+/**
+ * Removes a directory tree, symlinks and all, refusing to touch anything outside
+ * the harness's own temp directory.
+ *
+ * The refusal is the point: this is only ever aimed at WALLOS_TEST_TMP/sandbox,
+ * and a bug that aimed it at the source tree would be catastrophic and silent.
+ * A dangling symlink is unlinked as the link it is, never followed.
+ *
+ * @param string $path
+ * @return void
+ */
+function wallos_test_rmtree($path)
+{
+    $tmp = realpath(WALLOS_TEST_TMP);
+    $target = realpath($path);
+    if ($tmp === false || $target === false || strpos($target, $tmp) !== 0) {
+        return;
+    }
+
+    $items = new RecursiveIteratorIterator(
+        new RecursiveDirectoryIterator($path, FilesystemIterator::SKIP_DOTS),
+        RecursiveIteratorIterator::CHILD_FIRST
+    );
+
+    foreach ($items as $item) {
+        if ($item->isLink() || !$item->isDir()) {
+            @unlink($item->getPathname());
+        } else {
+            @rmdir($item->getPathname());
+        }
+    }
+
+    @rmdir($path);
+}
+
+/**
+ * Whether a cached sandbox can no longer be trusted, so it is rebuilt rather
+ * than reused.
+ *
+ * The sandbox fills itself partly with symlinks back into WALLOS_ROOT, and it
+ * used to record nothing about the tree those links point into. Two things then
+ * go wrong when the tree changes underneath it — both silently, both far
+ * downstream (#146):
+ *
+ *   - built from a *different* tree (an agent worktree, then the main checkout):
+ *     a symlink resolves to a second copy of a file already loaded from
+ *     WALLOS_ROOT, and PHP dies with "Cannot redeclare …";
+ *   - built from a *removed* tree (a worktree deleted after its branch merged):
+ *     the symlinks dangle, and every require through them fails with
+ *     "Failed opening required …/cron_run.php".
+ *
+ * Recording the root it was built from turns both into one rebuild. A dangling
+ * link is checked directly as well, because a tree can be moved without the
+ * stamp noticing.
+ *
+ * @param string $sandbox
+ * @return bool
+ */
+function wallos_test_sandbox_stale($sandbox)
+{
+    $stamp = $sandbox . '/.built-from';
+
+    // Missing (a sandbox from before this was recorded) or naming another tree.
+    if (!is_file($stamp) || trim((string) @file_get_contents($stamp)) !== WALLOS_ROOT) {
+        return true;
+    }
+
+    // A symlink whose target is gone: file_exists() follows the link and is
+    // false for a dangling one. The boundary files are the only symlinks.
+    $links = array_merge(
+        glob($sandbox . '/includes/*.php') ?: [],
+        glob($sandbox . '/includes/database/*.php') ?: [],
+        glob($sandbox . '/includes/database/*/*.php') ?: []
+    );
+    foreach ($links as $link) {
+        if (is_link($link) && !file_exists($link)) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+/**
+ * Where PHP session files live for this run.
+ *
+ * session.save_path when the ini set one (the container does, so request-time
+ * GC can reach the store), the system temp directory otherwise. The "N;/path"
+ * depth form is handled by taking the part after the last semicolon.
+ *
+ * @return string
+ */
+function wallos_test_session_store()
+{
+    $path = (string) session_save_path();
+    if ($path === '') {
+        return sys_get_temp_dir();
+    }
+
+    $semicolon = strrpos($path, ';');
+
+    return $semicolon === false ? $path : substr($path, $semicolon + 1);
+}
+
+/**
+ * Makes the session store exist and empties it of files from earlier runs.
+ *
+ * The store is shared across runs, and a subprocess case that writes sess_<id>
+ * under a fixed id leaves it behind. Read back next time, a stale value — the
+ * guard's oidc_refresh_after, say — masks the very behaviour the case checks,
+ * and the only cure used to be clearing sess_* by hand (#148). The harness owns
+ * the store instead: it creates it (so a run does not depend on startup.sh
+ * having done so) and clears it, once, before any case runs.
+ *
+ * @return void
+ */
+function wallos_test_reset_session_store()
+{
+    $store = wallos_test_session_store();
+
+    if (!is_dir($store)) {
+        @mkdir($store, 0700, true);
+    }
+
+    foreach (glob($store . '/sess_*') ?: [] as $file) {
+        @unlink($file);
+    }
+}
+
+/**
+ * The environment a child process must be handed so that it opens the SAME
+ * database this case is using — not merely the same backend.
+ *
+ * On SQLite that is the throwaway file in WALLOS_DB_PATH; on PostgreSQL it is
+ * the case's own schema, carried in PGOPTIONS so libpq puts every connection the
+ * child opens onto that search_path. A child given only WALLOS_DB_DRIVER would
+ * connect to the shared default schema and read another run's rows — the shape
+ * of #148, where a subprocess currency case read stale shared state on
+ * PostgreSQL. The fixture already exports these with putenv(), so a child
+ * started from this process inherits them; this names the exact set for a caller
+ * that would rather hand them over explicitly than trust the ambient
+ * environment.
+ *
+ * @return array<string, string>
+ */
+function wallos_test_subprocess_env()
+{
+    $names = [
+        'WALLOS_DB_DRIVER', 'WALLOS_DB_HOST', 'WALLOS_DB_PORT', 'WALLOS_DB_NAME',
+        'WALLOS_DB_USER', 'WALLOS_DB_PASSWORD', 'WALLOS_DB_SSLMODE', 'WALLOS_DB_PATH',
+        // libpq reads this; it carries the per-case schema on PostgreSQL.
+        'PGOPTIONS',
+    ];
+
+    $env = [];
+    foreach ($names as $name) {
+        $value = getenv($name);
+        if ($value !== false) {
+            $env[$name] = $value;
+        }
+    }
+
+    return $env;
+}
+
+/**
  * Builds the real application schema once per run by running the same
  * createdatabase.php and migration chain the container startup uses, then
  * hands out a fresh copy of it per test.
@@ -501,6 +690,18 @@ function wallos_test_database()
 
     if ($template === null) {
         $sandbox = WALLOS_TEST_TMP . '/sandbox';
+
+        // The sandbox fills itself with symlinks into WALLOS_ROOT, and reused
+        // against a different or a removed tree those links either redeclare a
+        // function already loaded from WALLOS_ROOT or dangle — each producing
+        // dozens of unrelated-looking failures far downstream (#146). It now
+        // records the tree it was built from; when that no longer matches, or a
+        // link has gone dangling, the whole sandbox is rebuilt with one line
+        // that says so rather than eighteen that do not.
+        if (is_dir($sandbox) && wallos_test_sandbox_stale($sandbox)) {
+            fwrite(STDERR, "test harness: the cached sandbox was built from another tree — rebuilding it\n");
+            wallos_test_rmtree($sandbox);
+        }
 
         // The sandbox and its built database survive in the temp directory
         // across suite runs, and nothing used to invalidate them — the first
@@ -549,6 +750,13 @@ function wallos_test_database()
             symlink(WALLOS_ROOT . '/includes/config_helper.php', $sandbox . '/includes/config_helper.php');
             // It reports itself like every other scheduled job.
             symlink(WALLOS_ROOT . '/includes/cron_run.php', $sandbox . '/includes/cron_run.php');
+
+            // Record the tree those symlinks point into. This is the one thing
+            // the sandbox never recorded, and its absence is why a sandbox built
+            // from an agent worktree survived into a run against the main
+            // checkout and took it down (#146). wallos_test_sandbox_stale() reads
+            // it on the next run.
+            file_put_contents($sandbox . '/.built-from', WALLOS_ROOT);
         }
 
         $databaseFile = $sandbox . '/db/wallos.db';
