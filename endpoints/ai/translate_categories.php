@@ -88,6 +88,7 @@ $validIds = array_column($categoriesToTranslate, 'id');
 $translations = [];
 
 $update = $db->prepare("UPDATE categories SET name = :name WHERE id = :id AND user_id = :user_id");
+$failed = false;
 
 foreach ($translated as $item) {
     $categoryId = (int) ($item['id'] ?? 0);
@@ -100,10 +101,25 @@ foreach ($translated as $item) {
     $update->bindValue(':name', $categoryName, SQLITE3_TEXT);
     $update->bindValue(':id', $categoryId, SQLITE3_INTEGER);
     $update->bindValue(':user_id', $userId, SQLITE3_INTEGER);
-    $update->execute();
+
+    if ($update->execute() === false) {
+        // A name that did not store is not one that was translated.
+        $failed = true;
+        $update->reset();
+        continue;
+    }
+
     $update->reset();
 
     $translations[$categoryId] = $categoryName;
+}
+
+if ($failed) {
+    echo json_encode([
+        "success" => false,
+        "message" => translate('error', $i18n),
+    ]);
+    exit;
 }
 
 echo json_encode([

@@ -439,6 +439,46 @@ function wallos_cron_record($run, $status, $duration, $detail)
 }
 
 /**
+ * Whether a run did nothing but skip, so its report must not replace the last
+ * run that did something (#136).
+ *
+ * The exchange-rate job runs on every container start, and a start after a
+ * nightly run would otherwise overwrite that run's detail with "skipped=N" —
+ * erasing the only record of whether the work has ever succeeded, which is the
+ * one thing the overview exists to answer. A skip still refreshes the row's
+ * timestamps, so the job reads as alive; it just leaves the meaningful status
+ * and detail where the last run that did something wrote them.
+ *
+ * A no-op is recognised by its counts: a positive "skipped" and no other work.
+ * A run that updated even one account, or that recorded a problem, did
+ * something and is written in full.
+ *
+ * @param array  $run
+ * @param string $status
+ * @return bool
+ */
+function wallos_cron_is_skip($run, $status)
+{
+    if ($status !== WALLOS_CRON_OK) {
+        return false;
+    }
+
+    $counts = $run['counts'];
+
+    if ((int) ($counts['skipped'] ?? 0) <= 0) {
+        return false;
+    }
+
+    foreach ($counts as $key => $value) {
+        if ($key !== 'skipped' && (int) $value !== 0) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+/**
  * The write itself, against whichever connection is usable.
  *
  * ON CONFLICT rather than a delete and an insert: both backends have it, and a
@@ -460,6 +500,13 @@ function wallos_cron_write($db, $run, $status, $duration, $detail)
         return false;
     }
 
+    // A no-op run refreshes the row's timestamps but keeps the status and detail
+    // of the last run that did something, so a startup skip cannot erase the
+    // report of the nightly run that worked (#136). The first-ever run has no
+    // prior report to keep, so the INSERT below still records the skip's own
+    // values; the CASE only guards the ON CONFLICT update.
+    $skip = wallos_cron_is_skip($run, $status);
+
     // A failure is written twice: into the row that describes the last run, and
     // into three columns a later success does not touch (migration 000066).
     // Without the second half a job that fails every third night and succeeded
@@ -474,11 +521,11 @@ function wallos_cron_write($db, $run, $status, $duration, $detail)
                                    VALUES (:job, :status, :startedAt, :finishedAt, :duration, :detail,
                                            :failureAt, :failureDetail, :failureIncrement)
                                    ON CONFLICT (job) DO UPDATE SET
-                                       status = :status,
+                                       status = CASE WHEN :isSkip = 1 THEN cron_runs.status ELSE :status END,
                                        started_at = :startedAt,
                                        finished_at = :finishedAt,
                                        duration_ms = :duration,
-                                       detail = :detail,
+                                       detail = CASE WHEN :isSkip = 1 THEN cron_runs.detail ELSE :detail END,
                                        last_failure_at = COALESCE(:failureAt, cron_runs.last_failure_at),
                                        last_failure_detail = CASE WHEN :failureAt IS NULL
                                            THEN cron_runs.last_failure_detail ELSE :failureDetail END,
@@ -489,11 +536,11 @@ function wallos_cron_write($db, $run, $status, $duration, $detail)
         $statement = $db->prepare('INSERT INTO cron_runs (job, status, started_at, finished_at, duration_ms, detail)
                                    VALUES (:job, :status, :startedAt, :finishedAt, :duration, :detail)
                                    ON CONFLICT (job) DO UPDATE SET
-                                       status = :status,
+                                       status = CASE WHEN :isSkip = 1 THEN cron_runs.status ELSE :status END,
                                        started_at = :startedAt,
                                        finished_at = :finishedAt,
                                        duration_ms = :duration,
-                                       detail = :detail');
+                                       detail = CASE WHEN :isSkip = 1 THEN cron_runs.detail ELSE :detail END');
     }
 
     if ($statement === false) {
@@ -509,6 +556,11 @@ function wallos_cron_write($db, $run, $status, $duration, $detail)
     $statement->bindValue(':finishedAt', gmdate('Y-m-d H:i:s'));
     $statement->bindValue(':duration', $duration);
     $statement->bindValue(':detail', $detail);
+    // Read by the CASE in both ON CONFLICT branches: 1 keeps the previous
+    // status and detail, 0 replaces them with this run's. Bare bind of an
+    // integer, so both backends infer the type and new code does not widen the
+    // SQLite boundary the audit exists to shrink (#20).
+    $statement->bindValue(':isSkip', $skip ? 1 : 0);
 
     if ($db->columnExists('cron_runs', 'failure_count')) {
         // NULL on a successful run is what the COALESCE and the CASE above read

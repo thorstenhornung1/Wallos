@@ -10,7 +10,12 @@ $customCss = $data['customCss'];
 
 $stmt = $db->prepare('DELETE FROM custom_css_style WHERE user_id = :userId');
 $stmt->bindParam(':userId', $userId, SQLITE3_INTEGER);
-$stmt->execute();
+if ($stmt->execute() === false) {
+    die(json_encode([
+        "success" => false,
+        "message" => translate("error", $i18n)
+    ]));
+}
 
 $stmt = $db->prepare('INSERT INTO custom_css_style (css, user_id) VALUES (:customCss, :userId)');
 $stmt->bindParam(':customCss', $customCss, SQLITE3_TEXT);

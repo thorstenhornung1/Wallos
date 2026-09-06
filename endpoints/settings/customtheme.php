@@ -27,7 +27,12 @@ if ($main_color == $accent_color) {
 
 $stmt = $db->prepare('DELETE FROM custom_colors WHERE user_id = :userId');
 $stmt->bindParam(':userId', $userId, SQLITE3_INTEGER);
-$stmt->execute();
+if ($stmt->execute() === false) {
+    die(json_encode([
+        "success" => false,
+        "message" => translate("error", $i18n)
+    ]));
+}
 
 $stmt = $db->prepare('INSERT INTO custom_colors (main_color, accent_color, hover_color, user_id) VALUES (:main_color, :accent_color, :hover_color, :userId)');
 $stmt->bindParam(':main_color', $main_color, SQLITE3_TEXT);
