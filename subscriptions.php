@@ -382,7 +382,7 @@ $subscriptionsView = (isset($_COOKIE['subscriptionsView']) && $_COOKIE['subscrip
               }
               ?>
             </select>
-            <select id="cycle" name="cycle" placeholder="Cycle">
+            <select id="cycle" name="cycle" placeholder="<?= translate('cycle', $i18n) ?>">
               <?php
               foreach ($cycles as $cycle) {
                 ?>

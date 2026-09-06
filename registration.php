@@ -89,7 +89,7 @@ if (isset($_COOKIE['colorTheme'])) {
 // used to be written out here, once more in endpoints/admin/adduser.php and
 // once more in includes/oidc/oidc_create_user.php — the same three copies the
 // categories had before includes/user_provisioning.php existed.
-$currencies = wallos_default_currencies();
+$currencies = wallos_default_currencies($lang);
 
 
 $passwordMismatch = false;
@@ -202,12 +202,12 @@ if (isset($_POST['username'])) {
                 // currencies is not a registration to report as successful
                 // (issue #87) — and the failure used to be invisible: the
                 // insert result went nowhere and the page said "registered".
-                if (!wallos_create_default_payment_methods($db, $userId)) {
+                if (!wallos_create_default_payment_methods($db, $userId, $language)) {
                     error_log('Wallos registration: could not create the default payment methods for user '
                         . $userId . ': ' . $db->lastErrorMsg());
                 }
 
-                if (!wallos_create_default_currencies($db, $userId)) {
+                if (!wallos_create_default_currencies($db, $userId, $language)) {
                     error_log('Wallos registration: could not create the default currencies for user '
                         . $userId . ': ' . $db->lastErrorMsg());
                 }
@@ -339,6 +339,8 @@ if (isset($_POST['username'])) {
         window.update_theme_settings = "<?= $updateThemeSettings ?>";
         window.colorTheme = <?= json_encode($colorTheme, JSON_HEX_TAG | JSON_HEX_QUOT | JSON_HEX_AMP | JSON_HEX_APOS) ?>;
     </script>
+    <script type="text/javascript" src="scripts/i18n/<?= $lang ?>.js?<?= $version ?>"></script>
+    <script type="text/javascript" src="scripts/i18n/getlang.js?<?= $version ?>"></script>
     <script type="text/javascript" src="scripts/registration.js?<?= $version ?>"></script>
     <script type="text/javascript" src="scripts/auth-theme.js?<?= $version ?>"></script>
     <script type="text/javascript" src="scripts/password-toggle.js?<?= $version ?>"></script>

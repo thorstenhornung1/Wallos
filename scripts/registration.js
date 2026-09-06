@@ -169,7 +169,7 @@ function restoreDBButton() {
         showErrorMessage(data.message);
       }
     })
-    .catch(error => showErrorMessage('Error:', error));
+    .catch(error => showErrorMessage(translate('error'), error));
 }
 
 function checkThemeNeedsUpdate() {

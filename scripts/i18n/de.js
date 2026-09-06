@@ -57,4 +57,5 @@ let i18n = {
   web_push_not_configured: "Web Push ist auf dem Server nicht konfiguriert.",
   web_push_enabled: "Web Push auf diesem Gerät aktiviert.",
   web_push_disabled: "Web Push auf diesem Gerät deaktiviert.",
+  error: "Fehler:",
 }

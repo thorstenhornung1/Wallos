@@ -96,13 +96,13 @@ if (!wallos_create_household_member($db, $newUserId, $username)) {
 wallos_create_default_categories($db, $newUserId, $language);
 
 // Payment Methods
-if (!wallos_create_default_payment_methods($db, $newUserId)) {
+if (!wallos_create_default_payment_methods($db, $newUserId, $language)) {
     error_log('Wallos OIDC provisioning: could not create the default payment methods for user '
         . $newUserId . ': ' . $db->lastErrorMsg());
 }
 
 // Currencies
-if (!wallos_create_default_currencies($db, $newUserId)) {
+if (!wallos_create_default_currencies($db, $newUserId, $language)) {
     error_log('Wallos OIDC provisioning: could not create the default currencies for user '
         . $newUserId . ': ' . $db->lastErrorMsg());
 }

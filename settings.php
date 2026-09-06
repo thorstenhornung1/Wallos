@@ -87,7 +87,7 @@ if ($budgetPeriodAnchorDate === '1970-01-01' || !preg_match('/^\d{4}-\d{2}-\d{2}
             <div class="form-group-inline">
                 <label for="monthly_budget"><?= $userData['currency_symbol'] ?></label>
                 <input type="number" id="monthly_budget" name="monthly_budget" autocomplete="off" value="<?= $userData['budget'] ?>"
-                    placeholder="Budget">
+                    placeholder="<?= translate('budget', $i18n) ?>">
                 <input type="submit" value="<?= translate('save', $i18n) ?>" id="saveMonthlyBudget" onClick="saveMonthlyBudgetButton()" />
             </div>
             <div class="settings-notes">
@@ -106,7 +106,7 @@ if ($budgetPeriodAnchorDate === '1970-01-01' || !preg_match('/^\d{4}-\d{2}-\d{2}
             <div class="form-group-inline">
                 <label for="period_budget"><?= $userData['currency_symbol'] ?></label>
                 <input type="number" id="period_budget" name="period_budget" autocomplete="off" value="<?= $userData['period_budget'] ?? 0 ?>"
-                    placeholder="Budget">
+                    placeholder="<?= translate('budget', $i18n) ?>">
             </div>
             <div class="form-group-inline period-budget-controls">
                 <div class="period-budget-field">
@@ -157,7 +157,7 @@ if ($budgetPeriodAnchorDate === '1970-01-01' || !preg_match('/^\d{4}-\d{2}-\d{2}
                     ?>
                     <div class="form-group-inline" data-memberid="<?= $member['id'] ?>">
                         <input type="text" name="member" autocomplete="off" value="<?= htmlspecialchars($member['name']) ?>"
-                            placeholder="Member">
+                            placeholder="<?= translate('member', $i18n) ?>">
                         <?php
                         if ($index !== 0) {
                             ?>
@@ -1230,7 +1230,7 @@ if ($budgetPeriodAnchorDate === '1970-01-01' || !preg_match('/^\d{4}-\d{2}-\d{2}
                         <div class="form-group-inline" data-categoryid="<?= $category['id'] ?>">
                             <div class=" drag-icon"><i class="fa-solid fa-grip-vertical"></i></div>
                             <input type="text" name="category" autocomplete="off" value="<?= htmlspecialchars($category['name']) ?>"
-                                placeholder="Category">
+                                placeholder="<?= translate('category', $i18n) ?>">
                             <button class="image-button medium" onClick="editCategory(<?= $category['id'] ?>)" name="save"
                                 title="<?= translate('save_category', $i18n) ?>">
                                 <i class="fa-solid fa-check"></i>
@@ -1347,7 +1347,7 @@ if ($budgetPeriodAnchorDate === '1970-01-01' || !preg_match('/^\d{4}-\d{2}-\d{2}
                         <input type="text" class="short" name="symbol" autocomplete="off" value="<?= htmlspecialchars($currency['symbol']) ?>"
                             placeholder="$">
                         <input type="text" name="currency" autocomplete="off" value="<?= htmlspecialchars($currency['name']) ?>"
-                            placeholder="Currency Name">
+                            placeholder="<?= translate('currency_name', $i18n) ?>">
                         <input type="text" name="code" autocomplete="off" value="<?= htmlspecialchars($currency['code']) ?>"
                             placeholder="Currency Code" <?= !$canDelete ? 'disabled' : '' ?>>
                         <button class="image-button medium" onClick="editCurrency(<?= $currency['id'] ?>)" name="save"
@@ -1395,7 +1395,7 @@ if ($budgetPeriodAnchorDate === '1970-01-01' || !preg_match('/^\d{4}-\d{2}-\d{2}
                     <span>
                         <?= htmlspecialchars($activeCurrencyProviderInfo['name']) ?>
                         <a href="<?= htmlspecialchars($activeCurrencyProviderInfo['catalogue']) ?>" target="_blank"
-                            title="Currency codes">
+                            title="<?= translate('currency_codes', $i18n) ?>">
                             <i class="fa-solid fa-arrow-up-right-from-square"></i>
                         </a>
                     </span>
@@ -1606,7 +1606,7 @@ if ($budgetPeriodAnchorDate === '1970-01-01' || !preg_match('/^\d{4}-\d{2}-\d{2}
                     <?= translate("get_key_alternative", $i18n) ?>
                     <span>
                         https://apilayer.com
-                        <a href="https://apilayer.com/marketplace/fixer-api" title="Get free fixer api key"
+                        <a href="https://apilayer.com/marketplace/fixer-api" title="<?= translate('get_fixer_api_key', $i18n) ?>"
                             target="_blank">
                             <i class="fa-solid fa-arrow-up-right-from-square"></i>
                         </a>
