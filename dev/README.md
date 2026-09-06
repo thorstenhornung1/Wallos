@@ -52,6 +52,27 @@ specification requires but the code does not implement yet. They are reported
 as `open` and do not fail the run; when one starts passing, the runner says so
 and the case can be promoted.
 
+**Running against a worktree, or with one nested inside the checkout.** Agent
+work happens in git worktrees under `.claude/worktrees/`, which are whole
+checkouts nested inside the repository. The container `podman exec` run above
+scans the mounted working tree with those worktrees in it, and two harness
+caches used to trip over them (#146). Both are now self-correcting and no
+isolated-mount workaround is needed:
+
+- the throwaway sandbox stamps the tree it was built from (`.built-from`) and
+  rebuilds — with one line saying so — when it finds itself pointed at a
+  different or a removed tree, rather than following a symlink into it and
+  dying with `Cannot redeclare …` or `Failed opening required …/cron_run.php`;
+- every full-tree walk asks `wallos_test_repo_excluded()`, the one definition of
+  the directories that are not this repository's own source (`.git`, the
+  `.claude` worktrees, vendored `libs/`), so a new walker inherits the exclusion
+  instead of rediscovering it.
+
+The runner also owns the PHP session store (`session.save_path`): it creates it
+and clears `sess_*` before any case, so a subprocess case's fixed-id session
+file cannot survive into the next run and mask a result (#148). No manual
+`rm -f /tmp/wallos-sessions/sess_*` between runs.
+
 ## SQLite boundary audit
 
 ```sh
@@ -69,6 +90,23 @@ ask you to commit the smaller baseline.
 
 `docs/sqlite-boundary.md` explains the design, and says which of the three
 gates from issue #41 are active.
+
+The Semgrep gate (Gate 2) is a separate command:
+
+```sh
+dev/semgrep/run.sh           # fail on any finding (exit 1)
+dev/semgrep/run.sh --report  # print findings, never fail
+```
+
+Semgrep is not a dependency of Wallos: if it is not on `PATH` the script runs
+the official image through podman or docker. A run that scanned **no files**
+now exits non-zero and says so — a scan of nothing reads as clean from the exit
+code alone, and that is the one answer a gate must never give by accident
+(#145). **From inside a worktree** the gate runs and scans correctly; Semgrep
+prints a `failed to set the safe.directory` warning because the worktree's
+`.git` is a file pointing outside the container's mount, but that is noise, not
+a failure — the scanned-file guard is what proves the scan happened, and the
+exit code means what it says.
 
 ## Full application
 

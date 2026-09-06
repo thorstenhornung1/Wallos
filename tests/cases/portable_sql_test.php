@@ -64,10 +64,17 @@ function portable_sql_application_files()
             return $entry->getExtension() === 'php';
         }
 
+        // The nested-checkout and vendored exclusion is the shared rule
+        // (wallos_test_repo_excluded, #146): dot directories hold .git and the
+        // agent worktrees, which are whole checkouts of this repository nested
+        // inside it, and libs/ is vendored. This walk adds its own skips on top.
+        $relative = substr(str_replace('\\', '/', $entry->getPathname()), strlen(WALLOS_ROOT) + 1);
+        if (wallos_test_repo_excluded($relative)) {
+            return false;
+        }
+
         $name = $entry->getFilename();
 
-        // Dot directories hold .git and the agent worktrees, which are whole
-        // checkouts of this repository nested inside it.
         return $name[0] !== '.' && !in_array($name, $skip, true);
     });
 
