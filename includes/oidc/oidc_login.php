@@ -107,6 +107,9 @@ setcookie('wallos_login', $cookieValue, [
     'expires' => $cookieExpire,
     'samesite' => 'Lax',
     'httponly' => true,
+    // Secure when the request is HTTPS (§15), so the login credential is never
+    // sent over plaintext; conditioned on HTTPS so http://localhost dev still works.
+    'secure' => wallos_request_is_https(),
 ]);
 
 // Set language cookie

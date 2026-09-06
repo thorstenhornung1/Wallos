@@ -6,9 +6,12 @@ require_once 'auth_lifetime.php';
 $secondsInMonth = wallos_auth_max_session_lifetime();
 if (session_status() === PHP_SESSION_NONE) {
     session_set_cookie_params([
-        'lifetime' => $secondsInMonth,             
-        'httponly' => true,          
-        'samesite' => 'Lax'          
+        'lifetime' => $secondsInMonth,
+        'httponly' => true,
+        'samesite' => 'Lax',
+        // Secure on HTTPS (§15): the session cookie is never sent over plaintext.
+        // Conditioned on HTTPS so http://localhost development still works.
+        'secure' => wallos_request_is_https(),
     ]);
     session_start();
 }

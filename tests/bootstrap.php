@@ -833,6 +833,97 @@ function wallos_test_open_database()
 }
 
 /**
+ * base64url without padding, the JOSE encoding for JWT segments and JWK values.
+ *
+ * @param string $data
+ * @return string
+ */
+function wallos_test_base64url($data)
+{
+    return rtrim(strtr(base64_encode($data), '+/', '-_'), '=');
+}
+
+/**
+ * A throwaway RSA keypair and the JWKS that publishes its public half, so the ID
+ * token validator's signature check is exercised against real cryptography
+ * rather than a stub that always says yes (OIDC Session Authority v2, WP2).
+ *
+ * openssl is part of the PHP the suite already runs on. The keypair is generated
+ * per call; a test that wants the same key across cases holds onto the return
+ * value.
+ *
+ * @param string $kid the key id, published in the JWK and set in signed headers
+ * @return array{private:string, kid:string, jwk:array, jwks:array}
+ */
+function wallos_test_rsa_keypair($kid = 'wallos-test-key')
+{
+    $resource = openssl_pkey_new([
+        'private_key_bits' => 2048,
+        'private_key_type' => OPENSSL_KEYTYPE_RSA,
+    ]);
+    if ($resource === false) {
+        throw new RuntimeException('openssl could not generate a test RSA keypair');
+    }
+
+    $privatePem = '';
+    openssl_pkey_export($resource, $privatePem);
+    $details = openssl_pkey_get_details($resource);
+
+    $jwk = [
+        'kty' => 'RSA',
+        'use' => 'sig',
+        'alg' => 'RS256',
+        'kid' => $kid,
+        'n' => wallos_test_base64url($details['rsa']['n']),
+        'e' => wallos_test_base64url($details['rsa']['e']),
+    ];
+
+    return [
+        'private' => $privatePem,
+        'kid' => $kid,
+        'jwk' => $jwk,
+        'jwks' => ['keys' => [$jwk]],
+    ];
+}
+
+/**
+ * Signs a JWT (an RS256 ID token, in practice) with a test private key.
+ *
+ * The header defaults to RS256 and carries the kid, so a validator that pins the
+ * key by id finds it. Passing an explicit alg builds a token the validator must
+ * reject (alg=none, an HMAC), which is exactly what the allowlist test needs.
+ *
+ * @param string $privatePem
+ * @param array  $claims
+ * @param array  $header  merged over the defaults
+ * @return string
+ */
+function wallos_test_sign_jwt($privatePem, $claims, $header = [])
+{
+    $header = array_merge(['alg' => 'RS256', 'typ' => 'JWT'], $header);
+
+    $segments = [
+        wallos_test_base64url(json_encode($header)),
+        wallos_test_base64url(json_encode($claims)),
+    ];
+    $signingInput = implode('.', $segments);
+
+    $digests = [
+        'RS256' => OPENSSL_ALGO_SHA256,
+        'RS384' => OPENSSL_ALGO_SHA384,
+        'RS512' => OPENSSL_ALGO_SHA512,
+    ];
+    $digest = $digests[$header['alg']] ?? OPENSSL_ALGO_SHA256;
+
+    $signature = '';
+    openssl_sign($signingInput, $signature, $privatePem, $digest);
+
+    $segments[] = wallos_test_base64url($signature);
+
+    return implode('.', $segments);
+}
+
+/**
  * SQLite3 wrapper that counts statements, so tests can assert that a code path
  * does not issue one query per row.
  */

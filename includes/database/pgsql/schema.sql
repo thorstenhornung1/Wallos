@@ -20,7 +20,7 @@
 --   * Every identifier is quoted, because "user" and "order" are reserved words
 --     and a keyword list kept in the generator would be wrong eventually.
 
--- 44 tables, 82 migrations recorded as applied.
+-- 44 tables, 83 migrations recorded as applied.
 
 CREATE TABLE "admin" (
     "id" SERIAL PRIMARY KEY,
@@ -432,7 +432,8 @@ CREATE TABLE "user" (
     "oidc_sub" TEXT,
     "budget_period_type" TEXT DEFAULT 'monthly',
     "budget_period_anchor_date" TEXT DEFAULT to_char(CURRENT_DATE, 'YYYY-MM-DD'),
-    "period_budget" DOUBLE PRECISION DEFAULT 0
+    "period_budget" DOUBLE PRECISION DEFAULT 0,
+    "issuer" TEXT
 );
 
 CREATE TABLE "user_roles" (
@@ -693,7 +694,8 @@ INSERT INTO "migrations" ("id", "migration") VALUES
     (79, 'migrations/000080.php'),
     (80, 'migrations/000081.php'),
     (81, 'migrations/000082.php'),
-    (82, 'migrations/000083.php');
+    (82, 'migrations/000083.php'),
+    (83, 'migrations/000084.php');
 
 INSERT INTO "payment_methods" ("id", "name", "icon", "enabled", "order", "user_id") VALUES
     (1, 'PayPal', 'images/uploads/icons/paypal.png', 1, 1, 1),

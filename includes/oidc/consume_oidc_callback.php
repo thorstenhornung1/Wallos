@@ -87,4 +87,8 @@ if ($callbackError !== '') {
 // with it; handle_oidc_callback.php reads $codeVerifier for the token exchange.
 $codeVerifier = isset($transaction['pkce_verifier']) ? $transaction['pkce_verifier'] : null;
 
+// The nonce this login transaction carried travels with it too, so the ID-token
+// validator (WP2) can require the returned token to name exactly this nonce.
+$oidcNonce = isset($transaction['nonce']) ? $transaction['nonce'] : null;
+
 require_once __DIR__ . '/handle_oidc_callback.php';
