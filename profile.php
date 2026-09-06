@@ -60,7 +60,7 @@ $providerManagedNote = sprintf(translate('field_managed_by_provider', $i18n), $p
                         <div class="user-avatar">
                             <img src="<?= htmlspecialchars($userData['avatar'], ENT_QUOTES, 'UTF-8') ?>" alt="avatar" class="avatar" id="avatarImg"
                                 onClick="toggleAvatarSelect()" />
-                            <span class="edit-avatar" onClick="toggleAvatarSelect()" title="Change Avatar">
+                            <span class="edit-avatar" onClick="toggleAvatarSelect()" title="<?= translate('change_avatar', $i18n) ?>">
                                 <i class="fa-solid fa-pencil"></i>
                             </span>
                         </div>
@@ -84,7 +84,7 @@ $providerManagedNote = sprintf(translate('field_managed_by_provider', $i18n), $p
                                             class="avatar-option" data-src="<?= htmlspecialchars($path) ?>">
 
                                         <div class="remove-avatar" onclick="deleteAvatar(<?= json_encode($filename, JSON_HEX_APOS | JSON_HEX_QUOT) ?>)"
-                                            title="Delete avatar">
+                                            title="<?= translate('delete_avatar', $i18n) ?>">
                                             <i class="fa-solid fa-xmark"></i>
                                         </div>
                                     </div>
@@ -149,7 +149,7 @@ $providerManagedNote = sprintf(translate('field_managed_by_provider', $i18n), $p
                         ?>
                         <div class="form-group">
                             <label for="currency"><?= translate('main_currency', $i18n) ?>:</label>
-                            <select id="currency" name="main_currency" placeholder="Currency">
+                            <select id="currency" name="main_currency" placeholder="<?= translate('currency', $i18n) ?>">
                                 <?php
                                 foreach ($currencies as $currency) {
                                     $selected = "";

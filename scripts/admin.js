@@ -317,7 +317,7 @@ function removeUser(userId) {
         showErrorMessage(data.message);
       }
     })
-    .catch(error => showErrorMessage('Error:', error));
+    .catch(error => showErrorMessage(translate('error'), error));
 
 }
 
@@ -415,7 +415,7 @@ function toggleUpdateNotification() {
         showErrorMessage(data.message);
       }
     })
-    .catch(error => showErrorMessage('Error:', error));
+    .catch(error => showErrorMessage(translate('error'), error));
 
 }
 
@@ -433,7 +433,7 @@ function executeCronJob(job) {
     })
     .catch(error => {
       console.error('Fetch error:', error);
-      showErrorMessage('Error:', error);
+      showErrorMessage(translate('error'), error);
     });
 }
 
@@ -465,7 +465,7 @@ function toggleOidcEnabled() {
       toggle.disabled = false;
     })
     .catch(error => {
-      showErrorMessage('Error:', error);
+      showErrorMessage(translate('error'), error);
       toggle.disabled = false;
     });
 
@@ -550,7 +550,7 @@ function saveOidcSettingsButton() {
       button.disabled = false;
     })
     .catch(error => {
-      showErrorMessage('Error:', error);
+      showErrorMessage(translate('error'), error);
       button.disabled = false;
     });
 }

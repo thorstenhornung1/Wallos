@@ -55,4 +55,5 @@ let i18n = {
   web_push_not_configured: "Web Push is not configured on the server.",
   web_push_enabled: "Web Push enabled on this device.",
   web_push_disabled: "Web Push disabled on this device.",
+  error: "Error:",
 }

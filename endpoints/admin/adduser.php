@@ -4,11 +4,6 @@ require_once '../../includes/validate_endpoint_admin.php';
 require_once '../../includes/integration_config.php';
 require_once '../../includes/user_provisioning.php';
 
-// The same two lists registration.php and the OIDC provisioning need, from
-// the one place that has them.
-$currencies = wallos_default_currencies();
-
-
 function validate($value)
 {
     $value = trim($value);
@@ -97,12 +92,12 @@ if ($result) {
         // Add payment methods and currencies for that user, and say so when
         // either fails: an account holding a third of its currencies is not an
         // account to report as created (issue #87).
-        if (!wallos_create_default_payment_methods($db, $newUserId)) {
+        if (!wallos_create_default_payment_methods($db, $newUserId, $language)) {
             error_log('Wallos adduser: could not create the default payment methods for user '
                 . $newUserId . ': ' . $db->lastErrorMsg());
         }
 
-        if (!wallos_create_default_currencies($db, $newUserId)) {
+        if (!wallos_create_default_currencies($db, $newUserId, $language)) {
             error_log('Wallos adduser: could not create the default currencies for user '
                 . $newUserId . ': ' . $db->lastErrorMsg());
         }
