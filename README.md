@@ -6,6 +6,7 @@
   </picture>
 
   <p>Wallos: Open-Source Personal Subscription Tracker</p>
+  <p><em>A personal fork of <a href="https://github.com/ellite/Wallos">ellite/Wallos</a></em></p>
 
   [![Stars](https://img.shields.io/github/stars/ellite/Wallos?style=flat-square)](https://github.com/ellite/Wallos)
   [![Docker](https://img.shields.io/docker/pulls/bellamy/wallos?style=flat-square)](https://hub.docker.com/r/bellamy/wallos)
@@ -14,30 +15,201 @@
   [![Discord](https://img.shields.io/discord/1237073478910214235?logo=discord&style=flat-square)](https://discord.gg/anex9GUrPW)
 </div>
 
+> [!WARNING]
+> **This is a personal fork of Wallos, under active development.**
+> It carries **no guarantee of stability** and may break at any time.
+> **It is not intended for production use.** If you want a stable Wallos, use
+> [upstream `ellite/Wallos`](https://github.com/ellite/Wallos) instead.
 
 ## Table of Contents
 
+- [About this fork](#about-this-fork)
+- [What this fork adds](#what-this-fork-adds)
+  - [PostgreSQL support](#postgresql-support)
+  - [Rootless, hardened container](#rootless-hardened-container)
+  - [OIDC and SSO](#oidc-and-sso)
+  - [Notifications](#notifications)
+  - [Currency](#currency)
+  - [Internationalization](#internationalization)
+  - [Instance-wide configuration](#instance-wide-configuration)
+  - [Engineering and correctness](#engineering-and-correctness)
 - [Introduction](#introduction)
 - [Features](#features)
 - [Demo](#demo)
 - [Getting Started](#getting-started)
   - [Prerequisites](#prerequisites)
-    - [Baremetal](#baremetal)
-    - [Docker](#docker)
   - [Installation](#installation)
-    - [Baremetal](#baremetal-1)
-      - [Updating](#updating)
-    - [Docker](#docker-1)
-    - [Docker-Compose](#docker-compose)
 - [Usage](#usage)
 - [Screenshots](#screenshots)
-- [OIDC](#oidc)
+- [OIDC configuration](#oidc-configuration)
+- [Shared instance integrations](#shared-instance-integrations)
 - [API Documentation](#api-documentation)
 - [Contributing](#contributing)
-  - [Contributors](#contributors)
-  - [Translations](#translations)
 - [License](#license)
 - [Links](#links)
+
+## About this fork
+
+Wallos is created and maintained by Henrique Dias (**[ellite](https://github.com/ellite)**)
+at **[ellite/Wallos](https://github.com/ellite/Wallos)** — all credit for Wallos
+itself belongs there, and this fork would not exist without it.
+
+This repository, **[thorstenhornung1/Wallos](https://github.com/thorstenhornung1/Wallos)**,
+is a personal fork that tracks upstream and adds a PostgreSQL backend, deeper
+OIDC/SSO, a rootless and hardened container, instance-wide/declarative
+configuration, and further notification and currency options — together with a
+test suite and a set of static dev gates that upstream does not carry and that
+keep those additions honest. See [What this fork adds](#what-this-fork-adds) for
+the detail.
+
+The fork's container image is published to the GitHub Container Registry:
+
+```sh
+docker pull ghcr.io/thorstenhornung1/wallos:latest
+```
+
+Switching an existing installation over is described in
+[docs/switching-to-this-fork.md](docs/switching-to-this-fork.md), and
+[docs/test-instance.md](docs/test-instance.md) sets up a throwaway instance for
+trying it before touching anything real. Your data is unaffected: the schema
+only gains columns, and every user who configured their own SMTP server,
+currency key or AI provider keeps it. Backend-independent fixes made here are
+also offered back to upstream as individual pull requests.
+
+## What this fork adds
+
+Everything below is on top of upstream Wallos. Upstream is SQLite-only and ships
+no `tests/` or `dev/` tooling; the fork adds both, plus the features described
+here.
+
+### PostgreSQL support
+
+Wallos can run on **PostgreSQL** as a full second backend beside the original
+SQLite, selected by environment variable (`WALLOS_DB_DRIVER=pgsql`). A database
+boundary under `includes/database/` isolates the driver-specific code, a static
+db-boundary audit keeps SQLite-only APIs from leaking outside it, and the entire
+test suite runs against **both** backends. A one-way migrator
+(`dev/migrate-to-pgsql.php`) copies an existing SQLite database into PostgreSQL
+in a single transaction — resetting every sequence past the highest id copied —
+and a shadow-migration harness rehearses the full upgrade path against a copy of
+real data. CI runs the suite against the oldest and newest PostgreSQL versions
+the project still supports.
+
+### Rootless, hardened container
+
+The container runs **unprivileged**. Application code is owned by `root` and only
+the data directories are writable by the web user, so a PHP-level flaw cannot
+rewrite the scripts that cron runs. nginx binds port 80 through a file
+capability (`cap_net_bind_service`) rather than running as root; a group-0
+ownership convention lets `user: <uid>:0` write fresh volumes with no host-side
+`chown`; and the image supports a **read-only root filesystem** and
+`cap_drop: ALL` (moving the listener above 1024 via `WALLOS_HTTP_PORT`). The
+build drops the compiler toolchain and headers from the final image (about 25%
+smaller) while keeping every runtime library, and php-fpm idles down to the
+master process on a quiet instance. Four container privilege modes are booted
+end-to-end by `dev/container-modes.sh`.
+
+### OIDC and SSO
+
+Building on upstream's basic OIDC, the fork implements a deeper integration:
+
+- **Authorization-code flow with PKCE** (RFC 7636, S256), binding the code to
+  the browser that began the login independently of the client secret.
+- **Userinfo-based sign-in** with discovery, an enforced `issuer` match, and
+  **https-only** provider endpoints (loopback excepted for local development).
+- **Back-channel logout** and **RP-initiated logout** with `id_token_hint`,
+  including the remember-me path.
+- **Refresh and session-lifetime handling**: the refresh token is stored per
+  session and the access token is refreshed at half its life, so the provider
+  governs the session for its whole lifetime rather than only the few minutes an
+  access token lives.
+- **OIDC Session Authority v2**: the identity provider is authoritative for the
+  session's lifetime. A token refresh alone can no longer keep an ended session
+  alive; past the back-channel coverage boundary an idle session must silently
+  re-prove itself with a `prompt=none` + `id_token_hint` revalidation
+  (`/oidc/revalidate`, bound to the same `(iss, sub)`), and a provider that has
+  ended the session refuses to re-admit it.
+- **Avatar import** from the provider's `picture` claim (verified by magic bytes,
+  size-bounded, stored content-addressed; a bad or absent picture is ignored).
+- **Profile and admin-role sync**: name, email, language and admin-role
+  membership are refreshed from the provider on each sign-in and enforced
+  server-side, with the managed fields shown read-only in the profile.
+- **SSRF hardening**: JWKS, discovery and endpoint fetches route through the
+  security allowlist, and a malformed logout token is rejected before any
+  outbound request.
+
+It can be configured declaratively via `OIDC_*` environment variables — see
+[OIDC configuration](#oidc-configuration).
+
+### Notifications
+
+- A **Web Push** channel (RFC 8291, implemented on OpenSSL with no new runtime
+  dependency) delivers browser/PWA push, including iOS Home-Screen web apps,
+  alongside the existing channels. It uses an instance VAPID keypair (generated
+  on first use, env-overridable), stores per-user device subscriptions, and
+  drops a subscription on a 404/410; outbound push is SSRF-guarded.
+- An **instance-configuration resolver** covers **Telegram, Pushover, ntfy and
+  Gotify**: the administrator (or an environment secret) sets the shared
+  credential once for the whole instance — bot token, application token, ntfy
+  server and auth headers, Gotify host — and each user supplies only their own
+  identifier (chat id, user key, topic, per-user token). One user's identifier
+  never reaches another's delivery, and existing per-user configurations keep
+  working untouched.
+
+### Currency
+
+- **Frankfurter** is available as a **keyless** exchange-rate provider — no
+  account, no API key, no request quota; selecting it is the whole
+  configuration. Fixer stays first-class and nobody is migrated, and a currency
+  Frankfurter cannot price (for example a cryptocurrency) keeps its previous
+  rate and is named in the cron report rather than moving silently to nothing.
+- **Currency names and symbols come from Unicode CLDR**, pinned at a specific
+  release (48.2.1) and shipped **offline** for every supported language. The
+  runtime resolves through a locale &rarr; English &rarr; provider &rarr;
+  ISO-code fallback that never touches the network, ICU or Symfony.
+
+### Internationalization
+
+- **Seed-time localization of default names**: default currency and
+  payment-method names are localized into the account's language at account
+  creation — the way categories already were — instead of being stored as
+  English literals, wired through every provisioning path. The code stays the
+  canonical identity; the localized name becomes user-owned data.
+- A fresh install's **first-admin account is localized from the start** (to the
+  instance default language), and an **opt-in Settings action** can localize an
+  existing account's still-default names with a per-row preview. The localizer
+  is data-driven (a row must still equal a known default), touches only the
+  cosmetic `name` column, and never changes a value the user renamed.
+
+### Instance-wide configuration
+
+In a multi-user installation, SMTP, the exchange-rate provider and the AI
+provider are usually infrastructure that belongs to the installation, not to
+each user. The fork lets them be configured **once for the whole instance** —
+in the Admin UI or declaratively through `WALLOS_*` environment variables (each
+with a `*_FILE` companion that reads the value from a Docker/Kubernetes/Podman
+secret) — and every user inherits them unless they opt into their own. Existing
+per-user credentials are migrated to a `custom` mode and keep working untouched.
+The full variable tables are under
+[Shared instance integrations](#shared-instance-integrations).
+
+### Engineering and correctness
+
+- A **dual-backend test suite** (`tests/`, zero external dependencies) builds the
+  real schema and runs every case against both SQLite and PostgreSQL, with CI
+  covering the supported PostgreSQL version range.
+- **Static dev audit gates** that ratchet against a recorded baseline:
+  a **db-boundary** audit (SQLite-only APIs must stay behind the database
+  boundary), a **write-audit** (a discarded result from a statement that writes,
+  detected path-sensitively), a **bind-audit** (a prepared statement whose binds
+  and placeholders disagree — the "SQLite tolerates, PostgreSQL rejects" class),
+  and **container-mode** checks that boot the image in each privilege mode.
+- An off-CI **growth-curve trend benchmark** (`dev/benchmark.sh`) that records
+  how hot paths scale with data size across releases, rather than gating on an
+  absolute figure.
+- A number of **correctness and security fixes specific to this fork** —
+  running on a second backend and inside a hardened container. Backend-
+  independent fixes are additionally contributed upstream.
 
 ## Introduction
 
@@ -90,10 +262,14 @@ See instructions to run Wallos below.
     - zip
     - mbstring
     - fpm
+    - `pdo_pgsql` — only if you use the [PostgreSQL backend](#postgresql-support)
 
 #### Docker
 
 - Docker
+
+> The Docker examples below use upstream's `bellamy/wallos` image. To run **this
+> fork**, substitute `ghcr.io/thorstenhornung1/wallos:latest`.
 
 ### Installation
 
@@ -221,7 +397,7 @@ If you want to trigger an Update of the exchange rates, change your main currenc
 
 </details>
 
-## OIDC
+## OIDC configuration
 
 OIDC can be enabled on the Admin page and can be used with providers that support OAuth.
 Wallos can also resolve OIDC settings declaratively from environment variables. When an `OIDC_*` variable is set, it overrides the corresponding database value at runtime without rewriting the database.
@@ -253,23 +429,6 @@ Wallos blocks webhook, SMTP, and OIDC endpoint URLs that resolve to private/link
 
 Setting the `SSRF_ALLOWLIST` environment variable overrides the database value entirely (same full-override semantics as the `OIDC_*` variables above), so the allowlist can be provisioned on first boot with no manual UI step. It accepts a comma-separated list of hosts/IPs, optionally with a port (e.g. `SSRF_ALLOWLIST=auth.example.com,192.168.1.100:8123`). While set, the Security Settings field in the Admin UI is shown but disabled.
 
-## About this fork
-
-This is a fork of [ellite/Wallos](https://github.com/ellite/Wallos) that adds
-instance-wide configuration for shared infrastructure, plus correctness and
-performance fixes.
-
-```sh
-docker pull ghcr.io/thorstenhornung1/wallos:latest
-```
-
-Switching an existing installation over is described in
-[docs/switching-to-this-fork.md](docs/switching-to-this-fork.md), and
-[docs/test-instance.md](docs/test-instance.md) sets up a throwaway instance on
-Kubernetes with a mail sink, for trying it before touching anything real. Your data is
-unaffected: the schema only gains columns, and every user who configured their
-own SMTP server, currency key or AI provider keeps it.
-
 ## Shared instance integrations
 
 In a multi-user installation, SMTP, the currency exchange provider and the AI provider are usually infrastructure that belongs to the installation, not to each individual user. Wallos can therefore configure them once for the whole instance, and every user inherits them by default.
@@ -295,7 +454,7 @@ Instance values can be set in **Admin → SMTP Settings** and **Admin → Instan
 | `WALLOS_SMTP_PASSWORD_FILE` | Path to a file containing the SMTP password |
 | `WALLOS_SMTP_FROM` | Sender address |
 | `WALLOS_SMTP_FROM_NAME` | Sender name (optional) |
-| `WALLOS_CURRENCY_PROVIDER` | `fixer` or `apilayer` |
+| `WALLOS_CURRENCY_PROVIDER` | `fixer`, `apilayer` or `frankfurter` |
 | `WALLOS_CURRENCY_API_KEY` | Exchange rate provider API key |
 | `WALLOS_CURRENCY_API_KEY_FILE` | Path to a file containing that API key |
 | `WALLOS_AI_PROVIDER` | `chatgpt`, `gemini`, `openrouter`, `ollama` or `openai-compatible` |
@@ -313,7 +472,7 @@ The `*_FILE` variant takes precedence over the plain variable. If a configured s
 ```yaml
 services:
   wallos:
-    image: bellamy/wallos:latest
+    image: ghcr.io/thorstenhornung1/wallos:latest
     environment:
       WALLOS_SMTP_HOST: smtp.example.internal
       WALLOS_SMTP_PORT: "587"
@@ -342,7 +501,7 @@ secrets:
     file: ./secrets/ai_api_key
 ```
 
-Host based integrations keep their SSRF validation: self-hosted SMTP servers, Ollama and OpenAI-compatible endpoints on private addresses still need to be present in the allowlist described below.
+Host based integrations keep their SSRF validation: self-hosted SMTP servers, Ollama and OpenAI-compatible endpoints on private addresses still need to be present in the allowlist described above.
 
 ## API Documentation
 
@@ -350,11 +509,16 @@ Wallos provides a comprehensive API that allows you to interact with the applica
 
 ## Contributing
 
-Feel free to open Pull requests with bug fixes and features. I'll do my best to keep an eye on those.  
-Feel free to open issues with bug reports or feature requests. Bug fixes will take priority.  
-I welcome contributions from the community and look forward to working with you to improve this project.
+This is a personal fork. For the upstream project, feel free to open Pull
+requests and issues at [ellite/Wallos](https://github.com/ellite/Wallos) — bug
+fixes there take priority and benefit everyone. Fork-specific issues can be
+raised on [this repository](https://github.com/thorstenhornung1/Wallos).
+Backend-independent fixes made here are offered back to upstream as individual
+pull requests.
 
 ### Contributors
+
+Wallos is built by the upstream community:
 
 <a href="https://github.com/ellite/wallos/graphs/contributors">
   <img src="https://contrib.rocks/image?repo=ellite/wallos" />
@@ -375,12 +539,15 @@ This project is licensed under the [GNU General Public License, Version 3](LICEN
 
 ### Why GPLv3?
 
-I chose the GNU General Public License version 3 (GPLv3) for this project because it ensures that the software remains open source and freely available to the community. GPLv3 mandates that any derivative works or modifications must also be released under the same license, promoting the principles of software freedom.
+The GNU General Public License version 3 (GPLv3) was chosen for this project because it ensures that the software remains open source and freely available to the community. GPLv3 mandates that any derivative works or modifications must also be released under the same license, promoting the principles of software freedom.
 
-I strongly believe in the importance of open source software and the collaborative nature of development, and I invite contributors to help improve this project.
+This fork is distributed under the same license, in keeping with the spirit of open source and the collaborative nature of development.
 
 ## Links
 
-- The author: [henrique.pt](https://henrique.pt)
+- Upstream project: [ellite/Wallos](https://github.com/ellite/Wallos)
+- The upstream author: [henrique.pt](https://henrique.pt)
 - Wallos Landingpage: [wallosapp.com](https://wallosapp.com)
 - Join the conversation: [Discord Server](https://discord.gg/anex9GUrPW)
+</content>
+</invoke>
