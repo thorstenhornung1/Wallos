@@ -9,6 +9,7 @@
 
 require_once __DIR__ . '/integration_config.php';
 require_once __DIR__ . '/http_status.php';
+require_once __DIR__ . '/fixer_direct.php';
 
 if (!function_exists('wallos_provider_http_get')) {
     /**
@@ -221,6 +222,13 @@ function wallos_fetch_exchange_rates($config, $codes, $base = null)
         // from one that belongs to the symbols it asked for. The message says
         // the same thing in prose, and prose is not something to branch on.
         'status' => null,
+        // Whether the direct-fixer path fell back to http for this answer, and
+        // whether that fallback was a proven plan restriction (#141). False on
+        // every path but direct fixer, and on a cached answer that cost no
+        // request. A caller records the http exposure and the settings-page
+        // warning from these.
+        'http_fallback' => false,
+        'https_restricted' => false,
     ];
 
     if (empty($config['valid'])) {
@@ -268,6 +276,12 @@ function wallos_fetch_exchange_rates($config, $codes, $base = null)
     // fixer's behaviour with a malformed code is its own business and is not
     // being changed here.
     $malformed = [];
+
+    // Whether the direct-fixer path had to put the key on the wire in the clear.
+    // Only its arm below touches these; the apilayer and Frankfurter arms leave
+    // them false, so those paths never warn (#141).
+    $httpFallback = false;
+    $httpsRestricted = false;
 
     if ($provider === 2) {
         // No key, no header, and https — there is nothing to authenticate and
@@ -335,18 +349,23 @@ function wallos_fetch_exchange_rates($config, $codes, $base = null)
             }
         }
     } else {
-        $apiUrl = "http://data.fixer.io/api/latest?access_key=" . $apiKey . "&base=EUR&symbols=" . $codes;
-        $context = stream_context_create([
-            'http' => [
-                'method' => 'GET',
-                'ignore_errors' => true,
-            ]
-        ]);
-        $http = wallos_provider_http_get($apiUrl, $context);
+        // The direct-fixer path. https is tried first and http is used only on
+        // a proven plan restriction; the shared helper owns that decision so all
+        // three call sites behave the same and no plaintext URL is built here
+        // (#141).
+        $http = wallos_fixer_direct_get('latest', $apiKey, ['base' => 'EUR', 'symbols' => $codes]);
         $response = $http['body'];
+        $httpFallback = !empty($http['http_fallback']);
+        $httpsRestricted = !empty($http['https_restricted']);
     }
 
     $status = wallos_http_status_code($http['headers']);
+
+    // Carried on every outcome so a caller can record that the key went over
+    // http, or that it did not. The apilayer and Frankfurter arms leave both
+    // false above, so those paths report no fallback.
+    $failure['http_fallback'] = $httpFallback;
+    $failure['https_restricted'] = $httpsRestricted;
 
     if ($response === false) {
         $failure['usage'] = $usage;
@@ -429,6 +448,8 @@ function wallos_fetch_exchange_rates($config, $codes, $base = null)
         'message' => '',
         'transport' => false,
         'status' => $status,
+        'http_fallback' => $httpFallback,
+        'https_restricted' => $httpsRestricted,
     ];
 
     $cache[] = ['credential' => $credential, 'codes' => $requested, 'result' => $fresh];
@@ -464,6 +485,11 @@ function wallos_fetch_currency_symbols($config)
         'usage' => ['limit' => null, 'used' => null],
         'message' => '',
         'transport' => false,
+        // As in wallos_fetch_exchange_rates(): whether the direct-fixer path put
+        // the key over http for this answer, and whether that was a proven plan
+        // restriction (#141). False on every other path.
+        'http_fallback' => false,
+        'https_restricted' => false,
     ];
 
     if (empty($config['valid'])) {
@@ -492,11 +518,11 @@ function wallos_fetch_currency_symbols($config)
         ]);
         $http = wallos_provider_http_get('https://api.apilayer.com/fixer/symbols', $context);
     } else {
-        $context = stream_context_create([
-            'http' => ['method' => 'GET', 'ignore_errors' => true],
-        ]);
-        $http = wallos_provider_http_get(
-            'http://data.fixer.io/api/symbols?access_key=' . $apiKey, $context);
+        // The direct-fixer path, through the shared helper: https first, http
+        // only on a proven plan restriction, no plaintext URL built here (#141).
+        $http = wallos_fixer_direct_get('symbols', $apiKey);
+        $failure['http_fallback'] = !empty($http['http_fallback']);
+        $failure['https_restricted'] = !empty($http['https_restricted']);
     }
 
     $failure['transport'] = true;
@@ -559,6 +585,8 @@ function wallos_fetch_currency_symbols($config)
             'usage' => ['limit' => null, 'used' => null],
             'message' => '',
             'transport' => true,
+            'http_fallback' => false,
+            'https_restricted' => false,
         ];
     }
 
@@ -580,7 +608,63 @@ function wallos_fetch_currency_symbols($config)
         'usage' => ['limit' => null, 'used' => null],
         'message' => '',
         'transport' => true,
+        // Carried from the arm above: on the direct-fixer path this says whether
+        // the symbol list travelled over http (#141).
+        'http_fallback' => $failure['http_fallback'],
+        'https_restricted' => $failure['https_restricted'],
     ];
+}
+
+/**
+ * Records what the direct-fixer path had to do about http, for the settings
+ * page to warn from (#141).
+ *
+ * A fetch result carries http_fallback (the key went over http for this answer)
+ * and https_restricted (that fallback was a proven plan restriction, not a
+ * passing outage). This turns those into the persisted mark the settings page
+ * reads: set it on a proven restriction, clear it when https answered cleanly so
+ * an upgraded plan stops being warned about. The error_log at the fallback point
+ * lives in the shared helper; this is only the persisted, per-key half.
+ *
+ * Only the direct-fixer provider has a scheme to choose, and only a fresh
+ * request (transport true) says anything — a cached answer reuses an earlier
+ * request's outcome and must not re-decide the mark.
+ *
+ * @param WallosDatabase $db
+ * @param array          $config Result of wallos_get_effective_currency_config().
+ * @param array          $result A fetch result from this file.
+ * @return void
+ */
+function wallos_currency_record_scheme($db, $config, $result)
+{
+    if ((int) ($config['values']['provider'] ?? 0) !== 0) {
+        return;
+    }
+
+    if (empty($result['transport'])) {
+        return;
+    }
+
+    $apiKey = (string) ($config['values']['api_key'] ?? '');
+
+    if ($apiKey === '') {
+        return;
+    }
+
+    if (!empty($result['http_fallback'])) {
+        // Remember only a proven plan restriction. A fallback that happened for
+        // some other reason (there is none today, but the flag keeps that honest)
+        // is not grounds to pin the plan to http.
+        if (!empty($result['https_restricted'])) {
+            wallos_fixer_remember_scheme($db, $apiKey, true);
+        }
+
+        return;
+    }
+
+    // https answered without a restriction: a paid plan, or one just upgraded.
+    // Clear any stale http-only mark so the warning goes away with the exposure.
+    wallos_fixer_remember_scheme($db, $apiKey, false);
 }
 
 /**
@@ -682,6 +766,9 @@ function wallos_prewarm_shared_exchange_rates($db, $userIds, $force = false)
         if (!empty($rates['transport'])) {
             wallos_count_currency_call($db, $group['config'], $group['users'][0]);
             wallos_store_currency_usage($db, $group['config'], $group['users'][0], $rates['usage']);
+            // And whether the direct-fixer key just went over http, so the
+            // settings page can warn about the shared instance key (#141).
+            wallos_currency_record_scheme($db, $group['config'], $rates);
         }
     }
 }
@@ -923,6 +1010,9 @@ function wallos_update_exchange_rates_for_user($db, $userId)
     if (!empty($rates['transport'])) {
         wallos_count_currency_call($db, $config, $userId);
         wallos_store_currency_usage($db, $config, $userId, $rates['usage']);
+        // Whether this user's direct-fixer key just went over http in the clear,
+        // recorded for the settings-page warning (#141).
+        wallos_currency_record_scheme($db, $config, $rates);
     }
 
     if (!$rates['success']) {

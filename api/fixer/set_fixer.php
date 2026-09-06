@@ -262,6 +262,11 @@ if ($test['transport']) {
 // with the scheduled refresh instead of a second, month-only copy of it.
 wallos_store_currency_usage($db, $config, $userId, $test['usage']);
 
+// Whether the verification above had to send a direct-fixer key over http, so
+// the settings page can warn about the cleartext exposure the moment it is
+// saved (#141).
+wallos_currency_record_scheme($db, $config, $test);
+
 echo json_encode([
     'success' => true,
     'title' => 'Fixer settings updated',

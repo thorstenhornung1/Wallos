@@ -133,6 +133,12 @@ if (!$stmt->execute()) {
 wallos_reset_config_cache($db);
 wallos_store_currency_usage($db, $config, $userId, $test['usage']);
 
+// The verification above went over the wire with this key. If it was a
+// direct-fixer free-tier key it will have fallen back to http, and the settings
+// page must say so — recorded here so the warning is on screen the moment the
+// key is saved rather than only after the first scheduled refresh (#141).
+wallos_currency_record_scheme($db, $config, $test);
+
 // The verification above was a real provider request with the user's own key,
 // so it counts against them — recorded after the insert, because only now is
 // there a row to keep the figure in. A key the provider rejected also cost a

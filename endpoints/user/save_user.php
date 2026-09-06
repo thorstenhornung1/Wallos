@@ -5,6 +5,7 @@ require_once '../../includes/reference_validation.php';
 require_once '../../includes/validate_endpoint.php';
 require_once '../../includes/oidc_settings.php';
 require_once '../../includes/oidc/oidc_profile_sync.php';
+require_once '../../includes/fixer_direct.php';
 
 if (!file_exists('../../images/uploads/logos')) {
     mkdir('../../images/uploads/logos', 0777, true);
@@ -51,8 +52,12 @@ function update_exchange_rate($db, $userId)
                 ]);
                 $response = file_get_contents($api_url, false, $context);
             } else {
-                $api_url = "http://data.fixer.io/api/latest?access_key=" . $apiKey . "&base=EUR&symbols=" . $codes;
-                $response = file_get_contents($api_url);
+                // The direct-fixer path, through the shared helper: https is
+                // tried first and http used only when the plan rejects it, so a
+                // paid plan is protected and no plaintext URL is built here. The
+                // helper logs the cleartext-http fallback once per process (#141).
+                $fixer = wallos_fixer_direct_get('latest', $apiKey, ['base' => 'EUR', 'symbols' => $codes]);
+                $response = $fixer['body'];
             }
 
             $apiData = json_decode($response, true);
