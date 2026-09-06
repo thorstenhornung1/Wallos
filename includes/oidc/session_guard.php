@@ -29,6 +29,7 @@
 
 require_once __DIR__ . '/backchannel.php';
 require_once __DIR__ . '/refresh.php';
+require_once __DIR__ . '/transactions.php';
 
 /**
  * No evidence of revocation, and inside a period where the provider's logout
@@ -314,9 +315,13 @@ function wallos_oidc_legacy_authority($db, $sessionId)
  * the endpoint body, and it exits.
  *
  *   - revoked: 401, and the local session and remember-me cookie are cleared.
- *   - revalidation_required: 401, but the authority row is left in place (it
- *     must persist so a Phase 2 browser revalidation can find it). The shape is
- *     the existing one for now; Phase 2 adds a revalidation_url.
+ *   - revalidation_required: 401 carrying the #159 contract —
+ *     {success:false, code:"oidc_revalidation_required", revalidation_url:...}.
+ *     The authority row and cookie are left in place so the browser round-trip
+ *     the URL points at can find them. The centralized JS handler (WP9) reads the
+ *     code and navigates to the URL; a mutating request never reaches its own
+ *     body, because this exits from the bootstrap before it, and the client MUST
+ *     NOT auto-replay it (§21).
  *   - suspended: 503, and NOTHING is cleared — the state is kept so the next
  *     request can retry once the store or provider is reachable again.
  *
@@ -342,15 +347,26 @@ function wallos_oidc_require_valid_session($db)
         exit();
     }
 
-    // A revoked session is cleared locally; a session needing revalidation is
-    // refused but its row and cookie are kept, so the browser can prove the
-    // provider session still exists rather than being forced to log in from
-    // scratch (the Phase 2 behaviour this leaves room for).
-    if ($state === WALLOS_OIDC_REVOKED) {
-        $_SESSION = [];
-        session_destroy();
-        setcookie('wallos_login', '', time() - 3600);
+    // Needs revalidation: refuse this request, but keep the row and the cookie —
+    // the browser can prove the provider session still exists with a silent
+    // prompt=none round-trip rather than logging in from scratch. The JSON names
+    // the code the one JS handler switches on and the URL it navigates to (#159).
+    if ($state === WALLOS_OIDC_REVALIDATION_REQUIRED) {
+        http_response_code(401);
+        header('Content-Type: application/json; charset=UTF-8');
+        echo json_encode([
+            'success' => false,
+            'code' => 'oidc_revalidation_required',
+            'revalidation_url' => wallos_oidc_revalidation_url(),
+            'message' => 'Your session needs to be re-confirmed by the identity provider.',
+        ]);
+        exit();
     }
+
+    // Revoked: cleared locally, definitively ended.
+    $_SESSION = [];
+    session_destroy();
+    setcookie('wallos_login', '', time() - 3600);
 
     http_response_code(401);
     header('Content-Type: application/json; charset=UTF-8');
@@ -358,5 +374,102 @@ function wallos_oidc_require_valid_session($db)
         'success' => false,
         'message' => 'Session ended by the identity provider. Please sign in again.',
     ]);
+    exit();
+}
+
+/**
+ * The URL the browser is sent to in order to revalidate silently: the resume
+ * entry point with a validated local return target.
+ *
+ * A relative path (no leading slash) so it resolves under a sub-path deployment:
+ * the JS handler assigns it relative to the current page, and an HTML redirect
+ * resolves it against the current URL. The return target is taken from the
+ * Referer for an XHR (the page that made the call) and reduced to a same-origin
+ * path, so it can never become an open redirect.
+ *
+ * @param string|null $returnTo an explicit return target, or null to derive one
+ * @return string
+ */
+function wallos_oidc_revalidation_url($returnTo = null)
+{
+    if ($returnTo === null) {
+        $referer = isset($_SERVER['HTTP_REFERER']) ? (string) $_SERVER['HTTP_REFERER'] : '';
+        $returnTo = wallos_oidc_return_to_from_referer($referer);
+    }
+
+    return 'oidc/revalidate.php?return_to=' . rawurlencode(wallos_oidc_sanitize_return_to($returnTo));
+}
+
+/**
+ * Reduces a Referer to the same-origin path+query it names, or the app root.
+ *
+ * Only the path and query are kept, so the value is same-origin whatever host the
+ * Referer carried — it is later used as a redirect on Wallos's own domain.
+ *
+ * @param string $referer
+ * @return string
+ */
+function wallos_oidc_return_to_from_referer($referer)
+{
+    if (!is_string($referer) || $referer === '') {
+        return 'index.php';
+    }
+
+    $path = parse_url($referer, PHP_URL_PATH);
+    if (!is_string($path) || $path === '') {
+        return 'index.php';
+    }
+
+    $query = parse_url($referer, PHP_URL_QUERY);
+    $candidate = $path . (is_string($query) && $query !== '' ? '?' . $query : '');
+
+    return wallos_oidc_sanitize_return_to($candidate);
+}
+
+/**
+ * The HTML-page counterpart of the guard: the same authority result, presented
+ * as a redirect or a page rather than JSON.
+ *
+ * Called from the page bootstrap only after wallos_oidc_current_session_is_valid()
+ * has already said the session is NOT valid, so it resolves the precise state to
+ * present it correctly:
+ *   - revalidation_required → redirect to the silent revalidation round-trip,
+ *     with the current page as the return target;
+ *   - suspended → a 503 "temporarily unavailable" page, nothing cleared;
+ *   - revoked (or anything else) → the ordinary logout redirect.
+ *
+ * Re-resolving the state here is safe: none of the non-valid states reach the
+ * proactive refresh, so it does no second token work.
+ *
+ * @param WallosDatabase $db
+ * @return void
+ */
+function wallos_oidc_gate_html_response($db)
+{
+    $state = wallos_oidc_session_authority($db);
+
+    if ($state === WALLOS_OIDC_REVALIDATION_REQUIRED) {
+        $requestUri = isset($_SERVER['REQUEST_URI']) ? (string) $_SERVER['REQUEST_URI'] : 'index.php';
+        header('Location: ' . wallos_oidc_revalidation_url($requestUri));
+        exit();
+    }
+
+    if ($state === WALLOS_OIDC_SUSPENDED) {
+        http_response_code(503);
+        header('Content-Type: text/html; charset=UTF-8');
+        header('Retry-After: 30');
+        header('Cache-Control: no-store');
+        echo '<!DOCTYPE html><html><head><meta charset="UTF-8">'
+            . '<meta name="viewport" content="width=device-width, initial-scale=1.0">'
+            . '<title>Wallos</title></head>'
+            . '<body style="font-family:sans-serif;max-width:32rem;margin:4rem auto;">'
+            . '<h1>Temporarily unavailable</h1>'
+            . '<p>Your authentication provider could not be reached. Your session has '
+            . 'not been ended &mdash; please try again in a moment.</p></body></html>';
+        exit();
+    }
+
+    // Revoked, or a state that leaves nothing to serve: the ordinary logout.
+    header('Location: logout.php');
     exit();
 }

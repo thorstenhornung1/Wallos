@@ -13,7 +13,7 @@ if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
 
-if (isset($_GET['code']) && isset($_GET['state'])) {
+if (isset($_GET['state']) && (isset($_GET['code']) || isset($_GET['error']))) {
     // This request is coming from the OIDC login flow
     require_once __DIR__ . '/oidc/consume_oidc_callback.php';
 } else {
@@ -39,8 +39,9 @@ if (isset($_GET['code']) && isset($_GET['state'])) {
         // session would have expired. The row is what makes it current.
         require_once __DIR__ . '/oidc/session_guard.php';
         if (!wallos_oidc_current_session_is_valid($db)) {
-            header('Location: logout.php');
-            exit();
+            // Not valid: present the precise state (revalidation_required now
+            // redirects to a silent prompt=none round-trip rather than logout).
+            wallos_oidc_gate_html_response($db);
         }
 
         if ($userData['avatar'] == "") {
@@ -69,9 +70,7 @@ if (isset($_GET['code']) && isset($_GET['state'])) {
         if (isset($_SESSION['from_oidc']) && $_SESSION['from_oidc'] === true) {
             require_once __DIR__ . '/oidc/session_guard.php';
             if (!wallos_oidc_current_session_is_valid($db)) {
-                $db->close();
-                header('Location: logout.php');
-                exit();
+                wallos_oidc_gate_html_response($db);
             }
         }
 

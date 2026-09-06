@@ -81,13 +81,20 @@ wallos_test('the authorization request carries the challenge and S256, and login
     // login.php is a full page, so it is checked structurally — but with the
     // tokeniser, which tells a real call from a mention. Break: comment out the
     // two helper calls or the two appended params and these fail.
-    assert_true(wallos_test_file_calls('login.php', 'wallos_oidc_generate_code_verifier'),
-        'the login page actually generates a verifier');
+    assert_true(wallos_test_file_calls('login.php', 'wallos_oidc_create_transaction'),
+        'the login page creates a transaction, which generates the verifier');
     assert_true(wallos_test_file_calls('login.php', 'wallos_oidc_code_challenge'),
-        'and derives the challenge from it');
+        'and derives the challenge from its verifier');
     $login = file_get_contents(WALLOS_ROOT . '/login.php');
     assert_contains("'code_challenge_method' => 'S256'", $login, 'the request declares S256');
-    assert_contains("\$_SESSION['oidc_code_verifier']", $login, 'and the verifier is bound to the session');
+    assert_contains("\$oidcTransaction['pkce_verifier']", $login,
+        'the challenge is derived from the transaction verifier');
+    assert_contains("\$oidcTransaction['state']", $login, 'and the transaction state rides the request');
+
+    // The verifier is bound to the session under its state, not a single global.
+    $transactions = file_get_contents(WALLOS_ROOT . '/includes/oidc/transactions.php');
+    assert_contains("\$_SESSION['oidc_transactions'][\$state] = \$transaction", $transactions,
+        'the transaction (with its verifier) is stored in the session under its state');
 });
 
 wallos_test('the token exchange sends the matching verifier', function () {
@@ -134,17 +141,21 @@ wallos_test('a public client with no secret still gets a valid PKCE token reques
     assert_same($verifier, $fields['code_verifier'], 'and PKCE stands in for it');
 });
 
-wallos_test('the verifier is single-use: consume clears it in lockstep with the state', function () {
-    // Behaviour is proven above (a null verifier sends nothing); this pins that
-    // consume_oidc_callback.php is what nulls it, on BOTH the failure and success
-    // paths, in the very same unset as the state. Break: drop oidc_code_verifier
-    // from either unset and the count drops below two.
-    $source = file_get_contents(WALLOS_ROOT . '/includes/oidc/consume_oidc_callback.php');
+wallos_test('the verifier is single-use: the transaction is consumed once, carrying the verifier', function () {
+    // The single-use guarantee moved into the per-state transaction map (WP1):
+    // consume removes the matched transaction, so a replayed callback finds
+    // nothing, and the login callback reads the verifier out of the consumed
+    // transaction for the token exchange. Break: drop the unset in consume and a
+    // replay resurrects the verifier; drop the read and no verifier is sent.
+    $callback = file_get_contents(WALLOS_ROOT . '/includes/oidc/consume_oidc_callback.php');
+    $transactions = file_get_contents(WALLOS_ROOT . '/includes/oidc/transactions.php');
 
-    assert_contains("\$codeVerifier = \$_SESSION['oidc_code_verifier'] ?? null;", $source,
-        'the verifier is read out before the session copy is cleared');
-    assert_same(2, substr_count($source, "unset(\$_SESSION['oidc_state'], \$_SESSION['oidc_code_verifier'])"),
-        'and cleared with the state on both the failure and success paths');
+    assert_true(wallos_test_file_calls('includes/oidc/consume_oidc_callback.php', 'wallos_oidc_consume_transaction'),
+        'the callback consumes the transaction for the state');
+    assert_contains("\$transaction['pkce_verifier']", $callback,
+        'and reads the PKCE verifier out of it for the token exchange');
+    assert_contains("unset(\$_SESSION['oidc_transactions'][\$key])", $transactions,
+        'consume removes the matched transaction, so it is single-use');
 
     // And handle really calls the field builder, so the exchange cannot quietly
     // stop sending the verifier without this failing.
