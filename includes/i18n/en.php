@@ -436,6 +436,8 @@ $i18n = [
     // Subscription
     "error_fetching_image" => "Error fetching image",
     "error_saving_logo" => "Error saving logo image.",
+    "error_not_an_image" => "The URL did not return an image.",
+    "could_not_resolve_host" => "could not resolve host",
     "subscription_updated_successfuly" => "Subscription updated successfully",
     "subscription_added_successfuly" => "Subscription added successfully",
     "subscription_deleted" => "Subscription deleted successfully",
