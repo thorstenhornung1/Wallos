@@ -16,6 +16,7 @@ if ($migrationFailure !== null) {
 
 require_once 'includes/i18n/languages.php';
 require_once 'includes/user_provisioning.php';
+require_once 'includes/integration_config.php';
 require_once 'includes/i18n/getlang.php';
 require_once 'includes/i18n/' . $lang . '.php';
 
@@ -253,6 +254,22 @@ if (isset($_POST['username'])) {
                         error_log('Wallos registration: user ' . $userId . ' still points at the currency '
                             . 'it was created against, which belongs to another account: '
                             . $db->lastErrorMsg());
+                    }
+                } else {
+                    // The very first account adopts the currencies and payment methods the
+                    // installer seeded (createdatabase.php on SQLite, the PostgreSQL
+                    // baseline) instead of seeding its own, and those seeds are literal
+                    // English. On the many single-user / all-admin instances this account
+                    // is the main account, so localize the adopted default names to the
+                    // instance default language now — the same localized source every
+                    // later account is seeded through (issue #164 part A). With no instance
+                    // default language configured this resolves to English and does
+                    // nothing, leaving the English seed exactly as it was. It runs only
+                    // here, at first-admin setup on a fresh install, never on an account
+                    // that already exists — those are left to the opt-in localizer.
+                    $seedLanguage = wallos_instance_default_language($db);
+                    if ($seedLanguage !== 'en') {
+                        wallos_apply_default_name_localization($db, $userId, $seedLanguage);
                     }
                 }
 

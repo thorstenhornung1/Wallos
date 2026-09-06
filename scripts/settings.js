@@ -1611,3 +1611,44 @@ function runAiRecommendationsButton() {
     });
 
 }
+
+
+// Opt-in localizer for still-default currency / payment-method names (issue
+// #164 part B). settings.php renders the preview panel, hidden, next to a
+// button; these only reveal it and post the rows the user leaves ticked.
+function toggleLocalizeDefaults(containerId) {
+  const container = document.getElementById(containerId);
+  if (!container) return;
+  const panel = container.querySelector('.localize-defaults-panel');
+  if (panel) panel.hidden = !panel.hidden;
+}
+
+function applyLocalizeDefaults(containerId, bucket, checkboxClass) {
+  const container = document.getElementById(containerId);
+  if (!container) return;
+  const ids = Array.from(container.querySelectorAll('.' + checkboxClass + ':checked'))
+    .map((checkbox) => checkbox.value);
+  const body = new URLSearchParams();
+  body.append(bucket, ids.join(','));
+  fetch(container.dataset.endpoint, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/x-www-form-urlencoded',
+      'X-CSRF-Token': window.csrfToken,
+    },
+    body: body,
+  })
+    .then((response) => response.json())
+    .then((data) => {
+      if (data.success) {
+        showSuccessMessage(data.message);
+        setTimeout(() => location.reload(), 800);
+      } else {
+        showErrorMessage(data.message || translate('unknown_error'));
+      }
+    })
+    .catch((error) => {
+      console.error(error);
+      showErrorMessage(translate('unknown_error'));
+    });
+}

@@ -582,6 +582,18 @@ $i18n = [
     "payment_method_bank_transfer" => "Überweisung",
     "payment_method_direct_debit" => "Lastschrift",
     "payment_method_money" => "Bargeld",
+    // Opt-in-Lokalisierung der noch voreingestellten Standardnamen für Währungen
+    // und Zahlungsmethoden (Issue #164 Teil B). Wird in den Einstellungsbereichen
+    // Währungen und Zahlungsmethoden nur angezeigt, solange englische Standardnamen
+    // vorhanden sind; sie werden nur nach ausdrücklicher, zeilenweiser Bestätigung
+    // in die Kontosprache umbenannt und umbenannte oder eigene Einträge nie geändert.
+    "localize_currencies_button" => "Standard-Währungsnamen in meine Sprache übersetzen",
+    "localize_payments_button" => "Standard-Zahlungsmethodennamen in meine Sprache übersetzen",
+    "localize_defaults_info" => "Diese Einträge verwenden noch die englischen Standardnamen. Du kannst sie in deine Sprache umbenennen. Umbenannte und eigene Einträge werden nie geändert.",
+    "localize_defaults_apply" => "Ausgewählte lokalisieren",
+    "localize_defaults_nothing_selected" => "Es wurde nichts zum Lokalisieren ausgewählt.",
+    "localize_defaults_failed" => "Die Namen konnten nicht lokalisiert werden. Bitte versuche es erneut.",
+    "localize_defaults_done" => "{count} Name(n) in deine Sprache lokalisiert.",
     // Währungsnamen und -symbole werden hier nicht mehr gepflegt: sie kommen zur
     // Kontoerstellung aus Unicode CLDR (includes/currency_localization.php,
     // Issue #163). Das "currency_name" unten ist die Feldbeschriftung, kein
