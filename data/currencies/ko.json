@@ -1,0 +1,1182 @@
+{
+    "ADP": {
+        "name": "안도라 페세타",
+        "symbol": null
+    },
+    "AED": {
+        "name": "아랍에미리트 디르함",
+        "symbol": null
+    },
+    "AFA": {
+        "name": "아프가니 (1927–2002)",
+        "symbol": null
+    },
+    "AFN": {
+        "name": "아프가니스탄 아프가니",
+        "symbol": "؋"
+    },
+    "ALL": {
+        "name": "알바니아 레크",
+        "symbol": null
+    },
+    "AMD": {
+        "name": "아르메니아 드람",
+        "symbol": "֏"
+    },
+    "ANG": {
+        "name": "네덜란드령 안틸레스 길더",
+        "symbol": null
+    },
+    "AOA": {
+        "name": "앙골라 콴자",
+        "symbol": "Kz"
+    },
+    "AOK": {
+        "name": "앙골라 콴자 (1977–1990)",
+        "symbol": null
+    },
+    "AON": {
+        "name": "앙골라 신콴자 (1990–2000)",
+        "symbol": null
+    },
+    "AOR": {
+        "name": "앙골라 재조정 콴자 (1995–1999)",
+        "symbol": null
+    },
+    "ARA": {
+        "name": "아르헨티나 오스트랄",
+        "symbol": null
+    },
+    "ARL": {
+        "name": "아르헨티나 페소 레이 (1970–1983)",
+        "symbol": null
+    },
+    "ARM": {
+        "name": "아르헨티나 페소 (18810–1970)",
+        "symbol": null
+    },
+    "ARP": {
+        "name": "아르헨티나 페소 (1983–1985)",
+        "symbol": null
+    },
+    "ARS": {
+        "name": "아르헨티나 페소",
+        "symbol": "$"
+    },
+    "ATS": {
+        "name": "호주 실링",
+        "symbol": null
+    },
+    "AUD": {
+        "name": "호주 달러",
+        "symbol": "AU$"
+    },
+    "AWG": {
+        "name": "아루바 플로린",
+        "symbol": null
+    },
+    "AZM": {
+        "name": "아제르바이젠 마나트(1993–2006)",
+        "symbol": null
+    },
+    "AZN": {
+        "name": "아제르바이잔 마나트",
+        "symbol": "₼"
+    },
+    "BAD": {
+        "name": "보스니아-헤르체고비나 디나르",
+        "symbol": null
+    },
+    "BAM": {
+        "name": "보스니아-헤르체고비나 태환 마르크",
+        "symbol": "KM"
+    },
+    "BAN": {
+        "name": "보스니아-헤르체고비나 신디나르 (1994–1997)",
+        "symbol": null
+    },
+    "BBD": {
+        "name": "바베이도스 달러",
+        "symbol": "$"
+    },
+    "BDT": {
+        "name": "방글라데시 타카",
+        "symbol": "৳"
+    },
+    "BEC": {
+        "name": "벨기에 프랑 (태환)",
+        "symbol": null
+    },
+    "BEF": {
+        "name": "벨기에 프랑",
+        "symbol": null
+    },
+    "BEL": {
+        "name": "벨기에 프랑 (금융)",
+        "symbol": null
+    },
+    "BGL": {
+        "name": "불가리아 동전 렛",
+        "symbol": null
+    },
+    "BGM": {
+        "name": "불가리아 사회주의자 렛",
+        "symbol": null
+    },
+    "BGN": {
+        "name": "불가리아 레프",
+        "symbol": null
+    },
+    "BGO": {
+        "name": "불가리아 렛 (1879–1952)",
+        "symbol": null
+    },
+    "BHD": {
+        "name": "바레인 디나르",
+        "symbol": null
+    },
+    "BIF": {
+        "name": "부룬디 프랑",
+        "symbol": null
+    },
+    "BMD": {
+        "name": "버뮤다 달러",
+        "symbol": "$"
+    },
+    "BND": {
+        "name": "부루나이 달러",
+        "symbol": "$"
+    },
+    "BOB": {
+        "name": "볼리비아 볼리비아노",
+        "symbol": "Bs"
+    },
+    "BOL": {
+        "name": "볼리비아 볼리비아노 (1863–1963)",
+        "symbol": null
+    },
+    "BOP": {
+        "name": "볼리비아노 페소",
+        "symbol": null
+    },
+    "BOV": {
+        "name": "볼리비아노 Mvdol(기금)",
+        "symbol": null
+    },
+    "BRB": {
+        "name": "볼리비아노 크루제이루 노보 (1967–1986)",
+        "symbol": null
+    },
+    "BRC": {
+        "name": "브라질 크루자두",
+        "symbol": null
+    },
+    "BRE": {
+        "name": "브라질 크루제이루 (1990–1993)",
+        "symbol": null
+    },
+    "BRL": {
+        "name": "브라질 레알",
+        "symbol": "R$"
+    },
+    "BRN": {
+        "name": "브라질 크루자두 노보",
+        "symbol": null
+    },
+    "BRR": {
+        "name": "브라질 크루제이루",
+        "symbol": null
+    },
+    "BRZ": {
+        "name": "브라질 크루제이루 (1942–1967)",
+        "symbol": null
+    },
+    "BSD": {
+        "name": "바하마 달러",
+        "symbol": "$"
+    },
+    "BTN": {
+        "name": "부탄 눌투눔",
+        "symbol": null
+    },
+    "BUK": {
+        "name": "버마 차트",
+        "symbol": null
+    },
+    "BWP": {
+        "name": "보츠와나 풀라",
+        "symbol": "P"
+    },
+    "BYB": {
+        "name": "벨라루스 신권 루블 (1994–1999)",
+        "symbol": null
+    },
+    "BYN": {
+        "name": "벨라루스 루블",
+        "symbol": "р."
+    },
+    "BYR": {
+        "name": "벨라루스 루블 (2000–2016)",
+        "symbol": null
+    },
+    "BZD": {
+        "name": "벨리즈 달러",
+        "symbol": "$"
+    },
+    "CAD": {
+        "name": "캐나다 달러",
+        "symbol": "CA$"
+    },
+    "CDF": {
+        "name": "콩고 프랑",
+        "symbol": null
+    },
+    "CHE": {
+        "name": "유로 (WIR)",
+        "symbol": null
+    },
+    "CHF": {
+        "name": "스위스 프랑",
+        "symbol": null
+    },
+    "CHW": {
+        "name": "프랑 (WIR)",
+        "symbol": null
+    },
+    "CLE": {
+        "name": "칠레 에스쿠도",
+        "symbol": null
+    },
+    "CLF": {
+        "name": "칠레 (UF)",
+        "symbol": null
+    },
+    "CLP": {
+        "name": "칠레 페소",
+        "symbol": "$"
+    },
+    "CNH": {
+        "name": "중국 위안화(역외)",
+        "symbol": null
+    },
+    "CNY": {
+        "name": "중국 위안화",
+        "symbol": "CN¥"
+    },
+    "COP": {
+        "name": "콜롬비아 페소",
+        "symbol": "$"
+    },
+    "COU": {
+        "name": "콜롬비아 실가 단위",
+        "symbol": null
+    },
+    "CRC": {
+        "name": "코스타리카 콜론",
+        "symbol": "₡"
+    },
+    "CSD": {
+        "name": "고 세르비아 디나르",
+        "symbol": null
+    },
+    "CSK": {
+        "name": "체코슬로바키아 동전 코루나",
+        "symbol": null
+    },
+    "CUC": {
+        "name": "쿠바 태환 페소",
+        "symbol": "$"
+    },
+    "CUP": {
+        "name": "쿠바 페소",
+        "symbol": "$"
+    },
+    "CVE": {
+        "name": "카보베르데 에스쿠도",
+        "symbol": null
+    },
+    "CYP": {
+        "name": "싸이프러스 파운드",
+        "symbol": null
+    },
+    "CZK": {
+        "name": "체코 코루나",
+        "symbol": "Kč"
+    },
+    "DDM": {
+        "name": "동독 오스트마르크",
+        "symbol": null
+    },
+    "DEM": {
+        "name": "독일 마르크",
+        "symbol": null
+    },
+    "DJF": {
+        "name": "지부티 프랑",
+        "symbol": null
+    },
+    "DKK": {
+        "name": "덴마크 크로네",
+        "symbol": "kr"
+    },
+    "DOP": {
+        "name": "도미니카 페소",
+        "symbol": "$"
+    },
+    "DZD": {
+        "name": "알제리 디나르",
+        "symbol": null
+    },
+    "ECS": {
+        "name": "에쿠아도르 수크레",
+        "symbol": null
+    },
+    "ECV": {
+        "name": "에콰도르 (UVC)",
+        "symbol": null
+    },
+    "EEK": {
+        "name": "에스토니아 크룬",
+        "symbol": null
+    },
+    "EGP": {
+        "name": "이집트 파운드",
+        "symbol": "E£"
+    },
+    "ERN": {
+        "name": "에리트레아 낙파",
+        "symbol": null
+    },
+    "ESA": {
+        "name": "스페인 페세타(예금)",
+        "symbol": null
+    },
+    "ESB": {
+        "name": "스페인 페세타(변환 예금)",
+        "symbol": null
+    },
+    "ESP": {
+        "name": "스페인 페세타",
+        "symbol": "₧"
+    },
+    "ETB": {
+        "name": "에티오피아 비르",
+        "symbol": null
+    },
+    "EUR": {
+        "name": "유로",
+        "symbol": "€"
+    },
+    "FIM": {
+        "name": "핀란드 마르카",
+        "symbol": null
+    },
+    "FJD": {
+        "name": "피지 달러",
+        "symbol": "$"
+    },
+    "FKP": {
+        "name": "포클랜드제도 파운드",
+        "symbol": "£"
+    },
+    "FRF": {
+        "name": "프랑스 프랑",
+        "symbol": null
+    },
+    "GBP": {
+        "name": "영국 파운드",
+        "symbol": "£"
+    },
+    "GEK": {
+        "name": "그루지야 지폐 라리트",
+        "symbol": null
+    },
+    "GEL": {
+        "name": "조지아 라리",
+        "symbol": "₾"
+    },
+    "GHC": {
+        "name": "가나 시디 (1979–2007)",
+        "symbol": null
+    },
+    "GHS": {
+        "name": "가나 세디",
+        "symbol": "GH₵"
+    },
+    "GIP": {
+        "name": "지브롤터 파운드",
+        "symbol": "£"
+    },
+    "GMD": {
+        "name": "감비아 달라시",
+        "symbol": null
+    },
+    "GNF": {
+        "name": "기니 프랑",
+        "symbol": "FG"
+    },
+    "GNS": {
+        "name": "기니 시리",
+        "symbol": null
+    },
+    "GQE": {
+        "name": "적도 기니 에쿨 (Ekwele)",
+        "symbol": null
+    },
+    "GRD": {
+        "name": "그리스 드라크마",
+        "symbol": null
+    },
+    "GTQ": {
+        "name": "과테말라 케트살",
+        "symbol": "Q"
+    },
+    "GWE": {
+        "name": "포르투갈령 기니 에스쿠도",
+        "symbol": null
+    },
+    "GWP": {
+        "name": "기네비쏘 페소",
+        "symbol": null
+    },
+    "GYD": {
+        "name": "가이아나 달러",
+        "symbol": "$"
+    },
+    "HKD": {
+        "name": "홍콩 달러",
+        "symbol": "HK$"
+    },
+    "HNL": {
+        "name": "온두라스 렘피라",
+        "symbol": "L"
+    },
+    "HRD": {
+        "name": "크로아티아 디나르",
+        "symbol": null
+    },
+    "HRK": {
+        "name": "크로아티아 쿠나",
+        "symbol": "kn"
+    },
+    "HTG": {
+        "name": "아이티 구르드",
+        "symbol": null
+    },
+    "HUF": {
+        "name": "헝가리 포린트",
+        "symbol": "Ft"
+    },
+    "IDR": {
+        "name": "인도네시아 루피아",
+        "symbol": "Rp"
+    },
+    "IEP": {
+        "name": "아일랜드 파운드",
+        "symbol": null
+    },
+    "ILP": {
+        "name": "이스라엘 파운드",
+        "symbol": null
+    },
+    "ILS": {
+        "name": "이스라엘 신권 세켈",
+        "symbol": "₪"
+    },
+    "INR": {
+        "name": "인도 루피",
+        "symbol": "₹"
+    },
+    "IQD": {
+        "name": "이라크 디나르",
+        "symbol": null
+    },
+    "IRR": {
+        "name": "이란 리얄",
+        "symbol": null
+    },
+    "ISK": {
+        "name": "아이슬란드 크로나",
+        "symbol": "kr"
+    },
+    "ITL": {
+        "name": "이탈리아 리라",
+        "symbol": null
+    },
+    "JMD": {
+        "name": "자메이카 달러",
+        "symbol": "$"
+    },
+    "JOD": {
+        "name": "요르단 디나르",
+        "symbol": null
+    },
+    "JPY": {
+        "name": "일본 엔화",
+        "symbol": "JP¥"
+    },
+    "KES": {
+        "name": "케냐 실링",
+        "symbol": null
+    },
+    "KGS": {
+        "name": "키르기스스탄 솜",
+        "symbol": "⃀"
+    },
+    "KHR": {
+        "name": "캄보디아 리엘",
+        "symbol": "៛"
+    },
+    "KMF": {
+        "name": "코모르 프랑",
+        "symbol": "CF"
+    },
+    "KPW": {
+        "name": "조선 민주주의 인민 공화국 원",
+        "symbol": "₩"
+    },
+    "KRH": {
+        "name": "대한민국 환 (1953–1962)",
+        "symbol": null
+    },
+    "KRW": {
+        "name": "대한민국 원",
+        "symbol": "₩"
+    },
+    "KWD": {
+        "name": "쿠웨이트 디나르",
+        "symbol": null
+    },
+    "KYD": {
+        "name": "케이맨 제도 달러",
+        "symbol": "$"
+    },
+    "KZT": {
+        "name": "카자흐스탄 텡게",
+        "symbol": "₸"
+    },
+    "LAK": {
+        "name": "라오스 키프",
+        "symbol": "₭"
+    },
+    "LBP": {
+        "name": "레바논 파운드",
+        "symbol": "L£"
+    },
+    "LKR": {
+        "name": "스리랑카 루피",
+        "symbol": "Rs"
+    },
+    "LRD": {
+        "name": "라이베리아 달러",
+        "symbol": "$"
+    },
+    "LSL": {
+        "name": "레소토 로티",
+        "symbol": null
+    },
+    "LTL": {
+        "name": "리투아니아 리타",
+        "symbol": "Lt"
+    },
+    "LTT": {
+        "name": "룩셈부르크 타로나",
+        "symbol": null
+    },
+    "LUC": {
+        "name": "룩셈부르크 변환 프랑",
+        "symbol": null
+    },
+    "LUF": {
+        "name": "룩셈부르크 프랑",
+        "symbol": null
+    },
+    "LUL": {
+        "name": "룩셈부르크 재정 프랑",
+        "symbol": null
+    },
+    "LVL": {
+        "name": "라트비아 라트",
+        "symbol": "Ls"
+    },
+    "LVR": {
+        "name": "라트비아 루블",
+        "symbol": null
+    },
+    "LYD": {
+        "name": "리비아 디나르",
+        "symbol": null
+    },
+    "MAD": {
+        "name": "모로코 디르함",
+        "symbol": null
+    },
+    "MAF": {
+        "name": "모로코 프랑",
+        "symbol": null
+    },
+    "MCF": {
+        "name": "모나코 프랑",
+        "symbol": null
+    },
+    "MDC": {
+        "name": "몰도바 쿠폰",
+        "symbol": null
+    },
+    "MDL": {
+        "name": "몰도바 레이",
+        "symbol": null
+    },
+    "MGA": {
+        "name": "마다가스카르 아리아리",
+        "symbol": "Ar"
+    },
+    "MGF": {
+        "name": "마다가스카르 프랑",
+        "symbol": null
+    },
+    "MKD": {
+        "name": "마케도니아 디나르",
+        "symbol": null
+    },
+    "MLF": {
+        "name": "말리 프랑",
+        "symbol": null
+    },
+    "MMK": {
+        "name": "미얀마 키얏",
+        "symbol": "K"
+    },
+    "MNT": {
+        "name": "몽골 투그릭",
+        "symbol": "₮"
+    },
+    "MOP": {
+        "name": "마카오 파타카",
+        "symbol": null
+    },
+    "MRO": {
+        "name": "모리타니 우기야 (1973–2017)",
+        "symbol": null
+    },
+    "MRU": {
+        "name": "모리타니 우기야",
+        "symbol": null
+    },
+    "MTL": {
+        "name": "몰타 리라",
+        "symbol": null
+    },
+    "MTP": {
+        "name": "몰타 파운드",
+        "symbol": null
+    },
+    "MUR": {
+        "name": "모리셔스 루피",
+        "symbol": "Rs"
+    },
+    "MVR": {
+        "name": "몰디브 제도 루피아",
+        "symbol": null
+    },
+    "MWK": {
+        "name": "말라위 콰차",
+        "symbol": null
+    },
+    "MXN": {
+        "name": "멕시코 페소",
+        "symbol": "MX$"
+    },
+    "MXP": {
+        "name": "멕시코 실버 페소 (1861–1992)",
+        "symbol": null
+    },
+    "MXV": {
+        "name": "멕시코 (UDI)",
+        "symbol": null
+    },
+    "MYR": {
+        "name": "말레이시아 링깃",
+        "symbol": "RM"
+    },
+    "MZE": {
+        "name": "모잠비크 에스쿠도",
+        "symbol": null
+    },
+    "MZM": {
+        "name": "고 모잠비크 메티칼",
+        "symbol": null
+    },
+    "MZN": {
+        "name": "모잠비크 메티칼",
+        "symbol": null
+    },
+    "NAD": {
+        "name": "나미비아 달러",
+        "symbol": "$"
+    },
+    "NGN": {
+        "name": "나이지리아 나이라",
+        "symbol": "₦"
+    },
+    "NIC": {
+        "name": "니카라과 코르도바(1988~1991)",
+        "symbol": null
+    },
+    "NIO": {
+        "name": "니카라과 코르도바",
+        "symbol": "C$"
+    },
+    "NLG": {
+        "name": "네델란드 길더",
+        "symbol": null
+    },
+    "NOK": {
+        "name": "노르웨이 크로네",
+        "symbol": "kr"
+    },
+    "NPR": {
+        "name": "네팔 루피",
+        "symbol": "Rs"
+    },
+    "NZD": {
+        "name": "뉴질랜드 달러",
+        "symbol": "NZ$"
+    },
+    "OMR": {
+        "name": "오만 리알",
+        "symbol": null
+    },
+    "PAB": {
+        "name": "파나마 발보아",
+        "symbol": null
+    },
+    "PEI": {
+        "name": "페루 인티",
+        "symbol": null
+    },
+    "PEN": {
+        "name": "페루 솔",
+        "symbol": null
+    },
+    "PES": {
+        "name": "페루 솔 (1863–1965)",
+        "symbol": null
+    },
+    "PGK": {
+        "name": "파푸아뉴기니 키나",
+        "symbol": null
+    },
+    "PHP": {
+        "name": "필리핀 페소",
+        "symbol": null
+    },
+    "PKR": {
+        "name": "파키스탄 루피",
+        "symbol": "Rs"
+    },
+    "PLN": {
+        "name": "폴란드 즈워티",
+        "symbol": "zł"
+    },
+    "PLZ": {
+        "name": "폴란드 즐로티 (1950–1995)",
+        "symbol": null
+    },
+    "PTE": {
+        "name": "포르투갈 에스쿠도",
+        "symbol": null
+    },
+    "PYG": {
+        "name": "파라과이 과라니",
+        "symbol": "₲"
+    },
+    "QAR": {
+        "name": "카타르 리얄",
+        "symbol": null
+    },
+    "RHD": {
+        "name": "로디지아 달러",
+        "symbol": null
+    },
+    "ROL": {
+        "name": "루마니아 레이",
+        "symbol": null
+    },
+    "RON": {
+        "name": "루마니아 레우",
+        "symbol": "L"
+    },
+    "RSD": {
+        "name": "세르비아 디나르",
+        "symbol": null
+    },
+    "RUB": {
+        "name": "러시아 루블",
+        "symbol": "₽"
+    },
+    "RUR": {
+        "name": "러시아 루블 (1991–1998)",
+        "symbol": null
+    },
+    "RWF": {
+        "name": "르완다 프랑",
+        "symbol": "RF"
+    },
+    "SAR": {
+        "name": "사우디아라비아 리얄",
+        "symbol": null
+    },
+    "SBD": {
+        "name": "솔로몬 제도 달러",
+        "symbol": "$"
+    },
+    "SCR": {
+        "name": "세이셸 루피",
+        "symbol": null
+    },
+    "SDD": {
+        "name": "수단 디나르",
+        "symbol": null
+    },
+    "SDG": {
+        "name": "수단 파운드",
+        "symbol": null
+    },
+    "SDP": {
+        "name": "고 수단 파운드",
+        "symbol": null
+    },
+    "SEK": {
+        "name": "스웨덴 크로나",
+        "symbol": "kr"
+    },
+    "SGD": {
+        "name": "싱가포르 달러",
+        "symbol": "$"
+    },
+    "SHP": {
+        "name": "세인트헬레나 파운드",
+        "symbol": "£"
+    },
+    "SIT": {
+        "name": "슬로베니아 톨라르",
+        "symbol": null
+    },
+    "SKK": {
+        "name": "슬로바키아 코루나",
+        "symbol": null
+    },
+    "SLE": {
+        "name": "시에라리온 리온",
+        "symbol": null
+    },
+    "SLL": {
+        "name": "시에라리온 리온(1964~2022)",
+        "symbol": null
+    },
+    "SOS": {
+        "name": "소말리아 실링",
+        "symbol": null
+    },
+    "SRD": {
+        "name": "수리남 달러",
+        "symbol": "$"
+    },
+    "SRG": {
+        "name": "수리남 길더",
+        "symbol": null
+    },
+    "SSP": {
+        "name": "남수단 파운드",
+        "symbol": "£"
+    },
+    "STD": {
+        "name": "상투메 프린시페 도브라 (1977–2017)",
+        "symbol": null
+    },
+    "STN": {
+        "name": "상투메 프린시페 도브라",
+        "symbol": "Db"
+    },
+    "SUR": {
+        "name": "소련 루블",
+        "symbol": null
+    },
+    "SVC": {
+        "name": "엘살바도르 콜론",
+        "symbol": null
+    },
+    "SYP": {
+        "name": "시리아 파운드",
+        "symbol": "£"
+    },
+    "SZL": {
+        "name": "스와질란드 릴랑게니",
+        "symbol": null
+    },
+    "THB": {
+        "name": "태국 바트",
+        "symbol": "฿"
+    },
+    "TJR": {
+        "name": "타지키스탄 루블",
+        "symbol": null
+    },
+    "TJS": {
+        "name": "타지키스탄 소모니",
+        "symbol": null
+    },
+    "TMM": {
+        "name": "투르크메니스탄 마나트 (1993–2009)",
+        "symbol": null
+    },
+    "TMT": {
+        "name": "투르크메니스탄 마나트",
+        "symbol": null
+    },
+    "TND": {
+        "name": "튀니지 디나르",
+        "symbol": null
+    },
+    "TOP": {
+        "name": "통가 파앙가",
+        "symbol": "T$"
+    },
+    "TPE": {
+        "name": "티모르 에스쿠도",
+        "symbol": null
+    },
+    "TRL": {
+        "name": "터키 리라(1922~2005)",
+        "symbol": null
+    },
+    "TRY": {
+        "name": "튀르키예 리라",
+        "symbol": "₺"
+    },
+    "TTD": {
+        "name": "트리니다드 토바고 달러",
+        "symbol": "$"
+    },
+    "TWD": {
+        "name": "신 타이완 달러",
+        "symbol": "NT$"
+    },
+    "TZS": {
+        "name": "탄자니아 실링",
+        "symbol": null
+    },
+    "UAH": {
+        "name": "우크라이나 그리브나",
+        "symbol": "₴"
+    },
+    "UAK": {
+        "name": "우크라이나 카보바네츠",
+        "symbol": null
+    },
+    "UGS": {
+        "name": "우간다 실링 (1966–1987)",
+        "symbol": null
+    },
+    "UGX": {
+        "name": "우간다 실링",
+        "symbol": null
+    },
+    "USD": {
+        "name": "미국 달러",
+        "symbol": "US$"
+    },
+    "USN": {
+        "name": "미국 달러(다음날)",
+        "symbol": null
+    },
+    "USS": {
+        "name": "미국 달러(당일)",
+        "symbol": null
+    },
+    "UYI": {
+        "name": "우루과이 페소 (UI)",
+        "symbol": null
+    },
+    "UYP": {
+        "name": "우루과이 페소 (1975–1993)",
+        "symbol": null
+    },
+    "UYU": {
+        "name": "우루과이 페소",
+        "symbol": "$"
+    },
+    "UZS": {
+        "name": "우즈베키스탄 숨",
+        "symbol": null
+    },
+    "VEB": {
+        "name": "베네주엘라 볼리바르 (1871–2008)",
+        "symbol": null
+    },
+    "VEF": {
+        "name": "베네수엘라 볼리바르 (2008–2018)",
+        "symbol": "Bs"
+    },
+    "VES": {
+        "name": "베네수엘라 볼리바르",
+        "symbol": null
+    },
+    "VND": {
+        "name": "베트남 동",
+        "symbol": "₫"
+    },
+    "VNN": {
+        "name": "베트남 동 (1978–1985)",
+        "symbol": null
+    },
+    "VUV": {
+        "name": "바누아투 바투",
+        "symbol": null
+    },
+    "WST": {
+        "name": "서 사모아 탈라",
+        "symbol": null
+    },
+    "XAF": {
+        "name": "중앙아프리카 CFA 프랑",
+        "symbol": "FCFA"
+    },
+    "XAG": {
+        "name": "은화",
+        "symbol": null
+    },
+    "XAU": {
+        "name": "금",
+        "symbol": null
+    },
+    "XBA": {
+        "name": "유르코 (유럽 회계 단위)",
+        "symbol": null
+    },
+    "XBB": {
+        "name": "유럽 통화 동맹",
+        "symbol": null
+    },
+    "XBC": {
+        "name": "유럽 계산 단위 (XBC)",
+        "symbol": null
+    },
+    "XBD": {
+        "name": "유럽 계산 단위 (XBD)",
+        "symbol": null
+    },
+    "XCD": {
+        "name": "동카리브 달러",
+        "symbol": "EC$"
+    },
+    "XCG": {
+        "name": "카리브 길더",
+        "symbol": "Cg."
+    },
+    "XDR": {
+        "name": "특별인출권",
+        "symbol": null
+    },
+    "XEU": {
+        "name": "유럽 환율 단위",
+        "symbol": null
+    },
+    "XFO": {
+        "name": "프랑스 프랑 (Gold)",
+        "symbol": null
+    },
+    "XFU": {
+        "name": "프랑스 프랑 (UIC)",
+        "symbol": null
+    },
+    "XOF": {
+        "name": "서아프리카 CFA 프랑",
+        "symbol": "F CFA"
+    },
+    "XPD": {
+        "name": "팔라듐",
+        "symbol": null
+    },
+    "XPF": {
+        "name": "CFP 프랑",
+        "symbol": "CFPF"
+    },
+    "XPT": {
+        "name": "백금",
+        "symbol": null
+    },
+    "XRE": {
+        "name": "RINET 기금",
+        "symbol": null
+    },
+    "XTS": {
+        "name": "테스트 통화 코드",
+        "symbol": null
+    },
+    "XXX": {
+        "name": "알 수 없는 통화 단위",
+        "symbol": "¤"
+    },
+    "YDD": {
+        "name": "예멘 디나르",
+        "symbol": null
+    },
+    "YER": {
+        "name": "예멘 리알",
+        "symbol": null
+    },
+    "YUD": {
+        "name": "유고슬라비아 동전 디나르",
+        "symbol": null
+    },
+    "YUM": {
+        "name": "유고슬라비아 노비 디나르",
+        "symbol": null
+    },
+    "YUN": {
+        "name": "유고슬라비아 전환 디나르",
+        "symbol": null
+    },
+    "ZAL": {
+        "name": "남아프리카 랜드 (금융)",
+        "symbol": null
+    },
+    "ZAR": {
+        "name": "남아프리카 랜드",
+        "symbol": "R"
+    },
+    "ZMK": {
+        "name": "쟘비아 콰쳐 (1968–2012)",
+        "symbol": null
+    },
+    "ZMW": {
+        "name": "잠비아 콰차",
+        "symbol": "ZK"
+    },
+    "ZRN": {
+        "name": "자이르 신권 자이르",
+        "symbol": null
+    },
+    "ZRZ": {
+        "name": "자이르 자이르",
+        "symbol": null
+    },
+    "ZWD": {
+        "name": "짐바브웨 달러",
+        "symbol": null
+    },
+    "ZWG": {
+        "name": "짐바브웨 골드",
+        "symbol": null
+    },
+    "ZWL": {
+        "name": "짐바브웨 달러 (2009)",
+        "symbol": null
+    },
+    "ZWR": {
+        "name": "짐바브웨 달러 (2008)",
+        "symbol": null
+    }
+}

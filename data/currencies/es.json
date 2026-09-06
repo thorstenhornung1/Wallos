@@ -1,0 +1,1134 @@
+{
+    "ADP": {
+        "name": "peseta andorrana",
+        "symbol": null
+    },
+    "AED": {
+        "name": "dírham de los Emiratos Árabes Unidos",
+        "symbol": null
+    },
+    "AFA": {
+        "name": "afgani (1927–2002)",
+        "symbol": null
+    },
+    "AFN": {
+        "name": "afgani afgano",
+        "symbol": "؋"
+    },
+    "ALL": {
+        "name": "lek albanés",
+        "symbol": null
+    },
+    "AMD": {
+        "name": "dram armenio",
+        "symbol": "֏"
+    },
+    "ANG": {
+        "name": "florín antillano",
+        "symbol": null
+    },
+    "AOA": {
+        "name": "kuanza angoleño",
+        "symbol": "Kz"
+    },
+    "AOK": {
+        "name": "kwanza angoleño (1977–1990)",
+        "symbol": null
+    },
+    "AON": {
+        "name": "nuevo kwanza angoleño (1990–2000)",
+        "symbol": null
+    },
+    "AOR": {
+        "name": "kwanza reajustado angoleño (1995–1999)",
+        "symbol": null
+    },
+    "ARA": {
+        "name": "austral argentino",
+        "symbol": null
+    },
+    "ARP": {
+        "name": "peso argentino (1983–1985)",
+        "symbol": null
+    },
+    "ARS": {
+        "name": "peso argentino",
+        "symbol": "$"
+    },
+    "ATS": {
+        "name": "chelín austriaco",
+        "symbol": null
+    },
+    "AUD": {
+        "name": "dólar australiano",
+        "symbol": null
+    },
+    "AWG": {
+        "name": "florín arubeño",
+        "symbol": null
+    },
+    "AZM": {
+        "name": "manat azerí (1993–2006)",
+        "symbol": null
+    },
+    "AZN": {
+        "name": "manat azerbaiyano",
+        "symbol": "₼"
+    },
+    "BAD": {
+        "name": "dinar bosnio",
+        "symbol": null
+    },
+    "BAM": {
+        "name": "marco convertible de Bosnia y Herzegovina",
+        "symbol": "KM"
+    },
+    "BBD": {
+        "name": "dólar barbadense",
+        "symbol": "$"
+    },
+    "BDT": {
+        "name": "taka bangladesí",
+        "symbol": "৳"
+    },
+    "BEC": {
+        "name": "franco belga (convertible)",
+        "symbol": null
+    },
+    "BEF": {
+        "name": "franco belga",
+        "symbol": null
+    },
+    "BEL": {
+        "name": "franco belga (financiero)",
+        "symbol": null
+    },
+    "BGL": {
+        "name": "lev fuerte búlgaro",
+        "symbol": null
+    },
+    "BGN": {
+        "name": "leva búlgara",
+        "symbol": null
+    },
+    "BHD": {
+        "name": "dinar bareiní",
+        "symbol": null
+    },
+    "BIF": {
+        "name": "franco burundés",
+        "symbol": null
+    },
+    "BMD": {
+        "name": "dólar bermudeño",
+        "symbol": "$"
+    },
+    "BND": {
+        "name": "dólar bruneano",
+        "symbol": "$"
+    },
+    "BOB": {
+        "name": "boliviano",
+        "symbol": "Bs"
+    },
+    "BOP": {
+        "name": "peso boliviano",
+        "symbol": null
+    },
+    "BOV": {
+        "name": "MVDOL boliviano",
+        "symbol": null
+    },
+    "BRB": {
+        "name": "nuevo cruceiro brasileño (1967–1986)",
+        "symbol": null
+    },
+    "BRC": {
+        "name": "cruzado brasileño",
+        "symbol": null
+    },
+    "BRE": {
+        "name": "cruceiro brasileño (1990–1993)",
+        "symbol": null
+    },
+    "BRL": {
+        "name": "real brasileño",
+        "symbol": null
+    },
+    "BRN": {
+        "name": "nuevo cruzado brasileño",
+        "symbol": null
+    },
+    "BRR": {
+        "name": "cruceiro brasileño",
+        "symbol": null
+    },
+    "BSD": {
+        "name": "dólar bahameño",
+        "symbol": "$"
+    },
+    "BTN": {
+        "name": "gultrum butanés",
+        "symbol": null
+    },
+    "BUK": {
+        "name": "kyat birmano",
+        "symbol": null
+    },
+    "BWP": {
+        "name": "pula botsuano",
+        "symbol": "P"
+    },
+    "BYB": {
+        "name": "nuevo rublo bielorruso (1994–1999)",
+        "symbol": null
+    },
+    "BYN": {
+        "name": "rublo bielorruso",
+        "symbol": "р."
+    },
+    "BYR": {
+        "name": "rublo bielorruso (2000–2016)",
+        "symbol": null
+    },
+    "BZD": {
+        "name": "dólar beliceño",
+        "symbol": "$"
+    },
+    "CAD": {
+        "name": "dólar canadiense",
+        "symbol": null
+    },
+    "CDF": {
+        "name": "franco congoleño",
+        "symbol": null
+    },
+    "CHE": {
+        "name": "euro WIR",
+        "symbol": null
+    },
+    "CHF": {
+        "name": "franco suizo",
+        "symbol": null
+    },
+    "CHW": {
+        "name": "franco WIR",
+        "symbol": null
+    },
+    "CLF": {
+        "name": "unidad de fomento chilena",
+        "symbol": null
+    },
+    "CLP": {
+        "name": "peso chileno",
+        "symbol": "$"
+    },
+    "CNH": {
+        "name": "yuan chino (extracontinental)",
+        "symbol": null
+    },
+    "CNY": {
+        "name": "yuan renminbi",
+        "symbol": null
+    },
+    "COP": {
+        "name": "peso colombiano",
+        "symbol": "$"
+    },
+    "COU": {
+        "name": "unidad de valor real colombiana",
+        "symbol": null
+    },
+    "CRC": {
+        "name": "colón costarricense",
+        "symbol": "₡"
+    },
+    "CSD": {
+        "name": "antiguo dinar serbio",
+        "symbol": null
+    },
+    "CSK": {
+        "name": "corona fuerte checoslovaca",
+        "symbol": null
+    },
+    "CUC": {
+        "name": "peso cubano convertible",
+        "symbol": "$"
+    },
+    "CUP": {
+        "name": "peso cubano",
+        "symbol": "$"
+    },
+    "CVE": {
+        "name": "escudo de Cabo Verde",
+        "symbol": null
+    },
+    "CYP": {
+        "name": "libra chipriota",
+        "symbol": null
+    },
+    "CZK": {
+        "name": "corona checa",
+        "symbol": "Kč"
+    },
+    "DDM": {
+        "name": "ostmark de Alemania del Este",
+        "symbol": null
+    },
+    "DEM": {
+        "name": "marco alemán",
+        "symbol": null
+    },
+    "DJF": {
+        "name": "franco yibutiano",
+        "symbol": null
+    },
+    "DKK": {
+        "name": "corona danesa",
+        "symbol": "kr"
+    },
+    "DOP": {
+        "name": "peso dominicano",
+        "symbol": "$"
+    },
+    "DZD": {
+        "name": "dinar argelino",
+        "symbol": null
+    },
+    "ECS": {
+        "name": "sucre ecuatoriano",
+        "symbol": null
+    },
+    "ECV": {
+        "name": "unidad de valor constante (UVC) ecuatoriana",
+        "symbol": null
+    },
+    "EEK": {
+        "name": "corona estonia",
+        "symbol": null
+    },
+    "EGP": {
+        "name": "libra egipcia",
+        "symbol": null
+    },
+    "ERN": {
+        "name": "nakfa eritreo",
+        "symbol": null
+    },
+    "ESA": {
+        "name": "peseta española (cuenta A)",
+        "symbol": null
+    },
+    "ESB": {
+        "name": "peseta española (cuenta convertible)",
+        "symbol": null
+    },
+    "ESP": {
+        "name": "peseta española",
+        "symbol": "₧"
+    },
+    "ETB": {
+        "name": "bir etíope",
+        "symbol": null
+    },
+    "EUR": {
+        "name": "euro",
+        "symbol": "€"
+    },
+    "FIM": {
+        "name": "marco finlandés",
+        "symbol": null
+    },
+    "FJD": {
+        "name": "dólar fiyiano",
+        "symbol": "$"
+    },
+    "FKP": {
+        "name": "libra malvinense",
+        "symbol": "£"
+    },
+    "FRF": {
+        "name": "franco francés",
+        "symbol": null
+    },
+    "GBP": {
+        "name": "libra esterlina",
+        "symbol": null
+    },
+    "GEK": {
+        "name": "kupon larit georgiano",
+        "symbol": null
+    },
+    "GEL": {
+        "name": "lari georgiano",
+        "symbol": "₾"
+    },
+    "GHC": {
+        "name": "cedi ghanés (1979–2007)",
+        "symbol": null
+    },
+    "GHS": {
+        "name": "cedi ghanés",
+        "symbol": "GH₵"
+    },
+    "GIP": {
+        "name": "libra gibraltareña",
+        "symbol": "£"
+    },
+    "GMD": {
+        "name": "dalasi gambiano",
+        "symbol": null
+    },
+    "GNF": {
+        "name": "franco guineano",
+        "symbol": "FG"
+    },
+    "GNS": {
+        "name": "syli guineano",
+        "symbol": null
+    },
+    "GQE": {
+        "name": "ekuele de Guinea Ecuatorial",
+        "symbol": null
+    },
+    "GRD": {
+        "name": "dracma griego",
+        "symbol": null
+    },
+    "GTQ": {
+        "name": "quetzal guatemalteco",
+        "symbol": "Q"
+    },
+    "GWE": {
+        "name": "escudo de Guinea Portuguesa",
+        "symbol": null
+    },
+    "GWP": {
+        "name": "peso de Guinea-Bissáu",
+        "symbol": null
+    },
+    "GYD": {
+        "name": "dólar guyanés",
+        "symbol": "$"
+    },
+    "HKD": {
+        "name": "dólar hongkonés",
+        "symbol": null
+    },
+    "HNL": {
+        "name": "lempira hondureño",
+        "symbol": "L"
+    },
+    "HRD": {
+        "name": "dinar croata",
+        "symbol": null
+    },
+    "HRK": {
+        "name": "kuna croata",
+        "symbol": "kn"
+    },
+    "HTG": {
+        "name": "gurde haitiano",
+        "symbol": null
+    },
+    "HUF": {
+        "name": "forinto húngaro",
+        "symbol": "Ft"
+    },
+    "IDR": {
+        "name": "rupia indonesia",
+        "symbol": "Rp"
+    },
+    "IEP": {
+        "name": "libra irlandesa",
+        "symbol": null
+    },
+    "ILP": {
+        "name": "libra israelí",
+        "symbol": null
+    },
+    "ILS": {
+        "name": "nuevo séquel israelí",
+        "symbol": null
+    },
+    "INR": {
+        "name": "rupia india",
+        "symbol": null
+    },
+    "IQD": {
+        "name": "dinar iraquí",
+        "symbol": null
+    },
+    "IRR": {
+        "name": "rial iraní",
+        "symbol": null
+    },
+    "ISK": {
+        "name": "corona islandesa",
+        "symbol": "kr"
+    },
+    "ITL": {
+        "name": "lira italiana",
+        "symbol": null
+    },
+    "JMD": {
+        "name": "dólar jamaicano",
+        "symbol": "$"
+    },
+    "JOD": {
+        "name": "dinar jordano",
+        "symbol": null
+    },
+    "JPY": {
+        "name": "yen japonés",
+        "symbol": null
+    },
+    "KES": {
+        "name": "chelín keniano",
+        "symbol": null
+    },
+    "KGS": {
+        "name": "som kirguís",
+        "symbol": "⃀"
+    },
+    "KHR": {
+        "name": "riel camboyano",
+        "symbol": "៛"
+    },
+    "KMF": {
+        "name": "franco comorense",
+        "symbol": "CF"
+    },
+    "KPW": {
+        "name": "won norcoreano",
+        "symbol": "₩"
+    },
+    "KRW": {
+        "name": "won surcoreano",
+        "symbol": null
+    },
+    "KWD": {
+        "name": "dinar kuwaití",
+        "symbol": null
+    },
+    "KYD": {
+        "name": "dólar de las Islas Caimán",
+        "symbol": "$"
+    },
+    "KZT": {
+        "name": "tengue kazajo",
+        "symbol": "₸"
+    },
+    "LAK": {
+        "name": "kip laosiano",
+        "symbol": "₭"
+    },
+    "LBP": {
+        "name": "libra libanesa",
+        "symbol": "L£"
+    },
+    "LKR": {
+        "name": "rupia esrilanquesa",
+        "symbol": "Rs"
+    },
+    "LRD": {
+        "name": "dólar liberiano",
+        "symbol": "$"
+    },
+    "LSL": {
+        "name": "loti lesotense",
+        "symbol": null
+    },
+    "LTL": {
+        "name": "litas lituano",
+        "symbol": "Lt"
+    },
+    "LTT": {
+        "name": "talonas lituano",
+        "symbol": null
+    },
+    "LUC": {
+        "name": "franco convertible luxemburgués",
+        "symbol": null
+    },
+    "LUF": {
+        "name": "franco luxemburgués",
+        "symbol": null
+    },
+    "LUL": {
+        "name": "franco financiero luxemburgués",
+        "symbol": null
+    },
+    "LVL": {
+        "name": "lats letón",
+        "symbol": "Ls"
+    },
+    "LVR": {
+        "name": "rublo letón",
+        "symbol": null
+    },
+    "LYD": {
+        "name": "dinar libio",
+        "symbol": null
+    },
+    "MAD": {
+        "name": "dírham marroquí",
+        "symbol": null
+    },
+    "MAF": {
+        "name": "franco marroquí",
+        "symbol": null
+    },
+    "MDL": {
+        "name": "leu moldavo",
+        "symbol": null
+    },
+    "MGA": {
+        "name": "ariari malgache",
+        "symbol": "Ar"
+    },
+    "MGF": {
+        "name": "franco malgache",
+        "symbol": null
+    },
+    "MKD": {
+        "name": "dinar macedonio",
+        "symbol": null
+    },
+    "MLF": {
+        "name": "franco malí",
+        "symbol": null
+    },
+    "MMK": {
+        "name": "kiat de Myanmar",
+        "symbol": "K"
+    },
+    "MNT": {
+        "name": "tugrik mongol",
+        "symbol": "₮"
+    },
+    "MOP": {
+        "name": "pataca macaense",
+        "symbol": null
+    },
+    "MRO": {
+        "name": "uguiya (1973–2017)",
+        "symbol": null
+    },
+    "MRU": {
+        "name": "uguiya mauritano",
+        "symbol": null
+    },
+    "MTL": {
+        "name": "lira maltesa",
+        "symbol": null
+    },
+    "MTP": {
+        "name": "libra maltesa",
+        "symbol": null
+    },
+    "MUR": {
+        "name": "rupia mauriciana",
+        "symbol": "Rs"
+    },
+    "MVR": {
+        "name": "rufiya maldiva",
+        "symbol": null
+    },
+    "MWK": {
+        "name": "kuacha malauí",
+        "symbol": null
+    },
+    "MXN": {
+        "name": "peso mexicano",
+        "symbol": null
+    },
+    "MXP": {
+        "name": "peso de plata mexicano (1861–1992)",
+        "symbol": null
+    },
+    "MXV": {
+        "name": "unidad de inversión (UDI) mexicana",
+        "symbol": null
+    },
+    "MYR": {
+        "name": "ringit malasio",
+        "symbol": "RM"
+    },
+    "MZE": {
+        "name": "escudo mozambiqueño",
+        "symbol": null
+    },
+    "MZM": {
+        "name": "antiguo metical mozambiqueño",
+        "symbol": null
+    },
+    "MZN": {
+        "name": "metical mozambiqueño",
+        "symbol": null
+    },
+    "NAD": {
+        "name": "dólar namibio",
+        "symbol": "$"
+    },
+    "NGN": {
+        "name": "naira nigeriano",
+        "symbol": "₦"
+    },
+    "NIC": {
+        "name": "córdoba nicaragüense (1988–1991)",
+        "symbol": null
+    },
+    "NIO": {
+        "name": "córdoba oro",
+        "symbol": "C$"
+    },
+    "NLG": {
+        "name": "florín neerlandés",
+        "symbol": null
+    },
+    "NOK": {
+        "name": "corona noruega",
+        "symbol": "kr"
+    },
+    "NPR": {
+        "name": "rupia nepalí",
+        "symbol": "Rs"
+    },
+    "NZD": {
+        "name": "dólar neozelandés",
+        "symbol": null
+    },
+    "OMR": {
+        "name": "rial omaní",
+        "symbol": null
+    },
+    "PAB": {
+        "name": "balboa panameño",
+        "symbol": null
+    },
+    "PEI": {
+        "name": "inti peruano",
+        "symbol": null
+    },
+    "PEN": {
+        "name": "sol peruano",
+        "symbol": null
+    },
+    "PES": {
+        "name": "sol peruano (1863–1965)",
+        "symbol": null
+    },
+    "PGK": {
+        "name": "kina papú",
+        "symbol": null
+    },
+    "PHP": {
+        "name": "peso filipino",
+        "symbol": null
+    },
+    "PKR": {
+        "name": "rupia pakistaní",
+        "symbol": "Rs"
+    },
+    "PLN": {
+        "name": "esloti polaco",
+        "symbol": "zł"
+    },
+    "PLZ": {
+        "name": "zloty polaco (1950–1995)",
+        "symbol": null
+    },
+    "PTE": {
+        "name": "escudo portugués",
+        "symbol": null
+    },
+    "PYG": {
+        "name": "guaraní paraguayo",
+        "symbol": "₲"
+    },
+    "QAR": {
+        "name": "rial catarí",
+        "symbol": null
+    },
+    "RHD": {
+        "name": "dólar rodesiano",
+        "symbol": null
+    },
+    "ROL": {
+        "name": "antiguo leu rumano",
+        "symbol": null
+    },
+    "RON": {
+        "name": "leu rumano",
+        "symbol": "L"
+    },
+    "RSD": {
+        "name": "dinar serbio",
+        "symbol": null
+    },
+    "RUB": {
+        "name": "rublo ruso",
+        "symbol": "₽"
+    },
+    "RUR": {
+        "name": "rublo ruso (1991–1998)",
+        "symbol": null
+    },
+    "RWF": {
+        "name": "franco ruandés",
+        "symbol": "RF"
+    },
+    "SAR": {
+        "name": "rial saudí",
+        "symbol": null
+    },
+    "SBD": {
+        "name": "dólar salomonense",
+        "symbol": "$"
+    },
+    "SCR": {
+        "name": "rupia seychellense",
+        "symbol": null
+    },
+    "SDD": {
+        "name": "dinar sudanés",
+        "symbol": null
+    },
+    "SDG": {
+        "name": "libra sudanesa",
+        "symbol": null
+    },
+    "SDP": {
+        "name": "libra sudanesa antigua",
+        "symbol": null
+    },
+    "SEK": {
+        "name": "corona sueca",
+        "symbol": "kr"
+    },
+    "SGD": {
+        "name": "dólar singapurense",
+        "symbol": "$"
+    },
+    "SHP": {
+        "name": "libra de Santa Elena",
+        "symbol": "£"
+    },
+    "SIT": {
+        "name": "tólar esloveno",
+        "symbol": null
+    },
+    "SKK": {
+        "name": "corona eslovaca",
+        "symbol": null
+    },
+    "SLE": {
+        "name": "leona sierraleonesa",
+        "symbol": null
+    },
+    "SLL": {
+        "name": "leona sierraleonesa (1964–2022)",
+        "symbol": null
+    },
+    "SOS": {
+        "name": "chelín somalí",
+        "symbol": null
+    },
+    "SRD": {
+        "name": "dólar surinamés",
+        "symbol": "$"
+    },
+    "SRG": {
+        "name": "florín surinamés",
+        "symbol": null
+    },
+    "SSP": {
+        "name": "libra sursudanesa",
+        "symbol": "£"
+    },
+    "STD": {
+        "name": "dobra (1977–2017)",
+        "symbol": null
+    },
+    "STN": {
+        "name": "dobra santotomense",
+        "symbol": "Db"
+    },
+    "SUR": {
+        "name": "rublo soviético",
+        "symbol": null
+    },
+    "SVC": {
+        "name": "colón salvadoreño",
+        "symbol": null
+    },
+    "SYP": {
+        "name": "libra siria",
+        "symbol": "£"
+    },
+    "SZL": {
+        "name": "lilangeni esuatiní",
+        "symbol": null
+    },
+    "THB": {
+        "name": "bat tailandés",
+        "symbol": "฿"
+    },
+    "TJR": {
+        "name": "rublo tayiko",
+        "symbol": null
+    },
+    "TJS": {
+        "name": "somoni tayiko",
+        "symbol": null
+    },
+    "TMM": {
+        "name": "manat turcomano (1993–2009)",
+        "symbol": null
+    },
+    "TMT": {
+        "name": "manat turcomano",
+        "symbol": null
+    },
+    "TND": {
+        "name": "dinar tunecino",
+        "symbol": null
+    },
+    "TOP": {
+        "name": "paanga tongano",
+        "symbol": "T$"
+    },
+    "TPE": {
+        "name": "escudo timorense",
+        "symbol": null
+    },
+    "TRL": {
+        "name": "lira turca (1922–2005)",
+        "symbol": null
+    },
+    "TRY": {
+        "name": "lira turca",
+        "symbol": "₺"
+    },
+    "TTD": {
+        "name": "dólar de Trinidad y Tobago",
+        "symbol": "$"
+    },
+    "TWD": {
+        "name": "nuevo dólar taiwanés",
+        "symbol": null
+    },
+    "TZS": {
+        "name": "chelín tanzano",
+        "symbol": null
+    },
+    "UAH": {
+        "name": "grivna ucraniana",
+        "symbol": "₴"
+    },
+    "UAK": {
+        "name": "karbovanet ucraniano",
+        "symbol": null
+    },
+    "UGS": {
+        "name": "chelín ugandés (1966–1987)",
+        "symbol": null
+    },
+    "UGX": {
+        "name": "chelín ugandés",
+        "symbol": null
+    },
+    "USD": {
+        "name": "dólar estadounidense",
+        "symbol": "US$"
+    },
+    "USN": {
+        "name": "dólar estadounidense (día siguiente)",
+        "symbol": null
+    },
+    "USS": {
+        "name": "dólar estadounidense (mismo día)",
+        "symbol": null
+    },
+    "UYI": {
+        "name": "peso uruguayo en unidades indexadas",
+        "symbol": null
+    },
+    "UYP": {
+        "name": "peso uruguayo (1975–1993)",
+        "symbol": null
+    },
+    "UYU": {
+        "name": "peso uruguayo",
+        "symbol": "$"
+    },
+    "UYW": {
+        "name": "unidad previsional uruguayo",
+        "symbol": null
+    },
+    "UZS": {
+        "name": "sum uzbeko",
+        "symbol": null
+    },
+    "VEB": {
+        "name": "bolívar venezolano (1871–2008)",
+        "symbol": null
+    },
+    "VEF": {
+        "name": "bolívar venezolano (2008–2018)",
+        "symbol": "Bs"
+    },
+    "VES": {
+        "name": "bolívar venezolano",
+        "symbol": null
+    },
+    "VND": {
+        "name": "dong vietnamita",
+        "symbol": "₫"
+    },
+    "VUV": {
+        "name": "vatu vanuatense",
+        "symbol": null
+    },
+    "WST": {
+        "name": "tala samoano",
+        "symbol": null
+    },
+    "XAF": {
+        "name": "franco CFA de África Central",
+        "symbol": null
+    },
+    "XAG": {
+        "name": "plata",
+        "symbol": null
+    },
+    "XAU": {
+        "name": "oro",
+        "symbol": null
+    },
+    "XBA": {
+        "name": "unidad compuesta europea",
+        "symbol": null
+    },
+    "XBB": {
+        "name": "unidad monetaria europea",
+        "symbol": null
+    },
+    "XBC": {
+        "name": "unidad de cuenta europea (XBC)",
+        "symbol": null
+    },
+    "XBD": {
+        "name": "unidad de cuenta europea (XBD)",
+        "symbol": null
+    },
+    "XCD": {
+        "name": "dólar del Caribe Oriental",
+        "symbol": null
+    },
+    "XCG": {
+        "name": "florín caribeño",
+        "symbol": "Cg."
+    },
+    "XDR": {
+        "name": "derechos especiales de giro",
+        "symbol": null
+    },
+    "XEU": {
+        "name": "unidad de moneda europea",
+        "symbol": null
+    },
+    "XFO": {
+        "name": "franco oro francés",
+        "symbol": null
+    },
+    "XFU": {
+        "name": "franco UIC francés",
+        "symbol": null
+    },
+    "XOF": {
+        "name": "franco CFA de África Occidental",
+        "symbol": null
+    },
+    "XPD": {
+        "name": "paladio",
+        "symbol": null
+    },
+    "XPF": {
+        "name": "franco CFP",
+        "symbol": "CFPF"
+    },
+    "XPT": {
+        "name": "platino",
+        "symbol": null
+    },
+    "XRE": {
+        "name": "fondos RINET",
+        "symbol": null
+    },
+    "XTS": {
+        "name": "código reservado para pruebas",
+        "symbol": null
+    },
+    "XXX": {
+        "name": "moneda desconocida",
+        "symbol": "¤"
+    },
+    "YDD": {
+        "name": "dinar yemení",
+        "symbol": null
+    },
+    "YER": {
+        "name": "rial yemení",
+        "symbol": null
+    },
+    "YUD": {
+        "name": "dinar fuerte yugoslavo",
+        "symbol": null
+    },
+    "YUM": {
+        "name": "super dinar yugoslavo",
+        "symbol": null
+    },
+    "YUN": {
+        "name": "dinar convertible yugoslavo",
+        "symbol": null
+    },
+    "ZAL": {
+        "name": "rand sudafricano (financiero)",
+        "symbol": null
+    },
+    "ZAR": {
+        "name": "rand sudafricano",
+        "symbol": "R"
+    },
+    "ZMK": {
+        "name": "kwacha zambiano (1968–2012)",
+        "symbol": null
+    },
+    "ZMW": {
+        "name": "kuacha zambiano",
+        "symbol": "ZK"
+    },
+    "ZRN": {
+        "name": "nuevo zaire zaireño",
+        "symbol": null
+    },
+    "ZRZ": {
+        "name": "zaire zaireño",
+        "symbol": null
+    },
+    "ZWD": {
+        "name": "dólar de Zimbabue",
+        "symbol": null
+    },
+    "ZWG": {
+        "name": "oro zimbabuense",
+        "symbol": null
+    },
+    "ZWL": {
+        "name": "dólar zimbabuense",
+        "symbol": null
+    }
+}

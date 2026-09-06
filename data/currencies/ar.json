@@ -1,0 +1,1050 @@
+{
+    "ADP": {
+        "name": "بيستا أندوري",
+        "symbol": null
+    },
+    "AED": {
+        "name": "درهم إماراتي",
+        "symbol": "د.إ.‏"
+    },
+    "AFA": {
+        "name": "أفغاني - 1927-2002",
+        "symbol": null
+    },
+    "AFN": {
+        "name": "أفغاني",
+        "symbol": "؋"
+    },
+    "ALL": {
+        "name": "ليك ألباني",
+        "symbol": null
+    },
+    "AMD": {
+        "name": "درام أرميني",
+        "symbol": "֏"
+    },
+    "ANG": {
+        "name": "غيلدر أنتيلي هولندي",
+        "symbol": null
+    },
+    "AOA": {
+        "name": "كوانزا أنغولي",
+        "symbol": "Kz"
+    },
+    "AOK": {
+        "name": "كوانزا أنجولي - 1977-1990",
+        "symbol": null
+    },
+    "AON": {
+        "name": "كوانزا أنجولي جديدة - 1990-2000",
+        "symbol": null
+    },
+    "AOR": {
+        "name": "كوانزا أنجولي معدلة - 1995 - 1999",
+        "symbol": null
+    },
+    "ARA": {
+        "name": "استرال أرجنتيني",
+        "symbol": null
+    },
+    "ARP": {
+        "name": "بيزو أرجنتيني - 1983-1985",
+        "symbol": null
+    },
+    "ARS": {
+        "name": "بيزو أرجنتيني",
+        "symbol": "AR$"
+    },
+    "ATS": {
+        "name": "شلن نمساوي",
+        "symbol": null
+    },
+    "AUD": {
+        "name": "دولار أسترالي",
+        "symbol": "AU$"
+    },
+    "AWG": {
+        "name": "فلورن أروبي",
+        "symbol": null
+    },
+    "AZM": {
+        "name": "مانات أذريبجاني",
+        "symbol": null
+    },
+    "AZN": {
+        "name": "مانات أذربيجان",
+        "symbol": "₼"
+    },
+    "BAD": {
+        "name": "دينار البوسنة والهرسك",
+        "symbol": null
+    },
+    "BAM": {
+        "name": "مارك البوسنة والهرسك قابل للتحويل",
+        "symbol": "KM"
+    },
+    "BBD": {
+        "name": "دولار بربادوسي",
+        "symbol": "BB$"
+    },
+    "BDT": {
+        "name": "تاكا بنغلاديشي",
+        "symbol": "৳"
+    },
+    "BEC": {
+        "name": "فرنك بلجيكي قابل للتحويل",
+        "symbol": null
+    },
+    "BEF": {
+        "name": "فرنك بلجيكي",
+        "symbol": null
+    },
+    "BEL": {
+        "name": "فرنك بلجيكي مالي",
+        "symbol": null
+    },
+    "BGN": {
+        "name": "ليف بلغاري",
+        "symbol": null
+    },
+    "BHD": {
+        "name": "دينار بحريني",
+        "symbol": "د.ب.‏"
+    },
+    "BIF": {
+        "name": "فرنك بروندي",
+        "symbol": null
+    },
+    "BMD": {
+        "name": "دولار برمودي",
+        "symbol": "BM$"
+    },
+    "BND": {
+        "name": "دولار بروناي",
+        "symbol": "BN$"
+    },
+    "BOB": {
+        "name": "بوليفيانو بوليفي",
+        "symbol": "Bs"
+    },
+    "BOP": {
+        "name": "بيزو بوليفي",
+        "symbol": null
+    },
+    "BOV": {
+        "name": "مفدول بوليفي",
+        "symbol": null
+    },
+    "BRB": {
+        "name": "نوفو كروزايرو برازيلي - 1967-1986",
+        "symbol": null
+    },
+    "BRC": {
+        "name": "كروزادو برازيلي",
+        "symbol": null
+    },
+    "BRE": {
+        "name": "كروزايرو برازيلي - 1990-1993",
+        "symbol": null
+    },
+    "BRL": {
+        "name": "ريال برازيلي",
+        "symbol": "R$"
+    },
+    "BSD": {
+        "name": "دولار باهامي",
+        "symbol": "BS$"
+    },
+    "BTN": {
+        "name": "نولتوم بوتاني",
+        "symbol": null
+    },
+    "BUK": {
+        "name": "كيات بورمي",
+        "symbol": null
+    },
+    "BWP": {
+        "name": "بولا بتسواني",
+        "symbol": "P"
+    },
+    "BYB": {
+        "name": "روبل بيلاروسي جديد - 1994-1999",
+        "symbol": null
+    },
+    "BYN": {
+        "name": "روبل بيلاروسي",
+        "symbol": "р."
+    },
+    "BYR": {
+        "name": "روبل بيلاروسي (٢٠٠٠–٢٠١٦)",
+        "symbol": null
+    },
+    "BZD": {
+        "name": "دولار بليزي",
+        "symbol": "BZ$"
+    },
+    "CAD": {
+        "name": "دولار كندي",
+        "symbol": "CA$"
+    },
+    "CDF": {
+        "name": "فرنك كونغولي",
+        "symbol": null
+    },
+    "CHF": {
+        "name": "فرنك سويسري",
+        "symbol": null
+    },
+    "CLP": {
+        "name": "بيزو تشيلي",
+        "symbol": "CL$"
+    },
+    "CNH": {
+        "name": "يوان صيني (في الخارج)",
+        "symbol": null
+    },
+    "CNY": {
+        "name": "يوان صيني",
+        "symbol": "CN¥"
+    },
+    "COP": {
+        "name": "بيزو كولومبي",
+        "symbol": "CO$"
+    },
+    "CRC": {
+        "name": "كولن كوستاريكي",
+        "symbol": "₡"
+    },
+    "CSD": {
+        "name": "دينار صربي قديم",
+        "symbol": null
+    },
+    "CSK": {
+        "name": "كرونة تشيكوسلوفاكيا",
+        "symbol": null
+    },
+    "CUC": {
+        "name": "بيزو كوبي قابل للتحويل",
+        "symbol": "$"
+    },
+    "CUP": {
+        "name": "بيزو كوبي",
+        "symbol": "CU$"
+    },
+    "CVE": {
+        "name": "اسكودو الرأس الأخضر",
+        "symbol": null
+    },
+    "CYP": {
+        "name": "جنيه قبرصي",
+        "symbol": null
+    },
+    "CZK": {
+        "name": "كرونة تشيكية",
+        "symbol": "Kč"
+    },
+    "DDM": {
+        "name": "أوستمارك ألماني شرقي",
+        "symbol": null
+    },
+    "DEM": {
+        "name": "مارك ألماني",
+        "symbol": null
+    },
+    "DJF": {
+        "name": "فرنك جيبوتي",
+        "symbol": null
+    },
+    "DKK": {
+        "name": "كرونة دنماركية",
+        "symbol": "kr"
+    },
+    "DOP": {
+        "name": "بيزو الدومنيكان",
+        "symbol": "DO$"
+    },
+    "DZD": {
+        "name": "دينار جزائري",
+        "symbol": "د.ج.‏"
+    },
+    "EEK": {
+        "name": "كرونة استونية",
+        "symbol": null
+    },
+    "EGP": {
+        "name": "جنيه مصري",
+        "symbol": "ج.م.‏"
+    },
+    "ERN": {
+        "name": "ناكفا أريتري",
+        "symbol": null
+    },
+    "ESP": {
+        "name": "بيزيتا إسباني",
+        "symbol": "₧"
+    },
+    "ETB": {
+        "name": "بير أثيوبي",
+        "symbol": null
+    },
+    "EUR": {
+        "name": "يورو",
+        "symbol": "€"
+    },
+    "FIM": {
+        "name": "ماركا فنلندي",
+        "symbol": null
+    },
+    "FJD": {
+        "name": "دولار فيجي",
+        "symbol": "FJ$"
+    },
+    "FKP": {
+        "name": "جنيه جزر فوكلاند",
+        "symbol": "£"
+    },
+    "FRF": {
+        "name": "فرنك فرنسي",
+        "symbol": null
+    },
+    "GBP": {
+        "name": "جنيه إسترليني",
+        "symbol": "UK£"
+    },
+    "GEL": {
+        "name": "لارى جورجي",
+        "symbol": "₾"
+    },
+    "GHC": {
+        "name": "سيدي غاني",
+        "symbol": null
+    },
+    "GHS": {
+        "name": "سيدي غانا",
+        "symbol": "GH₵"
+    },
+    "GIP": {
+        "name": "جنيه جبل طارق",
+        "symbol": "£"
+    },
+    "GMD": {
+        "name": "دلاسي غامبي",
+        "symbol": null
+    },
+    "GNF": {
+        "name": "فرنك غينيا",
+        "symbol": "FG"
+    },
+    "GNS": {
+        "name": "سيلي غينيا",
+        "symbol": null
+    },
+    "GQE": {
+        "name": "اكويل جونينا غينيا الاستوائيّة",
+        "symbol": null
+    },
+    "GRD": {
+        "name": "دراخما يوناني",
+        "symbol": null
+    },
+    "GTQ": {
+        "name": "كوتزال غواتيمالا",
+        "symbol": "Q"
+    },
+    "GWE": {
+        "name": "اسكود برتغالي غينيا",
+        "symbol": null
+    },
+    "GWP": {
+        "name": "بيزو غينيا بيساو",
+        "symbol": null
+    },
+    "GYD": {
+        "name": "دولار غيانا",
+        "symbol": "GY$"
+    },
+    "HKD": {
+        "name": "دولار هونغ كونغ",
+        "symbol": "HK$"
+    },
+    "HNL": {
+        "name": "ليمبيرا هنداروس",
+        "symbol": "L"
+    },
+    "HRD": {
+        "name": "دينار كرواتي",
+        "symbol": null
+    },
+    "HRK": {
+        "name": "كونا كرواتي",
+        "symbol": "kn"
+    },
+    "HTG": {
+        "name": "جوردى هايتي",
+        "symbol": null
+    },
+    "HUF": {
+        "name": "فورينت هنغاري",
+        "symbol": "Ft"
+    },
+    "IDR": {
+        "name": "روبية إندونيسية",
+        "symbol": "Rp"
+    },
+    "IEP": {
+        "name": "جنيه إيرلندي",
+        "symbol": null
+    },
+    "ILP": {
+        "name": "جنيه إسرائيلي",
+        "symbol": null
+    },
+    "ILS": {
+        "name": "شيكل إسرائيلي جديد",
+        "symbol": "₪"
+    },
+    "INR": {
+        "name": "روبية هندي",
+        "symbol": "₹"
+    },
+    "IQD": {
+        "name": "دينار عراقي",
+        "symbol": "د.ع.‏"
+    },
+    "IRR": {
+        "name": "ريال إيراني",
+        "symbol": "ر.إ."
+    },
+    "ISK": {
+        "name": "كرونة أيسلندية",
+        "symbol": "kr"
+    },
+    "ITL": {
+        "name": "ليرة إيطالية",
+        "symbol": null
+    },
+    "JMD": {
+        "name": "دولار جامايكي",
+        "symbol": "JM$"
+    },
+    "JOD": {
+        "name": "دينار أردني",
+        "symbol": "د.أ.‏"
+    },
+    "JPY": {
+        "name": "ين ياباني",
+        "symbol": "JP¥"
+    },
+    "KES": {
+        "name": "شلن كينيي",
+        "symbol": null
+    },
+    "KGS": {
+        "name": "سوم قيرغستاني",
+        "symbol": "⃀"
+    },
+    "KHR": {
+        "name": "رييال كمبودي",
+        "symbol": "៛"
+    },
+    "KMF": {
+        "name": "فرنك جزر القمر",
+        "symbol": "CF"
+    },
+    "KPW": {
+        "name": "وون كوريا الشمالية",
+        "symbol": "₩"
+    },
+    "KRW": {
+        "name": "وون كوريا الجنوبية",
+        "symbol": "₩"
+    },
+    "KWD": {
+        "name": "دينار كويتي",
+        "symbol": "د.ك.‏"
+    },
+    "KYD": {
+        "name": "دولار جزر كيمن",
+        "symbol": "KY$"
+    },
+    "KZT": {
+        "name": "تينغ كازاخستاني",
+        "symbol": "₸"
+    },
+    "LAK": {
+        "name": "كيب لاوسي",
+        "symbol": "₭"
+    },
+    "LBP": {
+        "name": "جنيه لبناني",
+        "symbol": "ل.ل.‏"
+    },
+    "LKR": {
+        "name": "روبية سريلانكية",
+        "symbol": "Rs"
+    },
+    "LRD": {
+        "name": "دولار ليبيري",
+        "symbol": "$LR"
+    },
+    "LSL": {
+        "name": "لوتي ليسوتو",
+        "symbol": null
+    },
+    "LTL": {
+        "name": "ليتا ليتوانية",
+        "symbol": "Lt"
+    },
+    "LTT": {
+        "name": "تالوناس ليتواني",
+        "symbol": null
+    },
+    "LUC": {
+        "name": "فرنك لوكسمبرج قابل للتحويل",
+        "symbol": null
+    },
+    "LUF": {
+        "name": "فرنك لوكسمبرج",
+        "symbol": null
+    },
+    "LUL": {
+        "name": "فرنك لوكسمبرج المالي",
+        "symbol": null
+    },
+    "LVL": {
+        "name": "لاتس لاتفيا",
+        "symbol": "Ls"
+    },
+    "LVR": {
+        "name": "روبل لاتفيا",
+        "symbol": null
+    },
+    "LYD": {
+        "name": "دينار ليبي",
+        "symbol": "د.ل.‏"
+    },
+    "MAD": {
+        "name": "درهم مغربي",
+        "symbol": "د.م.‏"
+    },
+    "MAF": {
+        "name": "فرنك مغربي",
+        "symbol": null
+    },
+    "MDL": {
+        "name": "ليو مولدوفي",
+        "symbol": null
+    },
+    "MGA": {
+        "name": "أرياري مدغشقر",
+        "symbol": "Ar"
+    },
+    "MGF": {
+        "name": "فرنك مدغشقر",
+        "symbol": null
+    },
+    "MKD": {
+        "name": "دينار مقدوني",
+        "symbol": null
+    },
+    "MLF": {
+        "name": "فرنك مالي",
+        "symbol": null
+    },
+    "MMK": {
+        "name": "كيات ميانمار",
+        "symbol": "K"
+    },
+    "MNT": {
+        "name": "توغروغ منغولي",
+        "symbol": "₮"
+    },
+    "MOP": {
+        "name": "باتاكا ماكاوي",
+        "symbol": null
+    },
+    "MRO": {
+        "name": "أوقية موريتانية - 1973-2017",
+        "symbol": null
+    },
+    "MRU": {
+        "name": "أوقية موريتانية",
+        "symbol": "أ.م."
+    },
+    "MTL": {
+        "name": "ليرة مالطية",
+        "symbol": null
+    },
+    "MTP": {
+        "name": "جنيه مالطي",
+        "symbol": null
+    },
+    "MUR": {
+        "name": "روبية موريشيوسية",
+        "symbol": "Rs"
+    },
+    "MVR": {
+        "name": "روفيه جزر المالديف",
+        "symbol": null
+    },
+    "MWK": {
+        "name": "كواشا مالاوي",
+        "symbol": null
+    },
+    "MXN": {
+        "name": "بيزو مكسيكي",
+        "symbol": "MX$"
+    },
+    "MXP": {
+        "name": "بيزو فضي مكسيكي - 1861-1992",
+        "symbol": null
+    },
+    "MYR": {
+        "name": "رينغيت ماليزي",
+        "symbol": "RM"
+    },
+    "MZE": {
+        "name": "اسكود موزمبيقي",
+        "symbol": null
+    },
+    "MZN": {
+        "name": "متكال موزمبيقي",
+        "symbol": null
+    },
+    "NAD": {
+        "name": "دولار ناميبي",
+        "symbol": "$"
+    },
+    "NGN": {
+        "name": "نايرا نيجيري",
+        "symbol": "₦"
+    },
+    "NIC": {
+        "name": "كوردوبة نيكاراجوا",
+        "symbol": null
+    },
+    "NIO": {
+        "name": "قرطبة نيكاراغوا",
+        "symbol": "C$"
+    },
+    "NLG": {
+        "name": "جلدر هولندي",
+        "symbol": null
+    },
+    "NOK": {
+        "name": "كرونة نرويجية",
+        "symbol": "kr"
+    },
+    "NPR": {
+        "name": "روبية نيبالي",
+        "symbol": "Rs"
+    },
+    "NZD": {
+        "name": "دولار نيوزيلندي",
+        "symbol": "NZ$"
+    },
+    "OMR": {
+        "name": "ريال عماني",
+        "symbol": "ر.ع.‏"
+    },
+    "PAB": {
+        "name": "بالبوا بنمي",
+        "symbol": null
+    },
+    "PEN": {
+        "name": "سول بيروفي",
+        "symbol": null
+    },
+    "PGK": {
+        "name": "كينا بابوا غينيا الجديدة",
+        "symbol": null
+    },
+    "PHP": {
+        "name": "بيزو فلبيني",
+        "symbol": null
+    },
+    "PKR": {
+        "name": "روبية باكستاني",
+        "symbol": "Rs"
+    },
+    "PLN": {
+        "name": "زلوتي بولندي",
+        "symbol": "zł"
+    },
+    "PLZ": {
+        "name": "زلوتي بولندي - 1950-1995",
+        "symbol": null
+    },
+    "PTE": {
+        "name": "اسكود برتغالي",
+        "symbol": null
+    },
+    "PYG": {
+        "name": "غواراني باراغواي",
+        "symbol": "₲"
+    },
+    "QAR": {
+        "name": "ريال قطري",
+        "symbol": "ر.ق.‏"
+    },
+    "RHD": {
+        "name": "دولار روديسي",
+        "symbol": null
+    },
+    "ROL": {
+        "name": "ليو روماني قديم",
+        "symbol": null
+    },
+    "RON": {
+        "name": "ليو روماني",
+        "symbol": "lei"
+    },
+    "RSD": {
+        "name": "دينار صربي",
+        "symbol": null
+    },
+    "RUB": {
+        "name": "روبل روسي",
+        "symbol": "₽"
+    },
+    "RUR": {
+        "name": "روبل روسي - 1991-1998",
+        "symbol": null
+    },
+    "RWF": {
+        "name": "فرنك رواندي",
+        "symbol": "RF"
+    },
+    "SAR": {
+        "name": "ريال سعودي",
+        "symbol": "ر.س.‏"
+    },
+    "SBD": {
+        "name": "دولار جزر سليمان",
+        "symbol": "SB$"
+    },
+    "SCR": {
+        "name": "روبية سيشيلية",
+        "symbol": null
+    },
+    "SDD": {
+        "name": "دينار سوداني",
+        "symbol": "د.س.‏"
+    },
+    "SDG": {
+        "name": "جنيه سوداني",
+        "symbol": "ج.س."
+    },
+    "SDP": {
+        "name": "جنيه سوداني قديم",
+        "symbol": null
+    },
+    "SEK": {
+        "name": "كرونة سويدية",
+        "symbol": "kr"
+    },
+    "SGD": {
+        "name": "دولار سنغافوري",
+        "symbol": "$"
+    },
+    "SHP": {
+        "name": "جنيه سانت هيلين",
+        "symbol": "£"
+    },
+    "SIT": {
+        "name": "تولار سلوفيني",
+        "symbol": null
+    },
+    "SKK": {
+        "name": "كرونة سلوفاكية",
+        "symbol": null
+    },
+    "SLE": {
+        "name": "ليون سيراليوني",
+        "symbol": null
+    },
+    "SLL": {
+        "name": "ليون سيراليوني - 1964-2022",
+        "symbol": null
+    },
+    "SOS": {
+        "name": "شلن صومالي",
+        "symbol": null
+    },
+    "SRD": {
+        "name": "دولار سورينامي",
+        "symbol": "SR$"
+    },
+    "SRG": {
+        "name": "جلدر سورينامي",
+        "symbol": null
+    },
+    "SSP": {
+        "name": "جنيه جنوب السودان",
+        "symbol": "£"
+    },
+    "STD": {
+        "name": "دوبرا ساو تومي وبرينسيبي - 1977-2017",
+        "symbol": null
+    },
+    "STN": {
+        "name": "دوبرا ساو تومي وبرينسيبي",
+        "symbol": "Db"
+    },
+    "SUR": {
+        "name": "روبل سوفيتي",
+        "symbol": null
+    },
+    "SVC": {
+        "name": "كولون سلفادوري",
+        "symbol": null
+    },
+    "SYP": {
+        "name": "ليرة سورية",
+        "symbol": "ل.س.‏"
+    },
+    "SZL": {
+        "name": "ليلانجيني سوازيلندي",
+        "symbol": null
+    },
+    "THB": {
+        "name": "باخت تايلاندي",
+        "symbol": "฿"
+    },
+    "TJR": {
+        "name": "روبل طاجيكستاني",
+        "symbol": null
+    },
+    "TJS": {
+        "name": "سوموني طاجيكستاني",
+        "symbol": null
+    },
+    "TMM": {
+        "name": "مانات تركمنستاني",
+        "symbol": null
+    },
+    "TMT": {
+        "name": "مانات تركمانستان",
+        "symbol": null
+    },
+    "TND": {
+        "name": "دينار تونسي",
+        "symbol": "د.ت.‏"
+    },
+    "TOP": {
+        "name": "بانغا تونغا",
+        "symbol": "T$"
+    },
+    "TPE": {
+        "name": "اسكود تيموري",
+        "symbol": null
+    },
+    "TRL": {
+        "name": "ليرة تركي",
+        "symbol": null
+    },
+    "TRY": {
+        "name": "ليرة تركية",
+        "symbol": "₺"
+    },
+    "TTD": {
+        "name": "دولار ترينداد وتوباغو",
+        "symbol": "TT$"
+    },
+    "TWD": {
+        "name": "دولار تايواني",
+        "symbol": "NT$"
+    },
+    "TZS": {
+        "name": "شلن تنزاني",
+        "symbol": null
+    },
+    "UAH": {
+        "name": "هريفنيا أوكراني",
+        "symbol": "₴"
+    },
+    "UGS": {
+        "name": "شلن أوغندي - 1966-1987",
+        "symbol": null
+    },
+    "UGX": {
+        "name": "شلن أوغندي",
+        "symbol": null
+    },
+    "USD": {
+        "name": "دولار أمريكي",
+        "symbol": "US$"
+    },
+    "USN": {
+        "name": "دولار أمريكي (اليوم التالي)‏",
+        "symbol": null
+    },
+    "USS": {
+        "name": "دولار أمريكي (نفس اليوم)‏",
+        "symbol": null
+    },
+    "UYP": {
+        "name": "بيزو أوروجواي - 1975-1993",
+        "symbol": null
+    },
+    "UYU": {
+        "name": "بيزو اوروغواي",
+        "symbol": "UY$"
+    },
+    "UZS": {
+        "name": "سوم أوزبكستاني",
+        "symbol": null
+    },
+    "VEB": {
+        "name": "بوليفار فنزويلي - 1871-2008",
+        "symbol": null
+    },
+    "VEF": {
+        "name": "بوليفار فنزويلي - 2008–2018",
+        "symbol": "Bs"
+    },
+    "VES": {
+        "name": "بوليفار فنزويلي",
+        "symbol": null
+    },
+    "VND": {
+        "name": "دونج فيتنامي",
+        "symbol": "₫"
+    },
+    "VUV": {
+        "name": "فاتو فانواتو",
+        "symbol": null
+    },
+    "WST": {
+        "name": "تالا ساموا",
+        "symbol": null
+    },
+    "XAF": {
+        "name": "فرنك وسط أفريقي",
+        "symbol": "FCFA"
+    },
+    "XAG": {
+        "name": "فضة",
+        "symbol": null
+    },
+    "XAU": {
+        "name": "ذهب",
+        "symbol": null
+    },
+    "XBA": {
+        "name": "الوحدة الأوروبية المركبة",
+        "symbol": null
+    },
+    "XBB": {
+        "name": "الوحدة المالية الأوروبية",
+        "symbol": null
+    },
+    "XBC": {
+        "name": "الوحدة الحسابية الأوروبية",
+        "symbol": null
+    },
+    "XBD": {
+        "name": "(XBD)وحدة الحساب الأوروبية",
+        "symbol": null
+    },
+    "XCD": {
+        "name": "دولار شرق الكاريبي",
+        "symbol": "EC$"
+    },
+    "XCG": {
+        "name": "غيلدر كاريبي",
+        "symbol": "Cg."
+    },
+    "XDR": {
+        "name": "حقوق السحب الخاصة",
+        "symbol": null
+    },
+    "XEU": {
+        "name": "وحدة النقد الأوروبية",
+        "symbol": null
+    },
+    "XFO": {
+        "name": "فرنك فرنسي ذهبي",
+        "symbol": null
+    },
+    "XFU": {
+        "name": "(UIC)فرنك فرنسي",
+        "symbol": null
+    },
+    "XOF": {
+        "name": "فرنك غرب أفريقي",
+        "symbol": "F CFA"
+    },
+    "XPD": {
+        "name": "بالاديوم",
+        "symbol": null
+    },
+    "XPF": {
+        "name": "فرنك سي إف بي",
+        "symbol": "CFPF"
+    },
+    "XPT": {
+        "name": "البلاتين",
+        "symbol": null
+    },
+    "XTS": {
+        "name": "كود اختبار العملة",
+        "symbol": null
+    },
+    "XXX": {
+        "name": "عملة غير معروفة",
+        "symbol": "¤"
+    },
+    "YDD": {
+        "name": "دينار يمني",
+        "symbol": null
+    },
+    "YER": {
+        "name": "ريال يمني",
+        "symbol": "ر.ي.‏"
+    },
+    "YUD": {
+        "name": "دينار يوغسلافي",
+        "symbol": null
+    },
+    "YUN": {
+        "name": "دينار يوغسلافي قابل للتحويل",
+        "symbol": null
+    },
+    "ZAL": {
+        "name": "راند جنوب أفريقيا -مالي",
+        "symbol": null
+    },
+    "ZAR": {
+        "name": "راند جنوب أفريقيا",
+        "symbol": "R"
+    },
+    "ZMK": {
+        "name": "كواشا زامبي - 1968-2012",
+        "symbol": null
+    },
+    "ZMW": {
+        "name": "كواشا زامبي",
+        "symbol": "ZK"
+    },
+    "ZRN": {
+        "name": "زائير زائيري جديد",
+        "symbol": null
+    },
+    "ZRZ": {
+        "name": "زائير زائيري",
+        "symbol": null
+    },
+    "ZWD": {
+        "name": "دولار زمبابوي",
+        "symbol": null
+    },
+    "ZWG": {
+        "name": "ذهب زيمبابوي",
+        "symbol": null
+    },
+    "ZWL": {
+        "name": "دولار زمبابوي 2009",
+        "symbol": null
+    }
+}

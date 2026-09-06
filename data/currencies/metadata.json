@@ -1,0 +1,8 @@
+{
+    "source": "Unicode CLDR",
+    "cldr_version": "48.2.1",
+    "license": "Unicode-3.0",
+    "source_repo": "https://github.com/unicode-org/cldr-json",
+    "generator": "scripts/update_cldr_currencies.php",
+    "languages": 28
+}
