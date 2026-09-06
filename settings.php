@@ -1473,6 +1473,14 @@ if ($budgetPeriodAnchorDate === '1970-01-01' || !preg_match('/^\d{4}-\d{2}-\d{2}
     $instanceCurrencyProvider = (int) $instanceCurrency['values']['provider'];
     $instanceCurrencyInfo = $currencyProviders[$instanceCurrencyProvider] ?? $currencyProviders[0];
     $instanceProviderNeedsKey = wallos_currency_provider_needs_key($instanceCurrencyProvider);
+
+    // Whether the direct-fixer provider that is actually in force has been
+    // observed to serve http only — a free-tier key that travels in cleartext
+    // (#141). Read from the effective config, so it is right in both instance and
+    // custom mode; a paid plan answers over https, never sets the mark, and so is
+    // not warned about. Only the direct-fixer provider (0) can be http-only.
+    $fixerHttpOnly = $activeCurrencyProvider === 0
+        && wallos_fixer_is_http_only($db, (string) ($currencyConfig['values']['api_key'] ?? ''));
     ?>
 
     <section class="account-section">
@@ -1632,7 +1640,17 @@ if ($budgetPeriodAnchorDate === '1970-01-01' || !preg_match('/^\d{4}-\d{2}-\d{2}
                     <?= translate('frankfurter_no_crypto', $i18n) ?>
                 </p>
             </div>
-            <div class="settings-notes" id="fixerProviderInfo" <?= $activeCurrencyProvider === 2 ? 'style="display:none"' : '' ?>>
+            <div class="settings-notes" id="fixerProviderInfo" data-http-only="<?= $fixerHttpOnly ? '1' : '0' ?>" <?= $activeCurrencyProvider === 2 ? 'style="display:none"' : '' ?>>
+                <?php
+                // The cleartext warning, on screen only when the direct-fixer key
+                // actually went over http (a paid https plan never sets the mark).
+                // toggleCurrencyProvider() re-decides it from the selected provider
+                // and the data attribute above (#141).
+                ?>
+                <p id="fixerHttpOnlyWarning" <?= $fixerHttpOnly ? '' : 'style="display:none"' ?>>
+                    <i class="fa-solid fa-triangle-exclamation"></i>
+                    <?= translate('fixer_http_only_warning', $i18n) ?>
+                </p>
                 <p><i class="fa-solid fa-circle-info"></i><?= translate('fixer_info', $i18n) ?></p>
                 <p><?= translate('get_key', $i18n) ?>:
                     <span>

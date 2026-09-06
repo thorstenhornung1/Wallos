@@ -112,6 +112,9 @@ function wallos_probe_refusal_is_about_the_key($answer)
 // probe below is a superset of it and so is a real request too.
 $control = wallos_fetch_exchange_rates($config, 'EUR,USD');
 wallos_probe_account($db, $config, $control);
+// This real request went out with the instance key; if it fell back to http,
+// record the cleartext exposure for the settings-page warning (#141).
+wallos_currency_record_scheme($db, $config, $control);
 
 if (!$control['success']) {
     // Nothing is learned and nothing is written down. A stored verdict stops

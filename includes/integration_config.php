@@ -398,6 +398,74 @@ function wallos_currency_provider_has_quota($provider)
 }
 
 /**
+ * The setting key under which the http-only mark for one fixer key is stored.
+ *
+ * Keyed by a short hash of the key rather than by user or by the key itself: a
+ * hash is not the credential, so nothing sensitive is written; and a hash lets
+ * an instance key and a user's own key each carry their own mark without a
+ * migration for a per-user column and without one user's plan deciding another's
+ * warning. The value stored is only ever '1'.
+ *
+ * @param string $apiKey
+ * @return string
+ */
+function wallos_fixer_scheme_setting_key($apiKey)
+{
+    return 'http_only_' . substr(hash('sha256', (string) $apiKey), 0, 16);
+}
+
+/**
+ * Whether the direct-fixer key has been observed to serve http only — a free
+ * tier whose access_key travels in cleartext (#141).
+ *
+ * The settings page reads this to decide whether to show the cleartext warning:
+ * a paid plan answers over https, never sets the mark, and so is not warned
+ * about. Stored in the generic instance settings, which needs no migration.
+ *
+ * @param WallosDatabase $db
+ * @param string         $apiKey
+ * @return bool
+ */
+function wallos_fixer_is_http_only($db, $apiKey)
+{
+    if (trim((string) $apiKey) === '') {
+        return false;
+    }
+
+    $settings = wallos_get_instance_settings($db, 'currency_scheme');
+
+    return !empty($settings[wallos_fixer_scheme_setting_key($apiKey)]);
+}
+
+/**
+ * Records, or clears, the http-only mark for one direct-fixer key.
+ *
+ * Written only when the state changes, so a cron run refreshing many accounts
+ * does not rewrite the row — and reset the config cache — on every account. An
+ * upgraded (now paid) plan answers over https, which clears the mark and with it
+ * the warning, the next time its rates refresh.
+ *
+ * @param WallosDatabase $db
+ * @param string         $apiKey
+ * @param bool           $httpOnly
+ * @return void
+ */
+function wallos_fixer_remember_scheme($db, $apiKey, $httpOnly)
+{
+    if (trim((string) $apiKey) === '') {
+        return;
+    }
+
+    if (wallos_fixer_is_http_only($db, $apiKey) === (bool) $httpOnly) {
+        return;
+    }
+
+    // An empty value deletes the row, which is how the mark is cleared.
+    wallos_set_instance_setting($db, 'currency_scheme',
+        wallos_fixer_scheme_setting_key($apiKey), $httpOnly ? '1' : '');
+}
+
+/**
  * @param SQLite3 $db
  * @return array Result structure with provider and api_key.
  */

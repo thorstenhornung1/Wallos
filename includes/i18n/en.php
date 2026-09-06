@@ -287,6 +287,7 @@ $i18n = [
     "exchange_rates" => "Exchange Rates",
     "provider" => "Provider",
     "fixer_info" => "If you use multiple currencies, and want accurate statistics and sorting on the subscriptions, a FREE API Key from Fixer is necessary.",
+    "fixer_http_only_warning" => "This direct fixer.io key is on a plan that serves http only, so it travels in cleartext on every request. Fixer offers https only on a paid plan. For https at no cost, switch to apilayer.com's free tier, which sends the key in a header, or to the keyless Frankfurter provider.",
     "get_key" => "Get your key at",
     "get_free_fixer_api_key" => "Get free Fixer API Key",
     "get_key_alternative" => "Alternatively, you can get a free fixer api key from",

@@ -1033,6 +1033,18 @@ function toggleCurrencyProvider() {
   if (fixerNotes) {
     fixerNotes.style.display = usesFrankfurter ? "none" : "";
   }
+
+  // The cleartext-http warning belongs to the direct fixer.io provider (0)
+  // alone, and only when the key in force was observed to serve http (the
+  // data-http-only mark the server set). apilayer (1) is https, Frankfurter (2)
+  // has no key, so neither ever shows it (#141).
+  const httpOnlyWarning = document.getElementById("fixerHttpOnlyWarning");
+
+  if (httpOnlyWarning && fixerNotes) {
+    const httpOnly = fixerNotes.dataset.httpOnly === "1";
+    httpOnlyWarning.style.display =
+      effectiveCurrencyProvider() === 0 && httpOnly ? "" : "none";
+  }
 }
 
 function addFixerKeyButton() {
