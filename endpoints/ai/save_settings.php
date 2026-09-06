@@ -109,7 +109,13 @@ if (in_array($aiType, WALLOS_AI_HOST_PROVIDERS)) {
 // Save settings
 $stmt = $db->prepare("DELETE FROM ai_settings WHERE user_id = ?");
 $stmt->bindValue(1, $userId, SQLITE3_INTEGER);
-$stmt->execute();
+if ($stmt->execute() === false) {
+    echo json_encode([
+        "success" => false,
+        "message" => translate('error', $i18n),
+    ]);
+    exit;
+}
 $stmt->close();
 
 $stmt = $db->prepare("
