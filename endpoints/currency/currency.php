@@ -3,6 +3,7 @@ require_once '../../includes/connect_endpoint.php';
 require_once '../../includes/inputvalidation.php';
 require_once '../../includes/validate_endpoint.php';
 require_once '../../includes/reference_validation.php';
+require_once '../../includes/currency_codes.php';
 
 $action = $_POST['action'] ?? '';
 
@@ -52,6 +53,22 @@ function handleEditCurrency($db, $userId, $i18n)
         $name = validate($_POST['name']);
         $symbol = validate($_POST['symbol']);
         $code = validate($_POST['code']);
+
+        // validate() escapes for output; it is not a check that the code names a
+        // real currency. An unknown code stored here keeps its rate and converts
+        // at 1:1 in silence (#133), so it is refused unless CLDR or the account's
+        // own provider knows it — the provider being what still allows a
+        // supported non-ISO asset like BTC.
+        $config = wallos_get_effective_currency_config($db, $userId);
+
+        if (!wallos_currency_code_acceptable($db, $config, $code)) {
+            echo json_encode([
+                "success" => false,
+                "message" => translate('invalid_currency_code', $i18n)
+            ]);
+            return;
+        }
+
         $sql = "UPDATE currencies SET name = :name, symbol = :symbol, code = :code WHERE id = :currencyId AND user_id = :userId";
         $stmt = $db->prepare($sql);
         $stmt->bindParam(':name', $name, SQLITE3_TEXT);

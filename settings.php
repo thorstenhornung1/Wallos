@@ -2,6 +2,7 @@
 require_once 'includes/header.php';
 require_once 'includes/integration_config.php';
 require_once 'includes/user_provisioning.php';
+require_once 'includes/currency_rates.php';
 
 // Opt-in localizer (issue #164 part B): the still-default English currency and
 // payment-method rows this account could rename to its own language. Empty for
@@ -1304,6 +1305,11 @@ if ($budgetPeriodAnchorDate === '1970-01-01' || !preg_match('/^\d{4}-\d{2}-\d{2}
     $row = $result->fetchArray(SQLITE3_ASSOC);
     $mainCurrencyId = $row['main_currency'];
 
+    // How many subscriptions use each currency, in one query rather than one
+    // per currency (#134): the loop below reads this map to decide which rows
+    // can be deleted, instead of a COUNT(*) scan for every currency it renders.
+    $currencyUsageCounts = wallos_currency_usage_counts($db, $userId);
+
     $query = "SELECT date FROM last_exchange_update";
     $exchange_rates_last_updated = $db->querySingle($query);
 
@@ -1338,12 +1344,9 @@ if ($budgetPeriodAnchorDate === '1970-01-01' || !preg_match('/^\d{4}-\d{2}-\d{2}
                         $canDelete = false;
                         $isMainCurrency = true;
                     } else {
-                        $query = "SELECT COUNT(*) as count FROM subscriptions WHERE currency_id = :currencyId";
-                        $stmt = $db->prepare($query);
-                        $stmt->bindParam(':currencyId', $currency['id'], SQLITE3_INTEGER);
-                        $result = $stmt->execute();
-                        $row = $result->fetchArray(SQLITE3_ASSOC);
-                        $isUsed = $row['count'];
+                        // From the one GROUP BY above; a currency no subscription
+                        // uses is absent from the map and reads as zero (#134).
+                        $isUsed = $currencyUsageCounts[$currency['id']] ?? 0;
 
                         if ($isUsed > 0) {
                             $canDelete = false;
@@ -1440,9 +1443,6 @@ if ($budgetPeriodAnchorDate === '1970-01-01' || !preg_match('/^\d{4}-\d{2}-\d{2}
                             <i class="fa-solid fa-arrow-up-right-from-square"></i>
                         </a>
                     </span>
-                </p>
-                <p>
-                    <?= translate('currency_performance', $i18n) ?>
                 </p>
             </div>
         </div>

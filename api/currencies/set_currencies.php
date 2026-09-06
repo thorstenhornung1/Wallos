@@ -28,6 +28,7 @@ Example response:
 require_once '../../includes/connect_endpoint.php';
 require_once '../../includes/inputvalidation.php';
 require_once '../../includes/reference_validation.php';
+require_once '../../includes/currency_codes.php';
 
 header('Content-Type: application/json; charset=UTF-8');
 
@@ -100,6 +101,21 @@ switch ($action) {
         $code = validate($code);
         $rate = floatval($rate);
 
+        // The API path is the one an integration uses, so its "not empty" check
+        // is exactly where an invented code enters unvalidated (#133). Refused
+        // unless CLDR or the account's provider knows the code, so it cannot be
+        // stored and then converted at 1:1 in silence.
+        $config = wallos_get_effective_currency_config($db, $userId);
+
+        if (!wallos_currency_code_acceptable($db, $config, $code)) {
+            echo json_encode([
+                'success' => false,
+                'title' => 'Invalid currency code',
+                'message' => 'The currency code is not a known ISO 4217 code or a code the configured provider prices.'
+            ]);
+            exit;
+        }
+
         // Insert
         $sqlInsert = "INSERT INTO currencies (name, symbol, code, rate, user_id) VALUES (:name, :symbol, :code, :rate, :userId)";
         $stmtInsert = $db->prepare($sqlInsert);
@@ -145,6 +161,19 @@ switch ($action) {
         $name = validate($name);
         $symbol = validate($symbol);
         $code = validate($code);
+
+        // Same check as the add path: an edit is another way to write an unknown
+        // code, and it must not be either (#133).
+        $config = wallos_get_effective_currency_config($db, $userId);
+
+        if (!wallos_currency_code_acceptable($db, $config, $code)) {
+            echo json_encode([
+                'success' => false,
+                'title' => 'Invalid currency code',
+                'message' => 'The currency code is not a known ISO 4217 code or a code the configured provider prices.'
+            ]);
+            exit;
+        }
 
         // Check ownership
         $checkSql = "SELECT * FROM currencies WHERE id = :currencyId AND user_id = :userId";

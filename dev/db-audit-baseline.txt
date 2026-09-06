@@ -11,7 +11,7 @@
 #
 # Do not edit by hand — run dev/db-audit.sh --update and commit the diff.
 #
-# total: 1529 matches in 235 file(s)
+# total: 1541 matches in 238 file(s)
 admin.php	5
 api/admin/get_admin_settings.php	1
 api/admin/set_admin_settings.php	2
@@ -117,7 +117,7 @@ endpoints/user/delete_avatar.php	6
 endpoints/user/disable_totp.php	6
 endpoints/user/enable_totp.php	8
 endpoints/user/regenerateapikey.php	2
-endpoints/user/save_user.php	29
+endpoints/user/save_user.php	20
 includes/api_admin.php	4
 includes/budget_period_calculations.php	2
 includes/checkredirect.php	2
@@ -212,11 +212,14 @@ migrations/000070.php	2
 passwordreset.php	14
 profile.php	5
 registration.php	25
-settings.php	48
+settings.php	46
 stats.php	2
 subscriptions.php	5
 tests/bootstrap.php	30
+tests/cases/currency_code_validation_test.php	1
 tests/cases/currency_frankfurter_test.php	14
+tests/cases/currency_key_save_test.php	3
+tests/cases/currency_main_change_test.php	9
 tests/cases/currency_quota_test.php	3
 tests/cases/currency_rates_test.php	4
 tests/cases/currency_refresh_test.php	13
@@ -233,7 +236,7 @@ tests/cases/oidc_admin_role_test.php	4
 tests/cases/oidc_backchannel_test.php	12
 tests/cases/oidc_discovery_test.php	10
 tests/cases/oidc_provisioning_test.php	1
-tests/cases/performance_test.php	21
+tests/cases/performance_test.php	31
 tests/cases/pgsql_upgrade_test.php	4
 tests/cases/portable_sql_test.php	2
 tests/cases/session_retention_test.php	9

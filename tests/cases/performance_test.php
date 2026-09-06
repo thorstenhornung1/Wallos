@@ -10,6 +10,7 @@
 */
 
 require_once WALLOS_ROOT . '/includes/integration_config.php';
+require_once WALLOS_ROOT . '/includes/currency_rates.php';
 
 /**
  * @param SQLite3 $db
@@ -352,6 +353,57 @@ wallos_test('one row per user is enforced where intended', function () {
         assert_same(1, (int) $db->scalar('SELECT COUNT(*) FROM ' . $table . ' WHERE user_id = 1'),
             'and the table still holds one ' . $table . ' row for the user');
     }
+
+    $db->close();
+});
+
+wallos_test('the settings page counts currency usage in one query, not one per currency (#134)', function () {
+    // The note "keep only the currencies you use" pointed at a cost the refresh
+    // does not have and stayed silent about the one that does: settings.php ran
+    // a COUNT(*) over subscriptions for every currency it rendered, each an
+    // unindexed scan — linear in currencies × subscriptions. One GROUP BY
+    // answers all of them. This asserts the shape: the query count does not grow
+    // with the number of currencies. If the per-currency COUNT ever comes back,
+    // it is 8 here, not 1.
+    $db = wallos_test_open_counting_database();
+    wallos_test_create_user($db, 1, 'alice');
+
+    // Six currencies beyond the fixture's two, so an N+1 would be unmistakable.
+    foreach (['GBP', 'JPY', 'CHF', 'CAD', 'AUD', 'SEK'] as $index => $code) {
+        $stmt = $db->prepare('INSERT INTO currencies (id, name, symbol, code, rate, user_id)
+                              VALUES (:id, :name, :symbol, :code, 1.0, 1)');
+        $stmt->bindValue(':id', 9100 + $index, SQLITE3_INTEGER);
+        $stmt->bindValue(':name', $code, SQLITE3_TEXT);
+        $stmt->bindValue(':symbol', $code, SQLITE3_TEXT);
+        $stmt->bindValue(':code', $code, SQLITE3_TEXT);
+        $stmt->execute();
+    }
+
+    // Two subscriptions on the fixture USD currency, one on GBP; the rest unused.
+    $references = wallos_test_user_references($db, 1);
+    $insert = $db->prepare('INSERT INTO subscriptions
+        (name, price, currency_id, next_payment, cycle, frequency, payer_user_id, category_id, payment_method_id, notify, inactive, user_id, auto_renew)
+        VALUES (:name, 9.99, :currency, :next, 3, 1, :payer, :category, :payment, 0, 0, 1, 1)');
+    foreach ([wallos_test_currency_id(1, 1), wallos_test_currency_id(1, 1), 9100] as $i => $currencyId) {
+        $insert->bindValue(':name', 'Sub ' . $i, SQLITE3_TEXT);
+        $insert->bindValue(':currency', $currencyId, SQLITE3_INTEGER);
+        $insert->bindValue(':next', date('Y-m-d'), SQLITE3_TEXT);
+        $insert->bindValue(':payer', $references['household'], SQLITE3_INTEGER);
+        $insert->bindValue(':category', $references['category'], SQLITE3_INTEGER);
+        $insert->bindValue(':payment', $references['payment_method'], SQLITE3_INTEGER);
+        $insert->execute();
+        $insert->reset();
+    }
+
+    $db->resetQueryCount();
+    $counts = wallos_currency_usage_counts($db, 1);
+
+    assert_same(1, $db->queryCount,
+        'one query answers every currency, whatever the count');
+    assert_same(2, $counts[wallos_test_currency_id(1, 1)] ?? 0,
+        'the used fixture currency reports its two subscriptions');
+    assert_same(1, $counts[9100] ?? 0, 'GBP reports its one subscription');
+    assert_true(!isset($counts[9101]), 'a currency no subscription uses is simply absent (reads as zero)');
 
     $db->close();
 });

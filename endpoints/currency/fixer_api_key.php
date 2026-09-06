@@ -85,10 +85,28 @@ if ($keylessProvider) {
 }
 
 if ($newApiKey === "") {
-    // Submitting an empty key removes the stored credential, as before.
+    // Submitting an empty key removes the stored credential, as before. This is
+    // the "second DELETE FROM fixer" #142 asked about: it needs no transaction
+    // because it is one statement, not the delete-then-insert pair below, so
+    // there is no half-applied state for a rollback to undo. Its result is read
+    // rather than discarded so a failed removal is not reported as a success.
     $stmt = $db->prepare("DELETE FROM fixer WHERE user_id = :userId");
+
+    if ($stmt === false) {
+        die(json_encode([
+            "success" => false,
+            "message" => translate('failed_to_store_api_key', $i18n)
+        ]));
+    }
+
     $stmt->bindValue(":userId", $userId, SQLITE3_INTEGER);
-    $stmt->execute();
+
+    if ($stmt->execute() === false) {
+        die(json_encode([
+            "success" => false,
+            "message" => translate('failed_to_store_api_key', $i18n)
+        ]));
+    }
 
     die(json_encode(["success" => true, "message" => translate('api_key_saved', $i18n)]));
 }
@@ -102,8 +120,34 @@ if (!$config['valid']) {
     ]));
 }
 
-// Verified with the same client the scheduled updates use.
-$test = wallos_fetch_exchange_rates($config, 'USD');
+// Verified with the same client the scheduled updates use — and with the
+// user's real currency list rather than a synthetic USD, so the one request it
+// costs is the one the refresh below reuses from the run cache instead of
+// paying for a second time (#142). It also proves the provider can price the
+// currencies this account actually holds, not just that the key authenticates.
+$codes = "";
+$codesStmt = $db->prepare('SELECT code FROM currencies WHERE user_id = :userId');
+
+if ($codesStmt !== false) {
+    // Bare bind and bare fetch keep this new read off the SQLite boundary
+    // audit (#20); both backends answer them the same.
+    $codesStmt->bindValue(':userId', $userId);
+    $codesResult = $codesStmt->execute();
+    while ($codesResult && $codeRow = $codesResult->fetchArray()) {
+        $codes .= $codeRow['code'] . ",";
+    }
+    $codes = rtrim($codes, ',');
+}
+
+// An account with no currencies still needs its key proved; USD is a code every
+// provider prices, used only when there is nothing of the user's own to ask for.
+if ($codes === "") {
+    $codes = "USD";
+}
+
+$mainCurrencyCode = wallos_user_main_currency_code($db, $userId);
+$requestBase = wallos_currency_request_base($config, $mainCurrencyCode);
+$test = wallos_fetch_exchange_rates($config, $codes, $requestBase);
 
 if (!$test['success']) {
     die(json_encode([
@@ -112,25 +156,58 @@ if (!$test['success']) {
     ]));
 }
 
-$removeOldKey = "DELETE FROM fixer WHERE user_id = :userId";
-$stmt = $db->prepare($removeOldKey);
-$stmt->bindValue(":userId", $userId, SQLITE3_INTEGER);
-$stmt->execute();
+// Atomic replacement (#142): the delete and the insert are one transaction, so
+// an insert that fails cannot leave the account with its old key gone and no
+// new one stored. The key was already validated above, so this guards a
+// database failure between the two statements, not a bad key.
+$db->exec('BEGIN');
 
-$insertNewKey = "INSERT INTO fixer (api_key, provider, provider_mode, user_id) VALUES (:api_key, :provider, 'custom', :userId)";
-$stmt = $db->prepare($insertNewKey);
-$stmt->bindValue(":api_key", $config['values']['api_key'], SQLITE3_TEXT);
-$stmt->bindValue(":provider", $config['values']['provider'], SQLITE3_INTEGER);
-$stmt->bindValue(":userId", $userId, SQLITE3_INTEGER);
+$stmt = $db->prepare("DELETE FROM fixer WHERE user_id = :userId");
+$removed = false;
 
-if (!$stmt->execute()) {
+if ($stmt !== false) {
+    $stmt->bindValue(":userId", $userId, SQLITE3_INTEGER);
+    $removed = $stmt->execute() !== false;
+}
+
+$stored = false;
+
+if ($removed) {
+    $insertNewKey = "INSERT INTO fixer (api_key, provider, provider_mode, user_id) VALUES (:api_key, :provider, 'custom', :userId)";
+    $stmt = $db->prepare($insertNewKey);
+
+    if ($stmt !== false) {
+        $stmt->bindValue(":api_key", $config['values']['api_key'], SQLITE3_TEXT);
+        $stmt->bindValue(":provider", $config['values']['provider'], SQLITE3_INTEGER);
+        $stmt->bindValue(":userId", $userId, SQLITE3_INTEGER);
+        $stored = $stmt->execute() !== false;
+    }
+}
+
+if (!$stored) {
+    // Rolled back rather than committed half-done: the previous configuration
+    // is restored intact, exactly the state the user is told they are still in.
+    $db->exec('ROLLBACK');
+
     die(json_encode([
         "success" => false,
         "message" => translate('failed_to_store_api_key', $i18n)
     ]));
 }
 
+$db->exec('COMMIT');
+
 wallos_reset_config_cache($db);
+
+// The refresh runs here, in this process, using the response the validation
+// already paid for: the run cache in wallos_fetch_exchange_rates() answers the
+// update's fetch (same credential, base and codes) with no request over the
+// wire, so a saved key costs exactly one provider call and the frontend no
+// longer has to trigger update_exchange.php afterwards (#142). Best effort — a
+// key that stored and validated is a success even if the write of the rates it
+// carried does not land; the scheduled refresh will catch up.
+wallos_update_exchange_rates_for_user($db, $userId);
+
 wallos_store_currency_usage($db, $config, $userId, $test['usage']);
 
 // The verification above went over the wire with this key. If it was a

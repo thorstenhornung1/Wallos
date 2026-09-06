@@ -957,11 +957,24 @@ function wallos_exchange_rates_fresh($db, $userId)
  * Updates the stored exchange rates of one user with the provider credentials
  * that are effective for them.
  *
- * @param SQLite3 $db
- * @param int     $userId
+ * $previousMainCurrencyCode is the base the stored rates were written against
+ * before this call, passed only by the one caller that can move it: a
+ * main-currency change (#149). When it names a different currency from the one
+ * now in force, every rate the new base's fetch did not re-price is stale in a
+ * way "keep the last known rate" cannot fix — it is a number relative to a base
+ * the account no longer uses, and summing it applies the wrong cross rate in
+ * silence. Those held rows are blanked here rather than kept, so a stale
+ * old-base figure is never applied to the new base. The default (null) is the
+ * refresh that did not move the base — the cron and the manual endpoint — where
+ * keeping an unpriced currency's last rate is the intended behaviour.
+ *
+ * @param SQLite3     $db
+ * @param int         $userId
+ * @param string|null $previousMainCurrencyCode The base the stored rates were
+ *                                               relative to before this call.
  * @return array{success: bool, message: string}
  */
-function wallos_update_exchange_rates_for_user($db, $userId)
+function wallos_update_exchange_rates_for_user($db, $userId, $previousMainCurrencyCode = null)
 {
     $config = wallos_get_effective_currency_config($db, $userId);
 
@@ -992,6 +1005,14 @@ function wallos_update_exchange_rates_for_user($db, $userId)
     if (empty($mainCurrencyCode)) {
         return ['success' => false, 'message' => 'Main currency is not set.'];
     }
+
+    // Whether the account's conversion base moved since the stored rates were
+    // written. Compared on the code, not the row id, so switching between two
+    // rows that both read USD is correctly not a base change (#149). When it is
+    // one, a currency the new base cannot re-price must not keep its old-base
+    // number below.
+    $previousBase = strtoupper(trim((string) $previousMainCurrencyCode));
+    $baseChanged = $previousBase !== '' && $previousBase !== strtoupper((string) $mainCurrencyCode);
 
     // The user's own currency, for a provider that will price in it. fixer
     // prices in EUR whatever is asked, and wallos_currency_request_base() is
@@ -1060,6 +1081,50 @@ function wallos_update_exchange_rates_for_user($db, $userId)
         }
 
         $updateStmt->reset();
+    }
+
+    // A base change leaves every rate the fetch did not re-price stranded
+    // against the old base (#149). There is no correct re-base without a rate —
+    // the provider does not price the held code — so the honest move is to stop
+    // presenting a number that is now in the wrong unit: blank it, so the
+    // conversion layer treats it as no-rate (price shown in its own units)
+    // rather than dividing by an old-base figure. Only on a base change, and
+    // only for this user's own codes that did not come back and are not the new
+    // main currency. Scoped by user_id like every rate write here (see
+    // currency_scope_test).
+    if ($baseChanged) {
+        $pricedCodes = array_map('strtoupper', array_keys($rates['rates']));
+        $ownCodes = array_map('strtoupper', array_filter(array_map('trim', explode(',', $codes))));
+        $mainCode = strtoupper((string) $mainCurrencyCode);
+        $invalidStmt = $db->prepare('UPDATE currencies SET rate = :invalid WHERE code = :code AND user_id = :userId');
+
+        if ($invalidStmt === false) {
+            $db->exec('ROLLBACK');
+
+            return ['success' => false, 'message' => 'Rate update failed; the previous rates were kept.'];
+        }
+
+        foreach (array_unique($ownCodes) as $code) {
+            if ($code === $mainCode || in_array($code, $pricedCodes, true)) {
+                continue;
+            }
+
+            // Empty string, not null: currencies.rate is NOT NULL on both
+            // backends, and the conversion layer already reads an empty rate as
+            // "no rate, leave the price alone" — the state this row is now in.
+            // Bare binds keep this new write off the SQLite boundary audit (#20).
+            $invalidStmt->bindValue(':invalid', '');
+            $invalidStmt->bindValue(':code', $code);
+            $invalidStmt->bindValue(':userId', $userId);
+
+            if (!$invalidStmt->execute()) {
+                $db->exec('ROLLBACK');
+
+                return ['success' => false, 'message' => 'Rate update failed for ' . $code . '; the previous rates were kept.'];
+            }
+
+            $invalidStmt->reset();
+        }
     }
 
     $formattedDate = (new DateTime())->format('Y-m-d');

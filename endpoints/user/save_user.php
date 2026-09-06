@@ -5,103 +5,11 @@ require_once '../../includes/reference_validation.php';
 require_once '../../includes/validate_endpoint.php';
 require_once '../../includes/oidc_settings.php';
 require_once '../../includes/oidc/oidc_profile_sync.php';
-require_once '../../includes/fixer_direct.php';
+require_once '../../includes/currency_provider.php';
 
 if (!file_exists('../../images/uploads/logos')) {
     mkdir('../../images/uploads/logos', 0777, true);
     mkdir('../../images/uploads/logos/avatars', 0777, true);
-}
-
-function update_exchange_rate($db, $userId)
-{
-    $query = "SELECT api_key, provider FROM fixer WHERE user_id = :userId";
-    $stmt = $db->prepare($query);
-    $stmt->bindParam(':userId', $userId, SQLITE3_INTEGER);
-    $result = $stmt->execute();
-
-    if ($result) {
-        $row = $result->fetchArray(SQLITE3_ASSOC);
-
-        if ($row) {
-            $apiKey = $row['api_key'];
-            $provider = $row['provider'];
-
-            $codes = "";
-            $query = "SELECT id, name, symbol, code FROM currencies";
-            $result = $db->query($query);
-            while ($row = $result->fetchArray(SQLITE3_ASSOC)) {
-                $codes .= $row['code'] . ",";
-            }
-            $codes = rtrim($codes, ',');
-
-            $query = "SELECT u.main_currency, c.code FROM \"user\" u LEFT JOIN currencies c ON u.main_currency = c.id WHERE u.id = :userId";
-            $stmt = $db->prepare($query);
-            $stmt->bindParam(':userId', $userId, SQLITE3_INTEGER);
-            $result = $stmt->execute();
-            $row = $result->fetchArray(SQLITE3_ASSOC);
-            $mainCurrencyCode = $row['code'];
-            $mainCurrencyId = $row['main_currency'];
-
-            if ($provider === 1) {
-                $api_url = "https://api.apilayer.com/fixer/latest?base=EUR&symbols=" . $codes;
-                $context = stream_context_create([
-                    'http' => [
-                        'method' => 'GET',
-                        'header' => 'apikey: ' . $apiKey,
-                    ]
-                ]);
-                $response = file_get_contents($api_url, false, $context);
-            } else {
-                // The direct-fixer path, through the shared helper: https is
-                // tried first and http used only when the plan rejects it, so a
-                // paid plan is protected and no plaintext URL is built here. The
-                // helper logs the cleartext-http fallback once per process (#141).
-                $fixer = wallos_fixer_direct_get('latest', $apiKey, ['base' => 'EUR', 'symbols' => $codes]);
-                $response = $fixer['body'];
-            }
-
-            $apiData = json_decode($response, true);
-
-            $mainCurrencyToEUR = $apiData['rates'][$mainCurrencyCode];
-
-            if ($apiData !== null && isset($apiData['rates'])) {
-                foreach ($apiData['rates'] as $currencyCode => $rate) {
-                    if ($currencyCode === $mainCurrencyCode) {
-                        $exchangeRate = 1.0;
-                    } else {
-                        $exchangeRate = $rate / $mainCurrencyToEUR;
-                    }
-                    $updateQuery = "UPDATE currencies SET rate = :rate WHERE code = :code AND user_id = :userId";
-                    $updateStmt = $db->prepare($updateQuery);
-                    $updateStmt->bindParam(':rate', $exchangeRate, SQLITE3_TEXT);
-                    $updateStmt->bindParam(':code', $currencyCode, SQLITE3_TEXT);
-                    $updateStmt->bindParam(':userId', $userId, SQLITE3_INTEGER);
-                    $updateResult = $updateStmt->execute();
-                }
-                $currentDate = new DateTime();
-                $formattedDate = $currentDate->format('Y-m-d');
-
-                $query = "SELECT * FROM last_exchange_update WHERE user_id = :userId";
-                $stmt = $db->prepare($query);
-                $stmt->bindParam(':userId', $userId, SQLITE3_INTEGER);
-                $result = $stmt->execute();
-                $row = $result->fetchArray(SQLITE3_ASSOC);
-
-                if ($row) {
-                    $query = "UPDATE last_exchange_update SET date = :formattedDate WHERE user_id = :userId";
-                } else {
-                    $query = "INSERT INTO last_exchange_update (date, user_id) VALUES (:formattedDate, :userId)";
-                }
-
-                $stmt = $db->prepare($query);
-                $stmt->bindParam(':formattedDate', $formattedDate, SQLITE3_TEXT);
-                $stmt->bindParam(':userId', $userId, SQLITE3_INTEGER);
-                $resutl = $stmt->execute();
-
-                $db->close();
-            }
-        }
-    }
 }
 
 $demoMode = getenv('DEMO_MODE');
@@ -392,17 +300,53 @@ if (
         $_SESSION['avatar'] = $avatar;
         $_SESSION['main_currency'] = $main_currency;
 
-        if ($main_currency != $mainCurrencyId) {
-            update_exchange_rate($db, $userId);
-        }
-
         $reload = $oldLanguage != $language;
 
-        $response = [
-            "success" => true,
-            "message" => translate('user_details_saved', $i18n),
-            "reload" => $reload
-        ];
+        // Changing the main currency moves the base every stored rate is
+        // relative to, so the rates have to be refetched against the new one.
+        // Routed onto the shared client (#143): its answer is read rather than
+        // discarded, its writes are one transaction, its guard validates the
+        // response before touching it, and it asks only for this user's codes —
+        // none of which the old in-file copy did, so a refusal used to be
+        // reported as "user details saved" over rates still in the old base.
+        // The old main-currency code is handed across so a currency the new
+        // base cannot re-price is blanked rather than left stale (#149).
+        $rateOutcome = ['success' => true, 'message' => ''];
+
+        if ($main_currency != $mainCurrencyId) {
+            $previousMainCurrencyCode = null;
+            $prevStmt = $db->prepare('SELECT code FROM currencies WHERE id = :id AND user_id = :userId');
+
+            if ($prevStmt !== false) {
+                $prevStmt->bindValue(':id', $mainCurrencyId, SQLITE3_INTEGER);
+                $prevStmt->bindValue(':userId', $userId, SQLITE3_INTEGER);
+                $prevResult = $prevStmt->execute();
+                $prevRow = $prevResult ? $prevResult->fetchArray(SQLITE3_ASSOC) : false;
+                $previousMainCurrencyCode = $prevRow ? $prevRow['code'] : null;
+            }
+
+            $rateOutcome = wallos_update_exchange_rates_for_user($db, $userId, $previousMainCurrencyCode);
+        }
+
+        if ($rateOutcome['success']) {
+            $response = [
+                "success" => true,
+                "message" => translate('user_details_saved', $i18n),
+                "reload" => $reload
+            ];
+        } else {
+            // The user row was saved, but no rate was converted to the new base.
+            // Reporting success here is the defect #143 is about, so the outcome
+            // is a failure carrying the provider's own words rather than a fixed
+            // "saved" string over totals that are now wrong by the cross rate.
+            $response = [
+                "success" => false,
+                "message" => $rateOutcome['message'] !== ''
+                    ? $rateOutcome['message']
+                    : translate('error_updating_user_data', $i18n),
+                "reload" => $reload
+            ];
+        }
         echo json_encode($response);
     } else {
         $response = [

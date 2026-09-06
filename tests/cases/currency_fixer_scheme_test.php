@@ -321,17 +321,27 @@ wallos_test('the settings page shows the cleartext warning off the persisted mar
         'and keyless Frankfurter as the other');
 });
 
-wallos_test('all three direct-fixer sites go through the one shared helper', function () {
-    // The centralisation the issue asks for: no plaintext data.fixer.io URL is
-    // built at any call site, and each site reaches the shared helper.
-    foreach (['includes/currency_provider.php', 'endpoints/user/save_user.php'] as $path) {
-        $source = file_get_contents(WALLOS_ROOT . '/' . $path);
+wallos_test('the direct-fixer host is named in one place, and save_user routes through the shared client', function () {
+    // The centralisation the issue asks for (#141): no plaintext data.fixer.io
+    // URL is built at any call site, and the fetch reaches the shared helper.
+    $provider = 'includes/currency_provider.php';
+    assert_not_contains('http://data.fixer.io', file_get_contents(WALLOS_ROOT . '/' . $provider),
+        $provider . ' builds no plaintext direct-fixer URL of its own');
+    assert_true(wallos_test_file_calls($provider, 'wallos_fixer_direct_get'),
+        $provider . ' fetches through the shared helper');
 
-        assert_not_contains('http://data.fixer.io', $source,
-            $path . ' builds no plaintext direct-fixer URL of its own');
-        assert_true(wallos_test_file_calls($path, 'wallos_fixer_direct_get'),
-            $path . ' fetches through the shared helper');
-    }
+    // save_user.php used to carry a third implementation of the provider call —
+    // its own direct-fixer fetch, missing every guard the client has (#143). It
+    // now builds no provider request at all: the main-currency-change refresh is
+    // delegated to the shared client, which is the one place the helper is
+    // reached, so the direct-fixer site here is gone rather than merely routed.
+    $saveUser = file_get_contents(WALLOS_ROOT . '/endpoints/user/save_user.php');
+    assert_not_contains('http://data.fixer.io', $saveUser,
+        'save_user.php builds no plaintext direct-fixer URL of its own');
+    assert_true(wallos_test_file_calls('endpoints/user/save_user.php', 'wallos_update_exchange_rates_for_user'),
+        'save_user.php routes the refresh through the shared client (#143)');
+    assert_true(!wallos_test_file_calls('endpoints/user/save_user.php', 'wallos_fixer_direct_get'),
+        'and no longer carries its own direct-fixer implementation');
 
     // And the helper itself is the only place that names the direct-fixer host.
     $helper = file_get_contents(WALLOS_ROOT . '/includes/fixer_direct.php');

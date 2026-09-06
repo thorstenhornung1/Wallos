@@ -1080,14 +1080,12 @@ function addFixerKeyButton() {
         addButton.disabled = false;
         convertCurrencyCheckbox.disabled = false;
 
-        fetch("endpoints/currency/update_exchange.php", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/x-www-form-urlencoded",
-            'X-CSRF-Token': window.csrfToken,
-          },
-          body: new URLSearchParams({force: "true"}),
-        }).catch(console.error).finally(() => loadFixerUsage());
+        // The key save now refreshes the rates itself, in the same request and
+        // from the response it already paid for (#142), so the second
+        // update_exchange.php call that used to run here is gone — it would have
+        // spent a second provider request for rates already fetched. Only the
+        // usage bar still needs refreshing, to show the request the save spent.
+        loadFixerUsage();
       } else {
         showErrorMessage(data.message);
         addButton.disabled = false;

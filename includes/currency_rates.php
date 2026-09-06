@@ -83,3 +83,39 @@ function wallos_convert_price($price, $currencyId, $db, $userId = null)
 
     return (float) $price / $rate;
 }
+
+/**
+ * How many subscriptions reference each of a user's currencies, in one query.
+ *
+ * The settings page needs this to decide which currency rows may be deleted.
+ * It used to ask once per currency — a COUNT(*) over subscriptions for every
+ * row, and subscriptions.currency_id carries no index, so each was a scan
+ * (#134): linear in currencies × subscriptions, on a page that only renders a
+ * form. One GROUP BY answers all of them at once. A currency no subscription
+ * uses is simply absent from the map, which the caller reads as zero — the
+ * same answer the per-currency COUNT gave, without the per-currency query.
+ *
+ * @param WallosDatabase $db
+ * @param int            $userId
+ * @return array<int, int> currency_id => subscription count
+ */
+function wallos_currency_usage_counts($db, $userId)
+{
+    $counts = [];
+    $stmt = $db->prepare('SELECT currency_id, COUNT(*) AS count FROM subscriptions WHERE user_id = :userId GROUP BY currency_id');
+
+    if ($stmt === false) {
+        return $counts;
+    }
+
+    // Bare bind and bare fetch keep this new read off the SQLite boundary
+    // audit (#20); both backends answer them the same.
+    $stmt->bindValue(':userId', $userId);
+    $result = $stmt->execute();
+
+    while ($result && $row = $result->fetchArray()) {
+        $counts[(int) $row['currency_id']] = (int) $row['count'];
+    }
+
+    return $counts;
+}
