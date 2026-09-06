@@ -14,6 +14,7 @@ require_once __DIR__ . '/../../includes/mailer.php';
 require_once __DIR__ . '/../../includes/notification_settings.php';
 require_once __DIR__ . '/../../includes/notification_due.php';
 require_once __DIR__ . '/../../includes/webpush.php';
+require_once __DIR__ . '/../../includes/notification_message.php';
 wallos_cron_database($db);
 
 require __DIR__ . '/../../includes/currency_formatter.php';
@@ -28,8 +29,9 @@ if (php_sapi_name() == 'cli') {
     echo "On Timezone: " . date_default_timezone_get() . "<br /><br />";
 }
 
-// Get all user ids
-$query = "SELECT id, username FROM \"user\"";
+// Get all user ids. The account language rides along so each account's
+// notifications can be built in the language its owner chose (#130).
+$query = "SELECT id, username, language FROM \"user\"";
 $stmt = $db->prepare($query);
 $usersToNotify = $stmt === false ? false : $stmt->execute();
 
@@ -43,17 +45,6 @@ $notificationSettings = wallos_load_notification_settings($db);
 $notificationTiming = wallos_load_notification_timing($db);
 $usersWithNotifications = wallos_users_with_notifications($notificationSettings, $db);
 
-function getDaysText($days)
-{
-    if ($days == 0) {
-        return "Today";
-    } elseif ($days == 1) {
-        return "Tomorrow";
-    } else {
-        return "In " . $days . " days";
-    }
-}
-
 function formatPrice($price, $currencyCode, $currencySymbol)
 {
     $formattedPrice = CurrencyFormatter::format($price, $currencyCode);
@@ -64,34 +55,6 @@ function formatPrice($price, $currencyCode, $currencySymbol)
     }
 
     return $formattedPrice;
-}
-
-function buildNotificationMessage($name, $perUser, $periodSummaryLine, $includePeriodSummary)
-{
-    if (empty($perUser) && !$includePeriodSummary) {
-        return "";
-    }
-
-    if (empty($perUser)) {
-        return ($name ? $name . ", " : "") . $periodSummaryLine . "\n";
-    }
-
-    if ($name) {
-        $message = $name . ", the following subscriptions are up for renewal:\n";
-    } else {
-        $message = "The following subscriptions are up for renewal:\n";
-    }
-
-    foreach ($perUser as $subscription) {
-        $dayText = getDaysText($subscription['days']);
-        $message .= $subscription['name'] . " for " . $subscription['formatted_price'] . " (" . $dayText . ")\n";
-    }
-
-    if ($includePeriodSummary) {
-        $message .= "\n" . $periodSummaryLine . "\n";
-    }
-
-    return $message;
 }
 
 // Six questions for everybody, instead of six per person.
@@ -198,6 +161,15 @@ while ($userToNotify = $usersToNotify->fetchArray(SQLITE3_ASSOC)) {
         }
         continue;
     }
+
+    // Everything this account sends — the subject, the message body, the day
+    // labels and the period summary — is built in the language the account
+    // owner chose (#130). Household members share the account, so one language
+    // covers every message this account produces. Resolved once, cached per
+    // language inside the helper, so it costs one file read no matter how many
+    // accounts share a language.
+    $userLanguage = wallos_resolve_language($userToNotify['language'] ?? null);
+    $userI18n = wallos_notification_i18n($userLanguage);
 
     // Notification timing (how many days before the subscription ends should the notification be sent)
     if (isset($notificationTiming[$userId])) {
@@ -350,11 +322,11 @@ while ($userToNotify = $usersToNotify->fetchArray(SQLITE3_ASSOC)) {
         $amountNeededThisPeriod = computeAmountNeededInPeriod($periodSubscriptions, $currentDate, $activeBudgetPeriod['end'], $db, $userId);
         $mainCurrencyCode = $currencies[$mainCurrencyId]['code'] ?? 'USD';
         $mainCurrencySymbol = $currencies[$mainCurrencyId]['symbol'] ?? '$';
-        $periodSummaryLine = translate('amount_for_pay_period', $i18n) . ": " . formatPrice($amountNeededThisPeriod, $mainCurrencyCode, $mainCurrencySymbol);
+        $periodSummaryLine = translate('amount_for_pay_period', $userI18n) . ": " . formatPrice($amountNeededThisPeriod, $mainCurrencyCode, $mainCurrencySymbol);
 
         if (!empty($userBudgetConfig['period_budget']) && $userBudgetConfig['period_budget'] > 0) {
             $remaining = max(0, $userBudgetConfig['period_budget'] - $amountNeededThisPeriod);
-            $periodSummaryLine .= " | " . translate('remaining', $i18n) . ": " . formatPrice($remaining, $mainCurrencyCode, $mainCurrencySymbol);
+            $periodSummaryLine .= " | " . translate('remaining', $userI18n) . ": " . formatPrice($remaining, $mainCurrencyCode, $mainCurrencySymbol);
         }
 
         $sendPeriodStartSummaryOnly = $periodSummaryAtPeriodStart === 1 && $isPeriodStart;
@@ -428,7 +400,7 @@ while ($userToNotify = $usersToNotify->fetchArray(SQLITE3_ASSOC)) {
                 $defaultName = $defaultUser['username'];
 
                 foreach ($notify as $userId => $perUser) {
-                    $message = buildNotificationMessage("", $perUser, $periodSummaryLine, $sendPeriodStartSummaryOnly);
+                    $message = buildNotificationMessage("", $perUser, $periodSummaryLine, $sendPeriodStartSummaryOnly, $userI18n);
                     if ($message === "") {
                         continue;
                     }
@@ -480,7 +452,7 @@ while ($userToNotify = $usersToNotify->fetchArray(SQLITE3_ASSOC)) {
                             }
                         }
 
-                        $mail->Subject = 'Wallos Notification';
+                        $mail->Subject = translate('wallos_notification', $userI18n);
                         $mail->Body = $message;
 
                         if ($mail->send()) {
@@ -512,10 +484,10 @@ while ($userToNotify = $usersToNotify->fetchArray(SQLITE3_ASSOC)) {
                         // $notify is keyed by household member; they are already loaded.
                         $user = $household[$userId] ?? [];
 
-                        $title = translate('wallos_notification', $i18n);
+                        $title = translate('wallos_notification', $userI18n);
 
                         $name = $user['name'] ?? "";
-                        $message = buildNotificationMessage($name, $perUser, $periodSummaryLine, $sendPeriodStartSummaryOnly);
+                        $message = buildNotificationMessage($name, $perUser, $periodSummaryLine, $sendPeriodStartSummaryOnly, $userI18n);
                         if ($message === "") {
                             continue;
                         }
@@ -575,7 +547,7 @@ while ($userToNotify = $usersToNotify->fetchArray(SQLITE3_ASSOC)) {
                         $user = $household[$userId] ?? [];
 
                         $name = $user['name'] ?? "";
-                        $message = buildNotificationMessage($name, $perUser, $periodSummaryLine, $sendPeriodStartSummaryOnly);
+                        $message = buildNotificationMessage($name, $perUser, $periodSummaryLine, $sendPeriodStartSummaryOnly, $userI18n);
                         if ($message === "") {
                             continue;
                         }
@@ -635,7 +607,7 @@ while ($userToNotify = $usersToNotify->fetchArray(SQLITE3_ASSOC)) {
                     } else {
                         $name = "";
                     }
-                    $message = buildNotificationMessage($name, $perUser, $periodSummaryLine, $sendPeriodStartSummaryOnly);
+                    $message = buildNotificationMessage($name, $perUser, $periodSummaryLine, $sendPeriodStartSummaryOnly, $userI18n);
                     if ($message === "") {
                         continue;
                     }
@@ -686,7 +658,7 @@ while ($userToNotify = $usersToNotify->fetchArray(SQLITE3_ASSOC)) {
 
                     // Build Message Content
                     $name = $user['name'] ?? "";
-                    $messageContent = buildNotificationMessage($name, $perUser, $periodSummaryLine, $sendPeriodStartSummaryOnly);
+                    $messageContent = buildNotificationMessage($name, $perUser, $periodSummaryLine, $sendPeriodStartSummaryOnly, $userI18n);
                     if ($messageContent === "") {
                         continue;
                     }
@@ -753,7 +725,7 @@ while ($userToNotify = $usersToNotify->fetchArray(SQLITE3_ASSOC)) {
 
                         // Build Message Content
                         $name = $user['name'] ?? "";
-                        $messageContent = buildNotificationMessage($name, $perUser, $periodSummaryLine, $sendPeriodStartSummaryOnly);
+                        $messageContent = buildNotificationMessage($name, $perUser, $periodSummaryLine, $sendPeriodStartSummaryOnly, $userI18n);
                         if ($messageContent === "") {
                             continue;
                         }
@@ -824,7 +796,7 @@ while ($userToNotify = $usersToNotify->fetchArray(SQLITE3_ASSOC)) {
                     } else {
                         $name = "";
                     }
-                    $message = buildNotificationMessage($name, $perUser, $periodSummaryLine, $sendPeriodStartSummaryOnly);
+                    $message = buildNotificationMessage($name, $perUser, $periodSummaryLine, $sendPeriodStartSummaryOnly, $userI18n);
                     if ($message === "") {
                         continue;
                     }
@@ -870,7 +842,7 @@ while ($userToNotify = $usersToNotify->fetchArray(SQLITE3_ASSOC)) {
                         $user = $household[$userId] ?? [];
 
                         $name = $user['name'] ?? "";
-                        $message = buildNotificationMessage($name, $perUser, $periodSummaryLine, $sendPeriodStartSummaryOnly);
+                        $message = buildNotificationMessage($name, $perUser, $periodSummaryLine, $sendPeriodStartSummaryOnly, $userI18n);
                         if ($message === "") {
                             continue;
                         }
@@ -923,12 +895,12 @@ while ($userToNotify = $usersToNotify->fetchArray(SQLITE3_ASSOC)) {
             // Web Push notifications if enabled
             if ($webPushNotificationsEnabled) {
                 $webPushUserId = $webPush['account_user_id'];
-                $webPushTitle = translate('wallos_notification', $i18n);
+                $webPushTitle = translate('wallos_notification', $userI18n);
 
                 foreach ($notify as $payerUserId => $perUser) {
                     $member = $household[$payerUserId] ?? [];
                     $memberName = $member['name'] ?? "";
-                    $message = buildNotificationMessage($memberName, $perUser, $periodSummaryLine, $sendPeriodStartSummaryOnly);
+                    $message = buildNotificationMessage($memberName, $perUser, $periodSummaryLine, $sendPeriodStartSummaryOnly, $userI18n);
                     if ($message === "") {
                         continue;
                     }
@@ -1054,9 +1026,9 @@ while ($userToNotify = $usersToNotify->fetchArray(SQLITE3_ASSOC)) {
                     // $notify is keyed by household member; they are already loaded.
                     $user = $household[$userId] ?? [];
 
-                    $title = 'Wallos Notification';
+                    $title = translate('wallos_notification', $userI18n);
                     $name = $user['name'] ?? "";
-                    $message = buildNotificationMessage($name, $perUser, $periodSummaryLine, $sendPeriodStartSummaryOnly);
+                    $message = buildNotificationMessage($name, $perUser, $periodSummaryLine, $sendPeriodStartSummaryOnly, $userI18n);
                     if ($message === "") {
                         continue;
                     }

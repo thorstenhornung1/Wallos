@@ -423,6 +423,14 @@ $i18n = [
     // Notifications
     "error_saving_notifications" => "Error saving notifications data.",
     "wallos_notification" => "Wallos Notification",
+    // Renewal notification body, built per recipient in their account language (#130).
+    // "notify_in_days" takes the day count via sprintf(); it is only ever used for
+    // two or more days (0 and 1 use "notify_today"/"notify_tomorrow").
+    "subscriptions_up_for_renewal" => "The following subscriptions are up for renewal:",
+    "notify_for" => "for",
+    "notify_today" => "Today",
+    "notify_tomorrow" => "Tomorrow",
+    "notify_in_days" => "In %d days",
     "test_notification" => "This is a test notification. If you're seeing this, the configuration is correct.",
     "email_error" => "Error sending email",
     "notification_sent_successfuly" => "Notification sent successfully",
