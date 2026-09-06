@@ -5,19 +5,28 @@ require_once '../../includes/validate_endpoint.php';
 $apiKey = isset($_POST['api_key']) ? trim($_POST['api_key']) : '';
 
 $removeOldCredentials = "DELETE FROM google_search WHERE user_id = :userId";
-$stmt = $db->prepare($removeOldCredentials);
-$stmt->bindParam(':userId', $userId, SQLITE3_INTEGER);
-$stmt->execute();
 
-// An empty field clears the key and disables the Google section
+// An empty field clears the key and disables the Google section.
 if ($apiKey === '') {
+    $stmt = $db->prepare($removeOldCredentials);
+    $stmt->bindParam(':userId', $userId, SQLITE3_INTEGER);
+
+    if ($stmt->execute() !== false) {
+        die(json_encode([
+            "success" => true,
+            "message" => translate('success', $i18n)
+        ]));
+    }
+
     die(json_encode([
-        "success" => true,
-        "message" => translate('success', $i18n)
+        "success" => false,
+        "message" => translate('failed_to_store_api_key', $i18n)
     ]));
 }
 
 // Validate the key against the SerpAPI account endpoint (doesn't spend a search)
+// before replacing the working credential. A rejected candidate must not erase
+// the key that was already configured.
 $ch = curl_init();
 curl_setopt($ch, CURLOPT_URL, 'https://serpapi.com/account?api_key=' . urlencode($apiKey));
 curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
@@ -33,6 +42,15 @@ if ($status !== 200 || isset($apiData['error'])) {
     die(json_encode([
         "success" => false,
         "message" => translate('invalid_api_key', $i18n)
+    ]));
+}
+
+$stmt = $db->prepare($removeOldCredentials);
+$stmt->bindParam(':userId', $userId, SQLITE3_INTEGER);
+if ($stmt->execute() === false) {
+    die(json_encode([
+        "success" => false,
+        "message" => translate('failed_to_store_api_key', $i18n)
     ]));
 }
 
