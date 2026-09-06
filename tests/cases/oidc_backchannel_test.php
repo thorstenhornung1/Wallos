@@ -512,7 +512,10 @@ wallos_test('a restored remember-me session stays subject to revocation', functi
     // result used to go nowhere, which put the defect 5.8.0 closed back within
     // reach of a single failed UPDATE (issue #87).
     $update = strpos($withoutComments, 'UPDATE oidc_sessions SET session_id');
-    $refusal = strpos($withoutComments, '$_SESSION = [];');
+    // The refusal that FOLLOWS the move — searched from the update onward, since a
+    // resume-only restore (WP6) also clears the session earlier, when the row is
+    // already revoked. The one this case is about is the failed-update refusal.
+    $refusal = strpos($withoutComments, '$_SESSION = [];', $update);
 
     assert_true($refusal !== false && $refusal > $update,
         'a failed update discards the session instead of continuing with it');

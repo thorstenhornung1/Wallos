@@ -57,7 +57,17 @@ function restoreSessionFromRememberMeCookie($db)
     // There is no case where the token may be skipped. If a caller ever needs
     // "is this account remembered at all", that is a different question and
     // needs its own function rather than a branch in this one.
-    $sql = "SELECT * FROM login_tokens WHERE user_id = :userId AND token = :token";
+    //
+    // An OIDC remember-me token is stored HASHED at rest (WP6 / §14): the cookie
+    // carries the raw 256-bit secret, the database keeps SHA-256(secret). A local
+    // token is still stored verbatim. We do not yet know which kind this cookie
+    // holds, so the lookup accepts either the raw value or its hash, and the check
+    // just below confirms which column actually matched — a raw value must never
+    // satisfy an OIDC row, or the stored hash itself (a database-read attacker's
+    // only prize) would work as a cookie.
+    $hashedToken = hash('sha256', $token);
+
+    $sql = "SELECT * FROM login_tokens WHERE user_id = :userId AND (token = :token OR token = :hashedToken)";
     $stmt = $db->prepare($sql);
 
     if ($stmt === false) {
@@ -66,6 +76,7 @@ function restoreSessionFromRememberMeCookie($db)
 
     $stmt->bindValue(':userId', (int) $userId);
     $stmt->bindValue(':token', $token, SQLITE3_TEXT);
+    $stmt->bindValue(':hashedToken', $hashedToken);
 
     $result = $stmt->execute();
 
@@ -91,69 +102,126 @@ function restoreSessionFromRememberMeCookie($db)
         return false;
     }
 
+    // Whether this remember-me token was minted for an OIDC session (migration
+    // 000076). It decides both how the token is matched — hashed for OIDC, raw
+    // for local — and, further down, that an OIDC restore does not authenticate
+    // on its own but re-enters Phase 2 revalidation.
+    $tokenIsOidc = isset($row['from_oidc']) && (int) $row['from_oidc'] === 1;
+
+    // Confirm the credential in constant time against the column that must have
+    // matched: an OIDC token by its hash, a local token by its raw value. A cookie
+    // carrying the stored hash verbatim (a database-read attacker) is refused for
+    // an OIDC row here, because its own hash is not the stored hash; a local token
+    // keeps its exact prior behaviour.
+    $storedToken = (string) $row['token'];
+    $expectedToken = $tokenIsOidc ? $hashedToken : $token;
+    if (!hash_equals($storedToken, $expectedToken)) {
+        error_log('Wallos: a remember-me cookie for user ' . (int) $userId
+            . ' presented a token that matches no active session; it was refused.');
+
+        return false;
+    }
+
     session_regenerate_id(true);
     $_SESSION['username'] = $username;
-    $_SESSION['token'] = $token;
+    // The stored value — the hash for an OIDC token, the raw value for a local one
+    // — so logout revokes login_tokens by the same value that is recorded there.
+    $_SESSION['token'] = $storedToken;
     $_SESSION['loggedin'] = true;
     $_SESSION['main_currency'] = $main_currency;
     $_SESSION['userId'] = $userId;
 
     // A PHP session is collected after about 24 minutes idle while this cookie
     // lives 30 days, so most long-lived sessions come back through here rather
-    // than through a login. Two things have to be carried across, or the
-    // rebuilt session is permanently exempt from back-channel logout:
+    // than through a login. For a NON-OIDC session that is the whole story: the
+    // lines above have authenticated it, and it is returned below unchanged.
     //
-    //   from_oidc, because the revocation check only applies to OIDC sessions
-    //   and a session that has forgotten its origin is never checked again;
+    // For an OIDC session it is not. An OIDC remember-me cookie is a resume
+    // HANDLE, never an authenticator (WP6 / §14): a live one does NOT rebuild an
+    // authenticated session here — it re-enters the Phase 2 silent-revalidation
+    // flow. Two things still have to travel across, or the rebuilt session is
+    // permanently exempt from that flow and from back-channel logout:
     //
-    //   the new session id in oidc_sessions, because session_regenerate_id()
-    //   above just invalidated the recorded one — leaving revocation to delete
-    //   a row that belongs to a session that no longer exists.
-    // Whether this remember-me token was minted for an OIDC session. The marker
-    // outlives the oidc_sessions row on purpose (migration 000075): once the row
-    // is gone it is the only thing left that tells a revoked OIDC token apart
-    // from an ordinary local one, and the two must not be treated the same. A
-    // token from before the column carries no marker and is read as local, which
-    // is the behaviour that predates it.
-    $tokenIsOidc = isset($row['from_oidc']) && (int) $row['from_oidc'] === 1;
+    //   from_oidc, because only an OIDC session is revalidated and revocable, and
+    //   a session that has forgotten its origin is never checked again;
+    //
+    //   the new session id in oidc_sessions, because session_regenerate_id() above
+    //   just invalidated the recorded one — leaving revocation AND revalidation to
+    //   target a row that belongs to a session that no longer exists.
+    //
+    // The oidc_sessions row is keyed by the SAME stored value login_tokens holds —
+    // hashed for an OIDC session — so it is located with $storedToken, not the raw
+    // cookie. The status column is absent only mid-migration (before Phase 1); when
+    // it is, the pre-v2 restore behaviour stands, matching the guard's own
+    // pre-migration bypass.
+    $hasStatus = $db->columnExists('oidc_sessions', 'status');
+    $statusColumn = $hasStatus ? ', status' : '';
 
-    $sessionStatement = $db->prepare('SELECT id, id_token FROM oidc_sessions WHERE login_token = :token LIMIT 1');
+    $sessionStatement = $db->prepare('SELECT id, id_token' . $statusColumn
+        . ' FROM oidc_sessions WHERE login_token = :token LIMIT 1');
     if ($sessionStatement !== false) {
-        $sessionStatement->bindValue(':token', $token, SQLITE3_TEXT);
+        $sessionStatement->bindValue(':token', $storedToken, SQLITE3_TEXT);
         $sessionResult = $sessionStatement->execute();
         $sessionRow = $sessionResult === false ? false : $sessionResult->fetchArray(SQLITE3_ASSOC);
 
         if ($sessionRow !== false) {
             $_SESSION['from_oidc'] = true;
 
-            // The id token comes back too, or the first logout after a
-            // container restart has no id_token_hint to offer and the
-            // end-session request degrades to the bare form (#123). Rows
-            // from before the column exist carry '', which stays absent.
+            // The id token comes back too: it is the id_token_hint the silent
+            // prompt=none revalidation sends, and the one the first logout after a
+            // container restart offers the end-session endpoint (#123). Rows from
+            // before the column exist carry '', which stays absent.
             if (!empty($sessionRow['id_token'])) {
                 $_SESSION['oidc_id_token'] = $sessionRow['id_token'];
             }
 
-            $update = $db->prepare('UPDATE oidc_sessions SET session_id = :sessionId WHERE id = :id');
+            // A row the provider has already ended is refused outright rather than
+            // revalidated. (The revocation paths also delete the login token, so the
+            // lookup above usually fails first; this is the belt-and-suspenders case
+            // where a marked row outlived nothing.)
+            $status = $hasStatus && isset($sessionRow['status']) ? (string) $sessionRow['status'] : '';
+            if ($status === 'revoked') {
+                error_log('Wallos: a remember-me cookie for a revoked OIDC session was refused rather '
+                    . 'than restored.');
+
+                $_SESSION = [];
+
+                return false;
+            }
+
+            // WP6 / §14: move the authority row onto the regenerated session id AND
+            // force it into REVALIDATION_REQUIRED, in one statement. The guard the
+            // caller runs next therefore refuses protected access and sends the
+            // browser through the silent prompt=none round-trip (/oidc/revalidate);
+            // access is created only when the provider confirms a live session for
+            // the same (iss, sub). A stolen cookie with no live OP browser session
+            // gets nothing (test N). With the status column absent (mid-migration)
+            // only the id is moved, preserving the pre-v2 behaviour.
+            if ($hasStatus) {
+                $update = $db->prepare('UPDATE oidc_sessions
+                                           SET session_id = :sessionId, status = :required
+                                         WHERE id = :id');
+            } else {
+                $update = $db->prepare('UPDATE oidc_sessions SET session_id = :sessionId WHERE id = :id');
+            }
             $recorded = false;
 
             if ($update !== false) {
                 $update->bindValue(':sessionId', session_id(), SQLITE3_TEXT);
+                if ($hasStatus) {
+                    $update->bindValue(':required', 'revalidation_required');
+                }
                 $update->bindValue(':id', $sessionRow['id'], SQLITE3_INTEGER);
                 $recorded = $update->execute() !== false;
             }
 
             if (!$recorded) {
                 // The row still names the session id that session_regenerate_id()
-                // invalidated a few lines above, so back-channel revocation would
-                // delete a session that no longer exists and leave this one
-                // running — for up to the thirty days the cookie lasts. That is
-                // the defect 5.8.0 closed (#37, #49), reachable again through a
-                // write whose result nobody read (issue #87).
-                //
-                // Refused rather than logged and continued: making somebody sign
-                // in again is a smaller harm than a session the provider cannot
-                // end.
+                // invalidated a few lines above, so back-channel revocation and the
+                // silent revalidation would both target a session that no longer
+                // exists. Refused rather than logged and continued: making somebody
+                // sign in again is a smaller harm than a session the provider cannot
+                // end and the browser cannot revalidate (#37, #49, #87).
                 error_log('Wallos: could not move the OIDC session onto the restored session id, '
                     . 'so the remember-me restore was refused: ' . $db->lastErrorMsg());
 

@@ -66,19 +66,25 @@ function idp_fixture($db, $sessionId, $token = 'remember-token', $markOidc = tru
 {
     wallos_test_create_user($db, 1, 'alice');
 
+    // WP6 / §14: an OIDC remember-me token is stored HASHED at rest, so the fixture
+    // mints it the way oidc_login.php now does — the cookie the cases present still
+    // carries the RAW $token, and login_tokens plus the oidc_sessions row keep its
+    // SHA-256. A local token (markOidc false) is stored verbatim, unchanged.
+    $storedToken = $markOidc ? hash('sha256', $token) : $token;
+
     $stmt = $db->prepare('INSERT INTO login_tokens (user_id, token, from_oidc) VALUES (1, :token, :oidc)');
     if ($stmt === false) {
         wallos_test_fail('the fixture could not prepare the login token insert');
 
         return;
     }
-    $stmt->bindValue(':token', $token);
+    $stmt->bindValue(':token', $storedToken);
     $stmt->bindValue(':oidc', $markOidc ? 1 : 0);
     if ($stmt->execute() === false) {
         wallos_test_fail('the fixture could not create a login token: ' . $db->lastErrorMsg());
     }
 
-    wallos_oidc_register_session($db, 1, 'sid-1', $sessionId, $token, 'id.token.here');
+    wallos_oidc_register_session($db, 1, 'sid-1', $sessionId, $storedToken, 'id.token.here');
 
     $saved = wallos_save_oidc_settings($db, [
         'name' => 'Test provider',
@@ -311,8 +317,11 @@ wallos_test('an OIDC-marked token whose row is gone is refused, not made a local
     wallos_test_create_user($db, 1, 'alice');
 
     // A marked OIDC token whose oidc_sessions row never exists here (revoked).
+    // Stored hashed (WP6 / §14), the way oidc_login.php mints it, so the cookie's
+    // raw value matches by hash and the restore reaches the missing-row refusal —
+    // rather than being turned away earlier as a value that matches nothing.
     $marked = $db->prepare('INSERT INTO login_tokens (user_id, token, from_oidc) VALUES (1, :t, 1)');
-    $marked->bindValue(':t', 'oidc-orphan-token');
+    $marked->bindValue(':t', hash('sha256', 'oidc-orphan-token'));
     $marked->execute();
 
     // An ordinary local token: no mark, no row.

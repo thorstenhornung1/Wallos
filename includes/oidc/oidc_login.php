@@ -39,8 +39,14 @@ if (isset($tokenData['id_token']) && is_string($tokenData['id_token'])) {
 
 $cookieExpire = time() + wallos_auth_max_session_lifetime();
 
-// generate remember token
-$token = bin2hex(random_bytes(32));
+// The remember-me credential. The RAW 256-bit secret travels only in the
+// cookie; everything at rest keeps its SHA-256 hash instead (WP6 / §14). An
+// OIDC remember-me cookie is a resume HANDLE, not an authenticator, so the value
+// the database and the PHP session hold is a hash a database-read attacker
+// cannot replay as a cookie. $token is that stored hash from here on, which is
+// what login_tokens, the oidc_sessions row and $_SESSION['token'] all record.
+$rememberMeSecret = bin2hex(random_bytes(32));
+$token = hash('sha256', $rememberMeSecret);
 $addLoginTokens = "INSERT INTO login_tokens (user_id, token) VALUES (:userId, :token)";
 $addLoginTokensStmt = $db->prepare($addLoginTokens);
 $addLoginTokensStmt->bindParam(':userId', $userId, SQLITE3_INTEGER);
@@ -102,7 +108,7 @@ if (!wallos_oidc_record_access_token($db, session_id(), $tokenResponse, time()))
         . 'the identity provider will lose the ability to end this session when the access token '
         . 'expires.');
 }
-$cookieValue = $username . "|" . $token . "|" . $main_currency;
+$cookieValue = $username . "|" . $rememberMeSecret . "|" . $main_currency;
 setcookie('wallos_login', $cookieValue, [
     'expires' => $cookieExpire,
     'samesite' => 'Lax',
