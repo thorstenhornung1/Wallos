@@ -7,7 +7,12 @@ $apiKey = isset($_POST['api_key']) ? trim($_POST['api_key']) : '';
 $removeOldCredentials = "DELETE FROM google_search WHERE user_id = :userId";
 $stmt = $db->prepare($removeOldCredentials);
 $stmt->bindParam(':userId', $userId, SQLITE3_INTEGER);
-$stmt->execute();
+if ($stmt->execute() === false) {
+    die(json_encode([
+        "success" => false,
+        "message" => translate('error', $i18n)
+    ]));
+}
 
 // An empty field clears the key and disables the Google section
 if ($apiKey === '') {

@@ -207,7 +207,10 @@ if (!empty($recommendations)) {
     // Clear old recommendations
     $stmt = $db->prepare("DELETE FROM ai_recommendations WHERE user_id = :user_id");
     $stmt->bindValue(':user_id', $userId, SQLITE3_INTEGER);
-    $stmt->execute();
+    if ($stmt->execute() === false) {
+        echo json_encode(["success" => false, "message" => translate('error', $i18n)]);
+        exit;
+    }
 
     // Insert new recommendations
     $insert = $db->prepare("
@@ -215,13 +218,21 @@ if (!empty($recommendations)) {
         VALUES (:user_id, :type, :title, :description, :savings)
     ");
 
+    $stored = true;
     foreach ($recommendations as $rec) {
         $insert->bindValue(':user_id', $userId, SQLITE3_INTEGER);
         $insert->bindValue(':type', 'subscription', SQLITE3_TEXT);
         $insert->bindValue(':title', $rec['title'] ?? '', SQLITE3_TEXT);
         $insert->bindValue(':description', $rec['description'] ?? '', SQLITE3_TEXT);
         $insert->bindValue(':savings', $rec['savings'] ?? '', SQLITE3_TEXT);
-        $insert->execute();
+        if ($insert->execute() === false) {
+            $stored = false;
+        }
+    }
+
+    if (!$stored) {
+        echo json_encode(["success" => false, "message" => translate('error', $i18n)]);
+        exit;
     }
 
     echo json_encode([

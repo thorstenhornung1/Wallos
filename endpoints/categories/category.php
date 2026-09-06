@@ -143,6 +143,7 @@ function handleSortCategories($db, $userId, $i18n)
 {
     $categories = $_POST['categoryIds'];
     $order = 2;
+    $saved = true;
 
     foreach ($categories as $categoryId) {
         $sql = 'UPDATE categories SET "order" = :order WHERE id = :categoryId AND user_id = :userId';
@@ -150,13 +151,20 @@ function handleSortCategories($db, $userId, $i18n)
         $stmt->bindParam(':order', $order, SQLITE3_INTEGER);
         $stmt->bindParam(':categoryId', $categoryId, SQLITE3_INTEGER);
         $stmt->bindParam(':userId', $userId, SQLITE3_INTEGER);
-        $result = $stmt->execute();
+        if ($stmt->execute() === false) {
+            $saved = false;
+        }
         $order++;
     }
 
-    $response = [
-        "success" => true,
-        "message" => translate("sort_order_saved", $i18n)
-    ];
+    $response = $saved
+        ? [
+            "success" => true,
+            "message" => translate("sort_order_saved", $i18n)
+        ]
+        : [
+            "success" => false,
+            "message" => translate("error", $i18n)
+        ];
     echo json_encode($response);
 }

@@ -104,7 +104,14 @@ if (isset($_POST['oidc_enabled'])) {
 
     $stmtEnabled = $db->prepare('UPDATE admin SET oidc_oauth_enabled = :oidcEnabled WHERE id = 1');
     $stmtEnabled->bindParam(':oidcEnabled', $oidcEnabled, SQLITE3_INTEGER);
-    $stmtEnabled->execute();
+    if ($stmtEnabled->execute() === false) {
+        echo json_encode([
+            'success' => false,
+            'title' => 'Database error',
+            'message' => 'Failed to save the OIDC enablement setting.'
+        ]);
+        exit;
+    }
 }
 
 // 2. Handle OIDC detailed configurations

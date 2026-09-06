@@ -15,13 +15,13 @@
 #
 # Do not edit by hand — run dev/write-audit.php --update and commit the diff.
 #
-# 111 file(s), 20 discarded result(s), 286 unchecked prepare(s), 12 unreported write(s).
+# 111 file(s), 10 discarded result(s), 286 unchecked prepare(s), 0 unreported write(s).
 
 admin.php	0	4	0
 api/admin/get_admin_settings.php	0	1	0
 api/admin/set_admin_settings.php	0	1	0
 api/admin/set_disable_password_login.php	0	1	0
-api/admin/set_oidc_settings.php	1	1	1
+api/admin/set_oidc_settings.php	0	1	0
 api/categories/get_categories.php	0	3	0
 api/categories/set_categories.php	0	7	0
 api/currencies/get_currencies.php	0	3	0
@@ -40,7 +40,7 @@ api/subscriptions/get_ical_feed.php	0	8	0
 api/subscriptions/get_monthly_cost.php	0	4	0
 api/subscriptions/get_period_budget.php	0	3	0
 api/subscriptions/get_subscription.php	0	6	0
-api/subscriptions/set_subscriptions.php	1	9	1
+api/subscriptions/set_subscriptions.php	0	9	0
 api/users/get_user.php	0	1	0
 api/users/set_budget.php	0	2	0
 calendar.php	0	4	0
@@ -51,10 +51,10 @@ endpoints/admin/savesecuritysettings.php	0	1	0
 endpoints/admin/savesmtpsettings.php	0	1	0
 endpoints/admin/updatenotification.php	0	1	0
 endpoints/ai/delete_recommendation.php	0	1	0
-endpoints/ai/generate_recommendations.php	2	7	2
-endpoints/ai/save_settings.php	1	4	1
-endpoints/ai/translate_categories.php	1	3	1
-endpoints/categories/category.php	0	5	1
+endpoints/ai/generate_recommendations.php	0	7	0
+endpoints/ai/save_settings.php	0	4	0
+endpoints/ai/translate_categories.php	0	3	0
+endpoints/categories/category.php	0	5	0
 endpoints/cronjobs/generaterecommendations.php	0	5	0
 endpoints/currency/currency.php	0	4	0
 endpoints/household/household.php	0	3	0
@@ -74,14 +74,14 @@ endpoints/notifications/testemailnotifications.php	0	1	0
 endpoints/payments/add.php	0	2	0
 endpoints/payments/get.php	0	2	0
 endpoints/payments/rename.php	0	1	0
-endpoints/payments/sort.php	0	1	1
+endpoints/payments/sort.php	0	1	0
 endpoints/payments/toggle.php	0	2	0
 endpoints/settings/colortheme.php	0	1	0
 endpoints/settings/convert_currency.php	0	1	0
-endpoints/settings/customcss.php	1	2	1
-endpoints/settings/customtheme.php	1	2	1
+endpoints/settings/customcss.php	0	2	0
+endpoints/settings/customtheme.php	0	2	0
 endpoints/settings/disabled_to_bottom.php	0	1	0
-endpoints/settings/google_search.php	1	2	1
+endpoints/settings/google_search.php	0	2	0
 endpoints/settings/google_search_usage.php	0	1	0
 endpoints/settings/hide_disabled.php	0	1	0
 endpoints/settings/mobile_navigation.php	0	1	0
@@ -94,7 +94,7 @@ endpoints/settings/theme.php	0	1	0
 endpoints/settings/week_starts_sunday.php	0	1	0
 endpoints/subscription/add.php	0	2	0
 endpoints/subscription/clone.php	0	2	0
-endpoints/subscription/delete.php	1	2	1
+endpoints/subscription/delete.php	0	2	0
 endpoints/subscription/exportcalendar.php	0	1	0
 endpoints/subscription/get.php	0	1	0
 endpoints/subscription/getcalendar.php	0	1	0

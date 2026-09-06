@@ -876,7 +876,14 @@ switch ($action) {
             $stmtCascade = $db->prepare($queryCascade);
             $stmtCascade->bindParam(':subId', $subscriptionId, SQLITE3_INTEGER);
             $stmtCascade->bindParam(':userId', $userId, SQLITE3_INTEGER);
-            $stmtCascade->execute();
+            if ($stmtCascade->execute() === false) {
+                echo json_encode([
+                    'success' => false,
+                    'title' => 'Database error',
+                    'message' => 'Failed to delete subscription.'
+                ]);
+                break;
+            }
 
             echo json_encode([
                 'success' => true,

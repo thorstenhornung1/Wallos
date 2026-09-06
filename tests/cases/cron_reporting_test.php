@@ -690,3 +690,83 @@ wallos_test('a run that did something says so in the container log', function ()
 
     $db->close();
 });
+
+// --- a skip that does not erase the run that did the work (#136) ------------
+
+wallos_test('a startup skip keeps the report of the run that did the work (#136)', function () {
+    // updateexchange runs on every container start; a start after the nightly
+    // run used to overwrite that run's detail with "skipped=N", erasing the only
+    // record of whether the work has ever succeeded. Broken-to-count: before the
+    // fix this row reads "skipped=4" and the "updated=4" below is gone.
+    $db = wallos_test_open_database();
+
+    cron_run_process("wallos_cron_count('updated', 4);\nwallos_cron_done('4 rates updated');");
+    cron_run_process("wallos_cron_count('skipped', 4);\nwallos_cron_done('nothing due');");
+
+    $row = cron_run_row($db, 'testjob');
+
+    assert_same(WALLOS_CRON_OK, $row['status'], 'the row still describes a successful run');
+    assert_contains('updated=4', $row['detail'], 'the run that did the work is still described');
+    assert_contains('4 rates updated', $row['detail'], 'including its summary');
+    assert_true(strpos($row['detail'], 'skipped=4') === false,
+        'the skip did not overwrite the real report (got: ' . $row['detail'] . ')');
+
+    // Still alive: the skip refreshed the timestamps, so the job is not reported
+    // as overdue. finished_at parses and is recent.
+    $finished = wallos_cron_parse_time($row['finished_at']);
+    assert_true($finished !== null && time() - $finished < 3600,
+        'the skip refreshed the liveness timestamp so the job reads as alive');
+
+    $db->close();
+});
+
+wallos_test('a real run still replaces a previous skip (#136)', function () {
+    // The other direction: a skip is only kept until something happens. A run
+    // that actually updated must overwrite whatever the row held, skip or not.
+    $db = wallos_test_open_database();
+
+    cron_run_process("wallos_cron_count('skipped', 4);\nwallos_cron_done('nothing due');");
+    cron_run_process("wallos_cron_count('updated', 2);\nwallos_cron_done('2 rates updated');");
+
+    $row = cron_run_row($db, 'testjob');
+
+    assert_contains('updated=2', $row['detail'], 'the work run replaced the skip');
+    assert_true(strpos($row['detail'], 'skipped') === false,
+        'nothing of the skip remains (got: ' . $row['detail'] . ')');
+
+    $db->close();
+});
+
+wallos_test('a first-ever skip still records itself (#136)', function () {
+    // Option 3 refused: a skip is evidence the schedule is alive, so a job that
+    // has only ever skipped must still write a row rather than look like a job
+    // that never ran. With no prior report to keep, the INSERT records the skip.
+    $db = wallos_test_open_database();
+
+    cron_run_process("wallos_cron_count('skipped', 2);\nwallos_cron_done('nothing due');");
+
+    $row = cron_run_row($db, 'testjob');
+
+    assert_true($row !== null, 'the skip recorded a row');
+    assert_same(WALLOS_CRON_OK, $row['status'], 'and it is a success');
+    assert_contains('skipped=2', $row['detail'], 'with its own detail, there being none to keep');
+
+    $db->close();
+});
+
+wallos_test('a skip does not bury a failure that came before it (#136)', function () {
+    // A failure is the most meaningful report of all, and a skip must not paper
+    // over it with a green "skipped" row. The failure history (000066) survives
+    // regardless; this keeps the last-run status and detail on the failure too.
+    $db = wallos_test_open_database();
+
+    cron_run_process("wallos_cron_problem('the provider refused');\nwallos_cron_done();");
+    cron_run_process("wallos_cron_count('skipped', 4);\nwallos_cron_done('nothing due');");
+
+    $row = cron_run_row($db, 'testjob');
+
+    assert_same(WALLOS_CRON_FAILED, $row['status'], 'the failure is still the last meaningful outcome');
+    assert_contains('the provider refused', $row['detail'], 'and its reason is still on the row');
+
+    $db->close();
+});
