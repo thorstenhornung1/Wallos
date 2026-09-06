@@ -12,7 +12,13 @@ foreach ($paymentMethods as $paymentMethodId) {
     $stmt->bindParam(':order', $order, SQLITE3_INTEGER);
     $stmt->bindParam(':paymentMethodId', $paymentMethodId, SQLITE3_INTEGER);
     $stmt->bindParam(':userId', $userId, SQLITE3_INTEGER);
-    $result = $stmt->execute();
+    if ($stmt->execute() === false) {
+        echo json_encode([
+            "success" => false,
+            "message" => translate("error", $i18n)
+        ]);
+        exit;
+    }
     $order++;
 }
 
