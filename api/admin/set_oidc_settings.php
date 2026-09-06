@@ -2,7 +2,7 @@
 /*
 This API Endpoint accepts POST requests only.
 It receives the following parameters:
-- api_key: the API key of an administrator.
+- api_key: The API key of an administrator.
 - oidc_enabled: (optional) '1' to enable OIDC logins, '0' to disable.
 - name: (optional) provider name.
 - client_id: (optional) OAuth client ID.
@@ -104,7 +104,14 @@ if (isset($_POST['oidc_enabled'])) {
 
     $stmtEnabled = $db->prepare('UPDATE admin SET oidc_oauth_enabled = :oidcEnabled WHERE id = 1');
     $stmtEnabled->bindParam(':oidcEnabled', $oidcEnabled, SQLITE3_INTEGER);
-    $stmtEnabled->execute();
+    if ($stmtEnabled->execute() === false) {
+        echo json_encode([
+            'success' => false,
+            'title' => 'Database error',
+            'message' => 'Failed to update OIDC enablement.'
+        ]);
+        exit;
+    }
 }
 
 // 2. Handle OIDC detailed configurations
