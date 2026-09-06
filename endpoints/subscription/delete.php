@@ -16,12 +16,18 @@ if ($deleteStmt->execute()) {
     $stmt = $db->prepare($query);
     $stmt->bindParam(':subscriptionId', $subscriptionId, SQLITE3_INTEGER);
     $stmt->bindParam(':userId', $userId, SQLITE3_INTEGER);
-    $stmt->execute();
 
-    echo json_encode([
-        "success" => true,
-        "message" => translate('subscription_deleted', $i18n)
-    ]);
+    if ($stmt->execute() === false) {
+        echo json_encode([
+            "success" => false,
+            "message" => translate('error_deleting_subscription', $i18n)
+        ]);
+    } else {
+        echo json_encode([
+            "success" => true,
+            "message" => translate('subscription_deleted', $i18n)
+        ]);
+    }
 } else {
     echo json_encode([
         "success" => false,
