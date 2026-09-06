@@ -23,13 +23,16 @@
  *     provider that is merely unreachable is SUSPENDED and retried, never read as
  *     revocation (§22, test L).
  *
- * The full ID-token validator (signature/aud/exp/azp) is Phase 3 (WP2). Phase 2
- * parses the ID token and enforces the two checks resume turns on: the exact
- * `nonce` for this transaction (test C) and the (iss, sub) binding.
+ * The ID token the resume exchange returns is put through the full standards-
+ * compliant validator (WP2, includes/oidc/id_token.php): signature, algorithm
+ * allowlist, exact issuer, audience, azp, exp, iat, non-empty sub and the exact
+ * `nonce` for this transaction (test C). Only then is the (iss, sub) binding to
+ * the existing session checked (test K).
  */
 
 require_once __DIR__ . '/pkce.php';
 require_once __DIR__ . '/jwt.php';
+require_once __DIR__ . '/id_token.php';
 require_once __DIR__ . '/refresh.php';
 require_once __DIR__ . '/backchannel.php';
 require_once __DIR__ . '/../ssrf_helper.php';
@@ -207,30 +210,42 @@ function wallos_oidc_resume_exchange_and_confirm($db, $oidcSettings, $transactio
     }
 
     $idToken = isset($tokens['id_token']) && is_string($tokens['id_token']) ? $tokens['id_token'] : '';
-    $parsed = $idToken !== '' ? wallos_jwt_parse($idToken) : null;
-    if ($parsed === null || !isset($parsed['payload']) || !is_array($parsed['payload'])) {
+    if ($idToken === '') {
         // The ID token is the authentication assertion; without one there is
         // nothing to bind the identity to. Interactive login.
         return ['outcome' => 'failed', 'reason' => 'no_id_token'];
     }
-    $claims = $parsed['payload'];
 
-    // The nonce MUST be the one this transaction sent (test C). A token minted for
-    // any other request — replayed, injected — fails here and never re-validates.
-    $nonce = isset($claims['nonce']) && is_string($claims['nonce']) ? $claims['nonce'] : '';
-    if ($nonce === '' || !hash_equals((string) ($transaction['nonce'] ?? ''), $nonce)) {
+    // The full standards-compliant validation (WP2): signature, algorithm
+    // allowlist, exact issuer, audience/azp, exp, iat, non-empty sub, and the
+    // exact nonce this transaction carried. Every accepted ID token — login and
+    // resume alike — passes through here. jwks_uri travels with the settings the
+    // caller assembled from the discovery document.
+    $validation = wallos_oidc_validate_id_token($db, $idToken, [
+        'issuer' => $oidcSettings['issuer'] ?? '',
+        'client_id' => $oidcSettings['client_id'] ?? '',
+        'nonce' => $transaction['nonce'] ?? '',
+        'jwks_uri' => $oidcSettings['jwks_uri'] ?? '',
+    ], $now);
+
+    if (!$validation['valid']) {
+        // Whatever failed — a bad signature, a wrong audience, an expired token —
+        // the silent auth cannot re-establish this session. The nonce mismatch
+        // keeps its own outcome so test C can name it; everything else is a
+        // definitive failure that ends the session and falls back to interactive
+        // login.
         wallos_oidc_terminate_session($db, $sessionId);
 
-        return ['outcome' => 'nonce_mismatch', 'reason' => 'nonce'];
+        if ($validation['error'] === 'nonce_mismatch') {
+            return ['outcome' => 'nonce_mismatch', 'reason' => 'nonce'];
+        }
+
+        return ['outcome' => 'failed', 'reason' => $validation['error']];
     }
 
-    $subject = isset($claims['sub']) && is_string($claims['sub']) ? $claims['sub'] : '';
-    if ($subject === '') {
-        wallos_oidc_terminate_session($db, $sessionId);
-
-        return ['outcome' => 'failed', 'reason' => 'no_subject'];
-    }
-    $issuer = isset($claims['iss']) && is_string($claims['iss']) ? $claims['iss'] : '';
+    $claims = $validation['claims'];
+    // A validated ID token, so these are present and non-empty by construction.
+    $subject = (string) $claims['sub'];
 
     $identity = wallos_oidc_resume_existing_identity($db, $sessionId);
     if ($identity === null) {
@@ -239,16 +254,10 @@ function wallos_oidc_resume_exchange_and_confirm($db, $oidcSettings, $transactio
         return ['outcome' => 'account_mismatch', 'reason' => 'no_session'];
     }
 
-    // The (iss, sub) binding (§13). A configured issuer must match; without one
-    // (manual configuration, no discovery) the subject alone is the immutable key
-    // Phase 2 can check — which is exactly what test K turns on.
-    $configuredIssuer = trim((string) ($oidcSettings['issuer'] ?? ''));
-    if ($configuredIssuer !== '' && $issuer !== ''
-        && rtrim($issuer, '/') !== rtrim($configuredIssuer, '/')) {
-        wallos_oidc_terminate_session($db, $sessionId);
-
-        return ['outcome' => 'account_mismatch', 'reason' => 'issuer'];
-    }
+    // The (iss, sub) binding (§13). The validator already held the token to the
+    // configured issuer; here the SUBJECT must be the one this local session
+    // belongs to, so a different account active in the browser at the provider
+    // can never be switched to — which is exactly what test K turns on.
     if (!hash_equals($identity['oidc_sub'], $subject)) {
         // A different account is active in the browser at the provider. Never
         // switch the local session to it — end this one and log in normally.

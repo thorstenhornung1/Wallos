@@ -45,12 +45,15 @@ $password = bin2hex(random_bytes(16)); // 32-character random password
 $hashedPassword = password_hash($password, PASSWORD_DEFAULT);
 
 // Insert user
-$query = "INSERT INTO \"user\" (username, email, oidc_sub, main_currency, avatar, language, budget, firstname, lastname, password, api_key)
-          VALUES (:username, :email, :oidc_sub, :main_currency, :avatar, :language, :budget, :firstname, :lastname, :password, :api_key)";
+$query = "INSERT INTO \"user\" (username, email, oidc_sub, issuer, main_currency, avatar, language, budget, firstname, lastname, password, api_key)
+          VALUES (:username, :email, :oidc_sub, :issuer, :main_currency, :avatar, :language, :budget, :firstname, :lastname, :password, :api_key)";
 $stmt = $db->prepare($query);
 $stmt->bindValue(':username', $username, SQLITE3_TEXT);
 $stmt->bindValue(':email', $email, SQLITE3_TEXT);
 $stmt->bindValue(':oidc_sub', $oidcSub, SQLITE3_TEXT);
+// Type-less bind (the DB boundary infers it) so identity is stored as the
+// canonical (issuer, subject) pair (§12) without adding a SQLite-specific token.
+$stmt->bindValue(':issuer', $oidcIssuer ?? '');
 $stmt->bindValue(':main_currency', $main_currency_id, SQLITE3_INTEGER);
 $stmt->bindValue(':avatar', $avatar, SQLITE3_TEXT);
 $stmt->bindValue(':language', $language, SQLITE3_TEXT);

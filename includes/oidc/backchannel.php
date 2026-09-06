@@ -712,11 +712,19 @@ if (!function_exists('wallos_oidc_jwks_http_get')) {
  * cached copy when one exists: a provider having a bad minute should not take
  * back-channel logout down with it, the same bargain the discovery cache makes.
  *
+ * $forceRefresh skips the fresh-cache short-circuit and goes to the network,
+ * still falling back to the cache on failure. The ID-token validator (WP2) uses
+ * it for the "unknown kid → refresh the JWKS once and retry" step: a provider
+ * that has rotated its signing key mid-cache-window publishes a kid the cached
+ * document does not carry, and one forced fetch picks it up rather than failing
+ * a legitimate token.
+ *
  * @param WallosDatabase $db
  * @param string         $jwksUri
+ * @param bool           $forceRefresh
  * @return array|null
  */
-function wallos_oidc_fetch_jwks($db, $jwksUri)
+function wallos_oidc_fetch_jwks($db, $jwksUri, $forceRefresh = false)
 {
     $jwksUri = trim((string) $jwksUri);
     if ($jwksUri === '') {
@@ -724,7 +732,7 @@ function wallos_oidc_fetch_jwks($db, $jwksUri)
     }
 
     $cached = wallos_oidc_jwks_cache_read($db, $jwksUri);
-    if ($cached !== null && $cached['fresh']) {
+    if (!$forceRefresh && $cached !== null && $cached['fresh']) {
         return $cached['document'];
     }
 

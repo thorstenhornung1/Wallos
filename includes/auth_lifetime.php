@@ -23,3 +23,49 @@ function wallos_auth_max_session_lifetime()
 {
     return 30 * 24 * 60 * 60;
 }
+
+/**
+ * Whether the current request reached Wallos over HTTPS (OIDC Session Authority
+ * v2, §15).
+ *
+ * The auth cookies — the PHP session cookie and `wallos_login` — carry the
+ * `Secure` attribute so a browser never sends them over plaintext, which stops a
+ * network attacker on an http hop from reading a live session credential. But
+ * `Secure` on a cookie set over plain http means the browser drops it entirely,
+ * so a developer running Wallos on http://localhost would be unable to stay
+ * signed in. The flag is therefore conditioned on the request actually being
+ * secure.
+ *
+ * Direct TLS shows up as $_SERVER['HTTPS']; a reverse proxy that terminates TLS
+ * and forwards http (the common self-hosted deployment the blueprint calls out)
+ * says so in X-Forwarded-Proto. Either is accepted, because in both the browser
+ * ↔ Wallos leg the cookie travels on is HTTPS. The forwarded header is only
+ * meaningful behind a proxy the operator controls, which is exactly the
+ * deployment it describes.
+ *
+ * @return bool
+ */
+function wallos_request_is_https()
+{
+    if (!empty($_SERVER['HTTPS']) && strtolower((string) $_SERVER['HTTPS']) !== 'off') {
+        return true;
+    }
+
+    if (isset($_SERVER['REQUEST_SCHEME']) && strtolower((string) $_SERVER['REQUEST_SCHEME']) === 'https') {
+        return true;
+    }
+
+    $forwardedProto = isset($_SERVER['HTTP_X_FORWARDED_PROTO'])
+        ? strtolower(trim((string) $_SERVER['HTTP_X_FORWARDED_PROTO']))
+        : '';
+    // A proxy may list several protocols ("https, http"); the first is the one
+    // the browser used.
+    if ($forwardedProto !== '') {
+        $first = trim(explode(',', $forwardedProto)[0]);
+        if ($first === 'https') {
+            return true;
+        }
+    }
+
+    return false;
+}

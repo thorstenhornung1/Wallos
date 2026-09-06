@@ -62,6 +62,8 @@ function resume_run_php($body)
  */
 function resume_provider_child($responses, $body)
 {
+    $keypair = resume_keypair();
+
     return resume_run_php(
         // A throwaway session store keeps a stale sess_<id> from a prior run out
         // of the way (#148); each case also uses a unique session id.
@@ -73,6 +75,13 @@ function resume_provider_child($responses, $body)
         . '    return $next === null' . "\n"
         . '        ? ["body" => false, "status" => 0, "error" => "no answer queued"]' . "\n"
         . '        : $next;' . "\n"
+        . '}' . "\n"
+        // The JWKS the WP2 validator verifies the returned ID token against. Stubbed
+        // before the code loads (function_exists guard), so no case makes a request;
+        // the token was signed by resume_keypair() in the parent.
+        . '$GLOBALS["jwks"] = ' . var_export(json_encode($keypair['jwks']), true) . ';' . "\n"
+        . 'function wallos_oidc_jwks_http_get($jwksUri, $resolve = null) {' . "\n"
+        . '    return ["body" => $GLOBALS["jwks"], "status" => 200];' . "\n"
         . '}' . "\n"
         . 'require ' . var_export(WALLOS_ROOT . '/includes/database/connection.php', true) . ';' . "\n"
         . '$db = wallos_database_connect();' . "\n"
@@ -93,7 +102,27 @@ function resume_settings($issuer = '')
         'user_info_url' => 'https://93.184.216.34/userinfo',
         'scopes' => 'openid email profile',
         'issuer' => $issuer,
+        // The full ID-token validator (WP2) verifies the returned token's
+        // signature against these keys; a literal IP so nothing resolves a name.
+        'jwks_uri' => 'https://93.184.216.34/jwks',
     ];
+}
+
+/**
+ * The RSA keypair the resume tests sign ID tokens with, generated once per run.
+ * The children verify against its published JWKS, so the resume path's signature
+ * check is exercised for real (WP2) rather than waved through.
+ *
+ * @return array
+ */
+function resume_keypair()
+{
+    static $keypair = null;
+    if ($keypair === null) {
+        $keypair = wallos_test_rsa_keypair('resume-test-key');
+    }
+
+    return $keypair;
 }
 
 /** A resume transaction with a chosen nonce and verifier. */
@@ -110,15 +139,23 @@ function resume_transaction($nonce, $verifier, $targetSessionId, $returnTo = 'su
     ];
 }
 
-/** An unsigned-looking but parseable ID token carrying the given claims. */
+/**
+ * A real RS256-signed ID token carrying the given claims. The audience, expiry
+ * and issued-at are filled with defaults the validator accepts unless the case
+ * overrides them, so a case names only the claims it cares about (sub, nonce, …)
+ * and still gets a token that passes the full WP2 validation.
+ */
 function resume_id_token($claims)
 {
-    $encode = function ($value) {
-        return rtrim(strtr(base64_encode(json_encode($value)), '+/', '-_'), '=');
-    };
-    $signature = rtrim(strtr(base64_encode('resume-test-signature'), '+/', '-_'), '=');
+    $claims = array_merge([
+        'aud' => 'wallos',
+        'exp' => time() + 300,
+        'iat' => time(),
+    ], $claims);
 
-    return $encode(['alg' => 'RS256', 'typ' => 'JWT']) . '.' . $encode($claims) . '.' . $signature;
+    $keypair = resume_keypair();
+
+    return wallos_test_sign_jwt($keypair['private'], $claims, ['kid' => $keypair['kid']]);
 }
 
 /** A provider token answer carrying a fresh access token and the given ID token. */

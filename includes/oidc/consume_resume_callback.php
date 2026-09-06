@@ -86,6 +86,12 @@ $oidcConfiguration = wallos_get_effective_oidc_configuration($db);
 $resumeConfigured = $oidcConfiguration['enabled'] === 1 && $oidcConfiguration['is_configured'];
 $oidcSettings = $oidcConfiguration['settings'];
 
+// The signing keys and the authoritative issuer for validating the resumed ID
+// token come from the discovery document, not from the stored settings, so they
+// are carried alongside the settings into the exchange (WP2).
+$oidcSettings['jwks_uri'] = wallos_oidc_discovery_jwks_uri($oidcConfiguration);
+$oidcSettings['issuer'] = wallos_oidc_expected_issuer($oidcConfiguration);
+
 // A provider error on prompt=none.
 if ($callbackError !== '') {
     require_once __DIR__ . '/diagnostics.php';

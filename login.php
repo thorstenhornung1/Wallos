@@ -20,9 +20,12 @@ if ($userCount == 0) {
 $secondsInMonth = wallos_auth_max_session_lifetime();
 if (session_status() === PHP_SESSION_NONE) {
     session_set_cookie_params([
-        'lifetime' => $secondsInMonth,             
-        'httponly' => true,          
-        'samesite' => 'Lax'          
+        'lifetime' => $secondsInMonth,
+        'httponly' => true,
+        'samesite' => 'Lax',
+        // Secure on HTTPS (§15): the session cookie is never sent over plaintext.
+        // Conditioned on HTTPS so http://localhost development still works.
+        'secure' => wallos_request_is_https(),
     ]);
     session_start();
 }
@@ -108,6 +111,8 @@ if ($adminRow['login_disabled'] == 1) {
             'expires' => $cookieExpire,
             'samesite' => 'Lax',
             'httponly' => true,
+            // Secure on HTTPS (§15); conditioned so http://localhost dev works.
+            'secure' => wallos_request_is_https(),
         ]);
 
         $db->close();
@@ -154,7 +159,10 @@ if ($oidcEnabled) {
         session_set_cookie_params([
             'lifetime' => $secondsInMonth,
             'httponly' => true,
-            'samesite' => 'Lax'
+            'samesite' => 'Lax',
+            // Secure on HTTPS (§15): the OIDC session cookie is never sent over
+            // plaintext. Conditioned on HTTPS so http://localhost dev still works.
+            'secure' => wallos_request_is_https(),
         ]);
         session_start();
     }
@@ -282,6 +290,8 @@ if (isset($_POST['username']) && isset($_POST['password'])) {
                             'expires' => $cookieExpire,
                             'samesite' => 'Lax',
                             'httponly' => true,
+                            // Secure on HTTPS (§15); conditioned so http dev works.
+                            'secure' => wallos_request_is_https(),
                         ]);
                     } else {
                         error_log('Wallos login: could not store the remember-me token for user '
