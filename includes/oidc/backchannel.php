@@ -137,8 +137,25 @@ function wallos_oidc_validate_logout_token($token, $jwks, $expectations, $now, $
  */
 function wallos_oidc_register_session($db, $userId, $sid, $sessionId, $loginToken, $idToken = null)
 {
-    $stmt = $db->prepare('INSERT INTO oidc_sessions (user_id, sid, session_id, login_token, id_token)
-                          VALUES (:userId, :sid, :sessionId, :loginToken, :idToken)');
+    // The authority columns are filled on the same insert once migration 000082
+    // has added them: a session is born 'valid', its authority confirmed now,
+    // because an Authorization Code login is the one thing that does establish
+    // authority. Without a status the guard would read the fresh row as a legacy
+    // session and revoke it (a NULL status reads as revoked). Guarded on the
+    // column so an install whose migration has not run yet still records the
+    // session — and spelled with the literal 'valid' rather than the guard's
+    // constant, which this file does not load.
+    $hasAuthority = $db->columnExists('oidc_sessions', 'status');
+
+    $columns = 'user_id, sid, session_id, login_token, id_token';
+    $placeholders = ':userId, :sid, :sessionId, :loginToken, :idToken';
+    if ($hasAuthority) {
+        $columns .= ', status, authority_confirmed_at';
+        $placeholders .= ', :status, :authorityConfirmedAt';
+    }
+
+    $stmt = $db->prepare('INSERT INTO oidc_sessions (' . $columns . ')
+                          VALUES (' . $placeholders . ')');
     if ($stmt === false) {
         return;
     }
@@ -147,6 +164,10 @@ function wallos_oidc_register_session($db, $userId, $sid, $sessionId, $loginToke
     $stmt->bindValue(':sessionId', $sessionId, SQLITE3_TEXT);
     $stmt->bindValue(':loginToken', $loginToken === null ? '' : $loginToken, SQLITE3_TEXT);
     $stmt->bindValue(':idToken', $idToken === null ? '' : $idToken, SQLITE3_TEXT);
+    if ($hasAuthority) {
+        $stmt->bindValue(':status', 'valid');
+        $stmt->bindValue(':authorityConfirmedAt', time());
+    }
 
     // Checked, because a session with no row here can never be revoked — the
     // guard reads the row's absence as "not an OIDC session" and lets it

@@ -504,15 +504,19 @@ wallos_test('every authenticated request keeps the token alive, and none is sign
         );
 
         // And the behaviour, through the guard itself: a refresh that fails
-        // against a session whose access token has already expired still leaves
-        // the session valid.
+        // against a session still INSIDE its back-channel coverage window leaves
+        // the session valid. (The token is issued 200s ago with a 300s life, so
+        // it is past the refresh-due halfway mark but not yet expired — a refresh
+        // is attempted. Past the coverage boundary the guard would require
+        // revalidation and not refresh at all; that is the v2 change Test H and
+        // Test M in oidc_idp_authority_test.php cover.)
         $db = wallos_test_open_database();
         refresh_fixture($db, 'guard-session-id');
         wallos_oidc_record_access_token($db, 'guard-session-id', [
-            'access_token' => 'expired-access-token',
+            'access_token' => 'ageing-access-token',
             'refresh_token' => 'stored-refresh-token',
             'expires_in' => 300,
-        ], time() - 600);
+        ], time() - 200);
 
         $unreachable = ['body' => false, 'status' => 0, 'error' => 'could not connect'];
 
