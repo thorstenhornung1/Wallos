@@ -102,10 +102,13 @@ if ($callbackError !== '') {
         wallos_oidc_resume_render_unavailable($db, $resumeReturnTo);
     }
 
-    // login_required and its siblings: the silent auth cannot be established, so
-    // the session must not continue. Interactive login — the session-expired
-    // message fits "your provider session ended, sign in again".
-    wallos_oidc_resume_end_session_and_login($db, 'login.php?error=oidc_session_expired');
+    // login_required and its siblings: the provider ended the session centrally
+    // and cannot re-authenticate the browser silently, so the local session must
+    // not continue. This is a central logout, not a lost or timed-out local
+    // session, so it carries its own honest code (oidc_logged_out) rather than the
+    // generic "session lost" one — the login page turns it into a message that
+    // says the provider signed the user out, which is what actually happened.
+    wallos_oidc_resume_end_session_and_login($db, 'login.php?error=oidc_logged_out');
 }
 
 if (!$resumeConfigured || $callbackCode === '') {

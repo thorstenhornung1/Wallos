@@ -620,6 +620,7 @@ $i18n = [
     "cron_diagnostics" => "Geplante Aufgaben",
     "cron_diagnostics_hint" => "Jede Aufgabe protokolliert ihren letzten Lauf. Eine als überfällig gemeldete Aufgabe wurde nicht gestartet, obwohl sie hätte laufen sollen — meist läuft Cron in diesem Container nicht.",
     "oidc_session_expired" => "Die Anmeldung hat zu lange gedauert oder die Sitzung ging verloren. Bitte versuchen Sie es erneut.",
+    "oidc_logged_out" => "Du wurdest zentral abgemeldet. Bitte neu anmelden.",
     "oidc_state_mismatch" => "Die Anmeldung konnte nicht überprüft werden und wurde zu Ihrer Sicherheit abgebrochen. Bitte versuchen Sie es erneut.",
     "oidc_invalid_response" => "Der Identitätsanbieter hat eine unvollständige Antwort gesendet. Bitte versuchen Sie es erneut.",
     "oidc_user_not_found" => "Anmeldung fehlgeschlagen: Zu dieser Identität gibt es kein Wallos-Konto, und das automatische Anlegen ist deaktiviert. Bitten Sie Ihre Administration um ein Konto.",

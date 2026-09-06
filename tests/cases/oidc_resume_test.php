@@ -517,3 +517,71 @@ wallos_test('one centralized JS handler navigates to the revalidation URL', func
     $header = file_get_contents(WALLOS_ROOT . '/includes/header.php');
     assert_contains('scripts/oidc-reauth.js', $header, 'header.php serves the handler');
 });
+
+// ---------------- #166: a central logout gets its own honest login-page message
+
+wallos_test('#166: a prompt=none central logout redirects with the distinct oidc_logged_out code', function () {
+    // A prompt=none that comes back login_required (or a sibling) is the provider
+    // having ended the session centrally — §22 classifies it 'interactive'. That
+    // branch must carry its OWN code so the login page can say the provider signed
+    // the user out, rather than reusing the generic timeout/state-lost code that
+    // reads like a defect (the QA report behind #166).
+    $callback = file_get_contents(WALLOS_ROOT . '/includes/oidc/consume_resume_callback.php');
+
+    assert_contains('login.php?error=oidc_logged_out', $callback,
+        'the central-logout branch redirects with the distinct code');
+    assert_not_contains('oidc_session_expired', $callback,
+        'and no longer reuses the generic timeout/state-lost code');
+    // The classification the branch turns on is the one #22 already fixes for
+    // login_required, so the distinct code lands exactly on the central logout.
+    assert_same('interactive', wallos_oidc_classify_prompt_none_error('login_required'),
+        'login_required is the central-logout case that reaches this redirect');
+});
+
+wallos_test('#166: the genuine session-lost path keeps the generic oidc_session_expired code', function () {
+    // The real timeout/state-lost case — a callback whose session held no
+    // transaction at all — must still show the generic message, unchanged.
+    $callback = file_get_contents(WALLOS_ROOT . '/includes/oidc/consume_oidc_callback.php');
+
+    assert_contains('oidc_session_expired', $callback,
+        'a dropped session with no transaction still shows the generic timeout/state-lost message');
+    assert_not_contains('oidc_logged_out', $callback,
+        'the central-logout code belongs only to the prompt=none login_required path');
+});
+
+wallos_test('#166: login.php maps oidc_logged_out to its own message key, and keeps the generic one', function () {
+    $login = file_get_contents(WALLOS_ROOT . '/login.php');
+
+    assert_contains('"oidc_logged_out" => "oidc_logged_out"', $login,
+        'the login page recognizes the central-logout code and resolves it to its own key');
+    assert_contains('"oidc_session_expired" => "oidc_session_expired"', $login,
+        'while the generic code stays mapped for the genuine timeout/state-lost case');
+});
+
+wallos_test('#166: the oidc_logged_out message resolves in en and de and falls back to English', function () {
+    // Drive the real translate() exactly as login.php does: the per-locale array
+    // for a hit, and en.php as the fallback for a locale that lacks the key.
+    $out = resume_run_php(
+        'chdir(' . var_export(WALLOS_ROOT, true) . ');' . "\n"
+        . '$_COOKIE["language"] = "de";' . "\n"
+        . 'require ' . var_export(WALLOS_ROOT . '/includes/i18n/languages.php', true) . ';' . "\n"
+        . 'require ' . var_export(WALLOS_ROOT . '/includes/i18n/getlang.php', true) . ';' . "\n"
+        . '$i18n = null; require ' . var_export(WALLOS_ROOT . '/includes/i18n/de.php', true) . '; $de = $i18n;' . "\n"
+        . '$i18n = null; require ' . var_export(WALLOS_ROOT . '/includes/i18n/en.php', true) . '; $en = $i18n;' . "\n"
+        . 'echo "de=" . translate("oidc_logged_out", $de) . "\n";' . "\n"
+        . 'echo "en=" . translate("oidc_logged_out", $en) . "\n";' . "\n"
+        . 'echo "generic=" . translate("oidc_session_expired", $en) . "\n";' . "\n"
+        . 'echo "fallback=" . translate("oidc_logged_out", ["unrelated" => "x"]) . "\n";' . "\n"
+        . 'echo "dehas=" . (array_key_exists("oidc_logged_out", $de) ? "yes" : "no");'
+    );
+
+    assert_contains('de=Du wurdest zentral abgemeldet. Bitte neu anmelden.', $out,
+        'the German message resolves (' . $out . ')');
+    assert_contains('en=You were signed out by your login provider. Please sign in again.', $out,
+        'the English message resolves');
+    assert_contains('generic=The login took too long or the session was lost. Please try again.', $out,
+        'and the generic timeout/state-lost message is unchanged');
+    assert_contains('fallback=You were signed out by your login provider. Please sign in again.', $out,
+        'a locale without the key falls back to English via translate()');
+    assert_contains('dehas=yes', $out, 'the German locale carries its own translation');
+});
