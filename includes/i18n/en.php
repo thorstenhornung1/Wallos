@@ -653,6 +653,7 @@ $i18n = [
     "cron_diagnostics" => "Scheduled jobs",
     "cron_diagnostics_hint" => "Each job records its last run. A job reported as overdue has not been started when it should have been, which usually means cron is not running in this container.",
     "oidc_session_expired" => "The login took too long or the session was lost. Please try again.",
+    "oidc_logged_out" => "You were signed out by your login provider. Please sign in again.",
     "oidc_state_mismatch" => "The login could not be verified and was stopped for your safety. Please try again.",
     "oidc_invalid_response" => "The identity provider sent an incomplete response. Please try again.",
     "oidc_user_not_found" => "Login failed: no Wallos account matches this identity, and automatic account creation is disabled. Ask your administrator for an account.",

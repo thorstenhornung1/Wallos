@@ -379,6 +379,7 @@ if (isset($_GET['error'])) {
         "oidc_invalid_state" => "oidc_state_mismatch",
         "oidc_state_mismatch" => "oidc_state_mismatch",
         "oidc_session_expired" => "oidc_session_expired",
+        "oidc_logged_out" => "oidc_logged_out",
         "oidc_invalid_response" => "oidc_invalid_response",
         "oidc_email_not_verified" => "oidc_email_not_verified",
         "oidc_invalid_config" => "oidc_invalid_config",
