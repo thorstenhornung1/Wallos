@@ -13,6 +13,7 @@
 */
 
 require_once __DIR__ . '/i18n/languages.php';
+require_once __DIR__ . '/currency_localization.php';
 
 /**
  * Translation keys of the default categories, in display order.
@@ -90,13 +91,22 @@ function wallos_create_default_categories($db, $userId, $language)
 }
 
 /**
- * The default currencies, in display order, as code => symbol + name key.
+ * The default currencies, in display order, as code => fallback symbol.
  *
- * A currency's code and symbol are canonical: a Euro is EUR and € whatever the
- * account's language. Only the name reads differently to a German and to an
- * English speaker, so only the name carries a translation key — resolved from
- * the language file at seed time exactly as the category names are. The code
- * and symbol stay literal.
+ * The code is the canonical identity — a Euro is EUR whatever the account's
+ * language. The name and symbol are no longer maintained here: they come from
+ * Unicode CLDR at seed time (wallos_currency_name / wallos_currency_symbol),
+ * which is the authoritative source for how a currency is written in a given
+ * language (issue #163). Providing them by hand, in English, was the thing that
+ * change removed.
+ *
+ * The value kept against each code is a fallback symbol only — the symbol
+ * Wallos historically shipped. CLDR has a distinctive symbol for some
+ * currencies in some locales and none for others (the Bulgarian lev and the
+ * Swiss franc, for instance, resolve to their bare code in most locales). Where
+ * CLDR has none, this fallback keeps лв and Fr instead of degrading the display
+ * to "BGN" and "CHF". It is the "existing/provider symbol" tier of the symbol
+ * fallback chain, nothing more.
  *
  * No id field. The lists used to carry one, and it was the position in the list
  * rather than the row in the database: registration.php read it straight into
@@ -105,65 +115,68 @@ function wallos_create_default_categories($db, $userId, $language)
  * corrected a few lines later by looking the code up for real, so nothing
  * breaks; carrying the number at all is what invites the confusion.
  *
- * @var array<string, array{symbol: string, key: string}>
+ * @var array<string, string> ISO 4217 code => fallback symbol
  */
 const WALLOS_DEFAULT_CURRENCIES = [
-    'EUR' => ['symbol' => '€', 'key' => 'currency_name_eur'],
-    'USD' => ['symbol' => '$', 'key' => 'currency_name_usd'],
-    'JPY' => ['symbol' => '¥', 'key' => 'currency_name_jpy'],
-    'BGN' => ['symbol' => 'лв', 'key' => 'currency_name_bgn'],
-    'CZK' => ['symbol' => 'Kč', 'key' => 'currency_name_czk'],
-    'DKK' => ['symbol' => 'kr', 'key' => 'currency_name_dkk'],
-    'GBP' => ['symbol' => '£', 'key' => 'currency_name_gbp'],
-    'HUF' => ['symbol' => 'Ft', 'key' => 'currency_name_huf'],
-    'PLN' => ['symbol' => 'zł', 'key' => 'currency_name_pln'],
-    'RON' => ['symbol' => 'lei', 'key' => 'currency_name_ron'],
-    'SEK' => ['symbol' => 'kr', 'key' => 'currency_name_sek'],
-    'CHF' => ['symbol' => 'Fr', 'key' => 'currency_name_chf'],
-    'ISK' => ['symbol' => 'kr', 'key' => 'currency_name_isk'],
-    'NOK' => ['symbol' => 'kr', 'key' => 'currency_name_nok'],
-    'RUB' => ['symbol' => '₽', 'key' => 'currency_name_rub'],
-    'TRY' => ['symbol' => '₺', 'key' => 'currency_name_try'],
-    'AUD' => ['symbol' => '$', 'key' => 'currency_name_aud'],
-    'BRL' => ['symbol' => 'R$', 'key' => 'currency_name_brl'],
-    'CAD' => ['symbol' => '$', 'key' => 'currency_name_cad'],
-    'CNY' => ['symbol' => '¥', 'key' => 'currency_name_cny'],
-    'HKD' => ['symbol' => 'HK$', 'key' => 'currency_name_hkd'],
-    'IDR' => ['symbol' => 'Rp', 'key' => 'currency_name_idr'],
-    'ILS' => ['symbol' => '₪', 'key' => 'currency_name_ils'],
-    'INR' => ['symbol' => '₹', 'key' => 'currency_name_inr'],
-    'KRW' => ['symbol' => '₩', 'key' => 'currency_name_krw'],
-    'MXN' => ['symbol' => 'Mex$', 'key' => 'currency_name_mxn'],
-    'MYR' => ['symbol' => 'RM', 'key' => 'currency_name_myr'],
-    'NZD' => ['symbol' => 'NZ$', 'key' => 'currency_name_nzd'],
-    'PHP' => ['symbol' => '₱', 'key' => 'currency_name_php'],
-    'SGD' => ['symbol' => 'S$', 'key' => 'currency_name_sgd'],
-    'THB' => ['symbol' => '฿', 'key' => 'currency_name_thb'],
-    'ZAR' => ['symbol' => 'R', 'key' => 'currency_name_zar'],
-    'UAH' => ['symbol' => '₴', 'key' => 'currency_name_uah'],
-    'TWD' => ['symbol' => 'NT$', 'key' => 'currency_name_twd'],
+    'EUR' => '€',
+    'USD' => '$',
+    'JPY' => '¥',
+    'BGN' => 'лв',
+    'CZK' => 'Kč',
+    'DKK' => 'kr',
+    'GBP' => '£',
+    'HUF' => 'Ft',
+    'PLN' => 'zł',
+    'RON' => 'lei',
+    'SEK' => 'kr',
+    'CHF' => 'Fr',
+    'ISK' => 'kr',
+    'NOK' => 'kr',
+    'RUB' => '₽',
+    'TRY' => '₺',
+    'AUD' => '$',
+    'BRL' => 'R$',
+    'CAD' => '$',
+    'CNY' => '¥',
+    'HKD' => 'HK$',
+    'IDR' => 'Rp',
+    'ILS' => '₪',
+    'INR' => '₹',
+    'KRW' => '₩',
+    'MXN' => 'Mex$',
+    'MYR' => 'RM',
+    'NZD' => 'NZ$',
+    'PHP' => '₱',
+    'SGD' => 'S$',
+    'THB' => '฿',
+    'ZAR' => 'R',
+    'UAH' => '₴',
+    'TWD' => 'NT$',
 ];
 
 /**
  * The currencies a new account starts with, in display order.
  *
- * The name is translated into the account's language at seed time and stored;
- * afterwards it is plain user data, renamed and edited freely, and a later
- * language switch never rewrites it — the same contract the categories keep.
- * The code and symbol are canonical and identical in every language.
+ * The name and symbol are resolved from Unicode CLDR into the account's
+ * language at seed time and stored; afterwards they are plain user data, renamed
+ * and edited freely, and a later language switch never rewrites them — the same
+ * contract the categories keep. The code is canonical and identical in every
+ * language.
+ *
+ * The historic Wallos symbol is passed as the fallback so that a currency CLDR
+ * gives no locale symbol for still shows a real symbol rather than its bare
+ * code.
  *
  * @param string $language
  * @return array[] each ['name' => string, 'symbol' => string, 'code' => string]
  */
 function wallos_default_currencies($language)
 {
-    $translations = wallos_translations($language);
-
     $currencies = [];
-    foreach (WALLOS_DEFAULT_CURRENCIES as $code => $currency) {
+    foreach (WALLOS_DEFAULT_CURRENCIES as $code => $fallbackSymbol) {
         $currencies[] = [
-            'name' => $translations[$currency['key']] ?? $currency['key'],
-            'symbol' => $currency['symbol'],
+            'name' => wallos_currency_name($code, $language),
+            'symbol' => wallos_currency_symbol($code, $language, $fallbackSymbol),
             'code' => $code,
         ];
     }

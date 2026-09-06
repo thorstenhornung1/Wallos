@@ -1,0 +1,1222 @@
+{
+    "ADP": {
+        "name": "Andorra Pezetası",
+        "symbol": null
+    },
+    "AED": {
+        "name": "Birleşik Arap Emirlikleri dirhemi",
+        "symbol": null
+    },
+    "AFA": {
+        "name": "Afganistan Afganisi (1927–2002)",
+        "symbol": null
+    },
+    "AFN": {
+        "name": "Afganistan afganisi",
+        "symbol": "؋"
+    },
+    "ALK": {
+        "name": "Arnavutluk Leki (1946–1965)",
+        "symbol": null
+    },
+    "ALL": {
+        "name": "Arnavutluk leki",
+        "symbol": null
+    },
+    "AMD": {
+        "name": "Ermenistan dramı",
+        "symbol": "֏"
+    },
+    "ANG": {
+        "name": "Hollanda Antilleri guldeni",
+        "symbol": null
+    },
+    "AOA": {
+        "name": "Angola kvanzası",
+        "symbol": "Kz"
+    },
+    "AOK": {
+        "name": "Angola Kvanzası (1977–1990)",
+        "symbol": null
+    },
+    "AON": {
+        "name": "Yeni Angola Kvanzası (1990–2000)",
+        "symbol": null
+    },
+    "AOR": {
+        "name": "Angola Kvanzası Reajustado (1995–1999)",
+        "symbol": null
+    },
+    "ARA": {
+        "name": "Arjantin Australi",
+        "symbol": null
+    },
+    "ARL": {
+        "name": "Arjantin Peso Leyi (1970–1983)",
+        "symbol": null
+    },
+    "ARM": {
+        "name": "Arjantin Pesosu (1881–1970)",
+        "symbol": null
+    },
+    "ARP": {
+        "name": "Arjantin Pezosu (1983–1985)",
+        "symbol": null
+    },
+    "ARS": {
+        "name": "Arjantin pesosu",
+        "symbol": "$"
+    },
+    "ATS": {
+        "name": "Avusturya Şilini",
+        "symbol": null
+    },
+    "AUD": {
+        "name": "Avustralya doları",
+        "symbol": "AU$"
+    },
+    "AWG": {
+        "name": "Aruba florini",
+        "symbol": null
+    },
+    "AZM": {
+        "name": "Azerbaycan Manatı (1993–2006)",
+        "symbol": null
+    },
+    "AZN": {
+        "name": "Azerbaycan manatı",
+        "symbol": "₼"
+    },
+    "BAD": {
+        "name": "Bosna Hersek Dinarı",
+        "symbol": null
+    },
+    "BAM": {
+        "name": "Konvertibl Bosna Hersek markı",
+        "symbol": "KM"
+    },
+    "BAN": {
+        "name": "Yeni Bosna Hersek Dinarı (1994–1997)",
+        "symbol": null
+    },
+    "BBD": {
+        "name": "Barbados doları",
+        "symbol": "$"
+    },
+    "BDT": {
+        "name": "Bangladeş takası",
+        "symbol": "৳"
+    },
+    "BEC": {
+        "name": "Belçika Frangı (konvertibl)",
+        "symbol": null
+    },
+    "BEF": {
+        "name": "Belçika Frangı",
+        "symbol": null
+    },
+    "BEL": {
+        "name": "Belçika Frangı (finansal)",
+        "symbol": null
+    },
+    "BGL": {
+        "name": "Bulgar Levası (Hard)",
+        "symbol": null
+    },
+    "BGM": {
+        "name": "Sosyalist Bulgaristan Levası",
+        "symbol": null
+    },
+    "BGN": {
+        "name": "Bulgar levası",
+        "symbol": null
+    },
+    "BGO": {
+        "name": "Bulgar Levası (1879–1952)",
+        "symbol": null
+    },
+    "BHD": {
+        "name": "Bahreyn dinarı",
+        "symbol": null
+    },
+    "BIF": {
+        "name": "Burundi frangı",
+        "symbol": null
+    },
+    "BMD": {
+        "name": "Bermuda doları",
+        "symbol": "$"
+    },
+    "BND": {
+        "name": "Brunei doları",
+        "symbol": "$"
+    },
+    "BOB": {
+        "name": "Bolivya bolivyanosu",
+        "symbol": "Bs"
+    },
+    "BOL": {
+        "name": "Bolivya Bolivyanosu (1863–1963)",
+        "symbol": null
+    },
+    "BOP": {
+        "name": "Bolivya Pezosu",
+        "symbol": null
+    },
+    "BOV": {
+        "name": "Bolivya Mvdolu",
+        "symbol": null
+    },
+    "BRB": {
+        "name": "Yeni Brezilya Kruzeirosu (1967–1986)",
+        "symbol": null
+    },
+    "BRC": {
+        "name": "Brezilya Kruzadosu",
+        "symbol": null
+    },
+    "BRE": {
+        "name": "Brezilya Kruzeirosu (1990–1993)",
+        "symbol": null
+    },
+    "BRL": {
+        "name": "Brezilya reali",
+        "symbol": "R$"
+    },
+    "BRN": {
+        "name": "Yeni Brezilya Kruzadosu",
+        "symbol": null
+    },
+    "BRR": {
+        "name": "Brezilya Kruzeirosu",
+        "symbol": null
+    },
+    "BRZ": {
+        "name": "Brezilya Kruzeirosu (1942–1967)",
+        "symbol": null
+    },
+    "BSD": {
+        "name": "Bahama doları",
+        "symbol": "$"
+    },
+    "BTN": {
+        "name": "Butan ngultrumu",
+        "symbol": null
+    },
+    "BUK": {
+        "name": "Burma Kyatı",
+        "symbol": null
+    },
+    "BWP": {
+        "name": "Botsvana pulası",
+        "symbol": "P"
+    },
+    "BYB": {
+        "name": "Yeni Beyaz Rusya Rublesi (1994–1999)",
+        "symbol": null
+    },
+    "BYN": {
+        "name": "Belarus rublesi",
+        "symbol": "р."
+    },
+    "BYR": {
+        "name": "Beyaz Rusya Rublesi (2000–2016)",
+        "symbol": null
+    },
+    "BZD": {
+        "name": "Belize doları",
+        "symbol": "$"
+    },
+    "CAD": {
+        "name": "Kanada doları",
+        "symbol": "CA$"
+    },
+    "CDF": {
+        "name": "Kongo frangı",
+        "symbol": null
+    },
+    "CHE": {
+        "name": "WIR Avrosu",
+        "symbol": null
+    },
+    "CHF": {
+        "name": "İsviçre frangı",
+        "symbol": null
+    },
+    "CHW": {
+        "name": "WIR Frangı",
+        "symbol": null
+    },
+    "CLE": {
+        "name": "Şili Esküdosu",
+        "symbol": null
+    },
+    "CLF": {
+        "name": "Şili Unidades de Fomento",
+        "symbol": null
+    },
+    "CLP": {
+        "name": "Şili pesosu",
+        "symbol": "$"
+    },
+    "CNH": {
+        "name": "Çin yuanı (offshore)",
+        "symbol": null
+    },
+    "CNX": {
+        "name": "Çin Halk Cumhuriyeti Merkez Bankası Doları",
+        "symbol": null
+    },
+    "CNY": {
+        "name": "Çin yuanı",
+        "symbol": "CN¥"
+    },
+    "COP": {
+        "name": "Kolombiya pesosu",
+        "symbol": "$"
+    },
+    "COU": {
+        "name": "Unidad de Valor Real",
+        "symbol": null
+    },
+    "CRC": {
+        "name": "Kosta Rika kolonu",
+        "symbol": "₡"
+    },
+    "CSD": {
+        "name": "Eski Sırbistan Dinarı",
+        "symbol": null
+    },
+    "CSK": {
+        "name": "Çekoslavak Korunası (Hard)",
+        "symbol": null
+    },
+    "CUC": {
+        "name": "Konvertibl Küba pesosu",
+        "symbol": "$"
+    },
+    "CUP": {
+        "name": "Küba pesosu",
+        "symbol": "$"
+    },
+    "CVE": {
+        "name": "Cape Verde esküdosu",
+        "symbol": null
+    },
+    "CYP": {
+        "name": "Güney Kıbrıs Lirası",
+        "symbol": null
+    },
+    "CZK": {
+        "name": "Çek korunası",
+        "symbol": "Kč"
+    },
+    "DDM": {
+        "name": "Doğu Alman Markı",
+        "symbol": null
+    },
+    "DEM": {
+        "name": "Alman Markı",
+        "symbol": null
+    },
+    "DJF": {
+        "name": "Cibuti frangı",
+        "symbol": null
+    },
+    "DKK": {
+        "name": "Danimarka kronu",
+        "symbol": "kr"
+    },
+    "DOP": {
+        "name": "Dominik pesosu",
+        "symbol": "$"
+    },
+    "DZD": {
+        "name": "Cezayir dinarı",
+        "symbol": null
+    },
+    "ECS": {
+        "name": "Ekvador Sukresi",
+        "symbol": null
+    },
+    "ECV": {
+        "name": "Ekvador Unidad de Valor Constante (UVC)",
+        "symbol": null
+    },
+    "EEK": {
+        "name": "Estonya Krunu",
+        "symbol": null
+    },
+    "EGP": {
+        "name": "Mısır lirası",
+        "symbol": "E£"
+    },
+    "ERN": {
+        "name": "Eritre nakfası",
+        "symbol": null
+    },
+    "ESA": {
+        "name": "İspanyol Pezetası (A hesabı)",
+        "symbol": null
+    },
+    "ESB": {
+        "name": "İspanyol Pezetası (konvertibl hesap)",
+        "symbol": null
+    },
+    "ESP": {
+        "name": "İspanyol Pezetası",
+        "symbol": "₧"
+    },
+    "ETB": {
+        "name": "Etiyopya birri",
+        "symbol": null
+    },
+    "EUR": {
+        "name": "Euro",
+        "symbol": "€"
+    },
+    "FIM": {
+        "name": "Fin Markkası",
+        "symbol": null
+    },
+    "FJD": {
+        "name": "Fiji doları",
+        "symbol": "$"
+    },
+    "FKP": {
+        "name": "Falkland Adaları lirası",
+        "symbol": "£"
+    },
+    "FRF": {
+        "name": "Fransız Frangı",
+        "symbol": null
+    },
+    "GBP": {
+        "name": "İngiliz sterlini",
+        "symbol": "£"
+    },
+    "GEK": {
+        "name": "Gürcistan Kupon Larisi",
+        "symbol": null
+    },
+    "GEL": {
+        "name": "Gürcistan larisi",
+        "symbol": "₾"
+    },
+    "GHC": {
+        "name": "Gana Sedisi (1979–2007)",
+        "symbol": null
+    },
+    "GHS": {
+        "name": "Gana sedisi",
+        "symbol": "GH₵"
+    },
+    "GIP": {
+        "name": "Cebelitarık lirası",
+        "symbol": "£"
+    },
+    "GMD": {
+        "name": "Gambiya dalasisi",
+        "symbol": null
+    },
+    "GNF": {
+        "name": "Gine frangı",
+        "symbol": "FG"
+    },
+    "GNS": {
+        "name": "Gine Sylisi",
+        "symbol": null
+    },
+    "GQE": {
+        "name": "Ekvator Ginesi Ekuelesi",
+        "symbol": null
+    },
+    "GRD": {
+        "name": "Yunan Drahmisi",
+        "symbol": null
+    },
+    "GTQ": {
+        "name": "Guatemala quetzalı",
+        "symbol": "Q"
+    },
+    "GWE": {
+        "name": "Portekiz Ginesi Esküdosu",
+        "symbol": null
+    },
+    "GWP": {
+        "name": "Gine-Bissau Pezosu",
+        "symbol": null
+    },
+    "GYD": {
+        "name": "Guyana doları",
+        "symbol": "$"
+    },
+    "HKD": {
+        "name": "Hong Kong doları",
+        "symbol": "HK$"
+    },
+    "HNL": {
+        "name": "Honduras lempirası",
+        "symbol": "L"
+    },
+    "HRD": {
+        "name": "Hırvatistan Dinarı",
+        "symbol": null
+    },
+    "HRK": {
+        "name": "Hırvatistan kunası",
+        "symbol": "kn"
+    },
+    "HTG": {
+        "name": "Haiti gurdu",
+        "symbol": null
+    },
+    "HUF": {
+        "name": "Macar forinti",
+        "symbol": "Ft"
+    },
+    "IDR": {
+        "name": "Endonezya rupisi",
+        "symbol": "Rp"
+    },
+    "IEP": {
+        "name": "İrlanda Lirası",
+        "symbol": null
+    },
+    "ILP": {
+        "name": "İsrail Lirası",
+        "symbol": null
+    },
+    "ILR": {
+        "name": "İsrail Şekeli (1980–1985)",
+        "symbol": null
+    },
+    "ILS": {
+        "name": "Yeni İsrail şekeli",
+        "symbol": "₪"
+    },
+    "INR": {
+        "name": "Hindistan rupisi",
+        "symbol": "₹"
+    },
+    "IQD": {
+        "name": "Irak dinarı",
+        "symbol": null
+    },
+    "IRR": {
+        "name": "İran riyali",
+        "symbol": null
+    },
+    "ISJ": {
+        "name": "İzlanda Kronu (1918–1981)",
+        "symbol": null
+    },
+    "ISK": {
+        "name": "İzlanda kronu",
+        "symbol": "kr"
+    },
+    "ITL": {
+        "name": "İtalyan Lireti",
+        "symbol": null
+    },
+    "JMD": {
+        "name": "Jamaika doları",
+        "symbol": "$"
+    },
+    "JOD": {
+        "name": "Ürdün dinarı",
+        "symbol": null
+    },
+    "JPY": {
+        "name": "Japon yeni",
+        "symbol": "¥"
+    },
+    "KES": {
+        "name": "Kenya şilini",
+        "symbol": null
+    },
+    "KGS": {
+        "name": "Kırgızistan somu",
+        "symbol": "⃀"
+    },
+    "KHR": {
+        "name": "Kamboçya rieli",
+        "symbol": "៛"
+    },
+    "KMF": {
+        "name": "Komorlar frangı",
+        "symbol": "CF"
+    },
+    "KPW": {
+        "name": "Kuzey Kore wonu",
+        "symbol": "₩"
+    },
+    "KRH": {
+        "name": "Güney Kore Hwanı (1953–1962)",
+        "symbol": null
+    },
+    "KRO": {
+        "name": "Güney Kore Wonu (1945–1953)",
+        "symbol": null
+    },
+    "KRW": {
+        "name": "Güney Kore wonu",
+        "symbol": "₩"
+    },
+    "KWD": {
+        "name": "Kuveyt dinarı",
+        "symbol": null
+    },
+    "KYD": {
+        "name": "Cayman Adaları doları",
+        "symbol": "$"
+    },
+    "KZT": {
+        "name": "Kazakistan tengesi",
+        "symbol": "₸"
+    },
+    "LAK": {
+        "name": "Laos kipi",
+        "symbol": "₭"
+    },
+    "LBP": {
+        "name": "Lübnan lirası",
+        "symbol": "L£"
+    },
+    "LKR": {
+        "name": "Sri Lanka rupisi",
+        "symbol": "Rs"
+    },
+    "LRD": {
+        "name": "Liberya doları",
+        "symbol": "$"
+    },
+    "LSL": {
+        "name": "Lesotho lotisi",
+        "symbol": null
+    },
+    "LTL": {
+        "name": "Litvanya Litası",
+        "symbol": "Lt"
+    },
+    "LTT": {
+        "name": "Litvanya Talonu",
+        "symbol": null
+    },
+    "LUC": {
+        "name": "Konvertibl Lüksemburg Frangı",
+        "symbol": null
+    },
+    "LUF": {
+        "name": "Lüksemburg Frangı",
+        "symbol": null
+    },
+    "LUL": {
+        "name": "Finansal Lüksemburg Frangı",
+        "symbol": null
+    },
+    "LVL": {
+        "name": "Letonya Latı",
+        "symbol": "Ls"
+    },
+    "LVR": {
+        "name": "Letonya Rublesi",
+        "symbol": null
+    },
+    "LYD": {
+        "name": "Libya dinarı",
+        "symbol": null
+    },
+    "MAD": {
+        "name": "Fas dirhemi",
+        "symbol": null
+    },
+    "MAF": {
+        "name": "Fas Frangı",
+        "symbol": null
+    },
+    "MCF": {
+        "name": "Monako Frangı",
+        "symbol": null
+    },
+    "MDC": {
+        "name": "Moldova Kuponu",
+        "symbol": null
+    },
+    "MDL": {
+        "name": "Moldova leyi",
+        "symbol": null
+    },
+    "MGA": {
+        "name": "Madagaskar ariarisi",
+        "symbol": "Ar"
+    },
+    "MGF": {
+        "name": "Madagaskar Frangı",
+        "symbol": null
+    },
+    "MKD": {
+        "name": "Makedonya dinarı",
+        "symbol": null
+    },
+    "MKN": {
+        "name": "Makedonya Dinarı (1992–1993)",
+        "symbol": null
+    },
+    "MLF": {
+        "name": "Mali Frangı",
+        "symbol": null
+    },
+    "MMK": {
+        "name": "Myanmar kyatı",
+        "symbol": "K"
+    },
+    "MNT": {
+        "name": "Moğolistan tugriki",
+        "symbol": "₮"
+    },
+    "MOP": {
+        "name": "Makao patakası",
+        "symbol": null
+    },
+    "MRO": {
+        "name": "Moritanya Ugiyası (1973–2017)",
+        "symbol": null
+    },
+    "MRU": {
+        "name": "Moritanya ugiyası",
+        "symbol": null
+    },
+    "MTL": {
+        "name": "Malta Lirası",
+        "symbol": null
+    },
+    "MTP": {
+        "name": "Malta Sterlini",
+        "symbol": null
+    },
+    "MUR": {
+        "name": "Mauritius rupisi",
+        "symbol": "Rs"
+    },
+    "MVP": {
+        "name": "Maldiv Rupisi",
+        "symbol": null
+    },
+    "MVR": {
+        "name": "Maldiv rufiyaası",
+        "symbol": null
+    },
+    "MWK": {
+        "name": "Malavi kvaçası",
+        "symbol": null
+    },
+    "MXN": {
+        "name": "Meksika pesosu",
+        "symbol": "MX$"
+    },
+    "MXP": {
+        "name": "Gümüş Meksika Pezosu (1861–1992)",
+        "symbol": null
+    },
+    "MXV": {
+        "name": "Meksika Unidad de Inversion (UDI)",
+        "symbol": null
+    },
+    "MYR": {
+        "name": "Malezya ringgiti",
+        "symbol": "RM"
+    },
+    "MZE": {
+        "name": "Mozambik Esküdosu",
+        "symbol": null
+    },
+    "MZM": {
+        "name": "Eski Mozambik Metikali",
+        "symbol": null
+    },
+    "MZN": {
+        "name": "Mozambik metikali",
+        "symbol": null
+    },
+    "NAD": {
+        "name": "Namibya doları",
+        "symbol": "$"
+    },
+    "NGN": {
+        "name": "Nijerya nairası",
+        "symbol": "₦"
+    },
+    "NIC": {
+        "name": "Nikaragua Kordobası (1988–1991)",
+        "symbol": null
+    },
+    "NIO": {
+        "name": "Nikaragua kordobası",
+        "symbol": "C$"
+    },
+    "NLG": {
+        "name": "Hollanda Florini",
+        "symbol": null
+    },
+    "NOK": {
+        "name": "Norveç kronu",
+        "symbol": "kr"
+    },
+    "NPR": {
+        "name": "Nepal rupisi",
+        "symbol": "Rs"
+    },
+    "NZD": {
+        "name": "Yeni Zelanda doları",
+        "symbol": "NZ$"
+    },
+    "OMR": {
+        "name": "Umman riyali",
+        "symbol": null
+    },
+    "PAB": {
+        "name": "Panama balboası",
+        "symbol": null
+    },
+    "PEI": {
+        "name": "Peru İnti",
+        "symbol": null
+    },
+    "PEN": {
+        "name": "Peru solü",
+        "symbol": null
+    },
+    "PES": {
+        "name": "Peru Solü (1863–1965)",
+        "symbol": null
+    },
+    "PGK": {
+        "name": "Papua Yeni Gine kinası",
+        "symbol": null
+    },
+    "PHP": {
+        "name": "Filipinler pesosu",
+        "symbol": null
+    },
+    "PKR": {
+        "name": "Pakistan rupisi",
+        "symbol": "Rs"
+    },
+    "PLN": {
+        "name": "Polonya zlotisi",
+        "symbol": "zł"
+    },
+    "PLZ": {
+        "name": "Polonya Zlotisi (1950–1995)",
+        "symbol": null
+    },
+    "PTE": {
+        "name": "Portekiz Esküdosu",
+        "symbol": null
+    },
+    "PYG": {
+        "name": "Paraguay guaranisi",
+        "symbol": "₲"
+    },
+    "QAR": {
+        "name": "Katar riyali",
+        "symbol": null
+    },
+    "RHD": {
+        "name": "Rodezya Doları",
+        "symbol": null
+    },
+    "ROL": {
+        "name": "Eski Romen Leyi",
+        "symbol": null
+    },
+    "RON": {
+        "name": "Romen leyi",
+        "symbol": "L"
+    },
+    "RSD": {
+        "name": "Sırp dinarı",
+        "symbol": null
+    },
+    "RUB": {
+        "name": "Rus rublesi",
+        "symbol": "₽"
+    },
+    "RUR": {
+        "name": "Rus Rublesi (1991–1998)",
+        "symbol": "р."
+    },
+    "RWF": {
+        "name": "Ruanda frangı",
+        "symbol": "RF"
+    },
+    "SAR": {
+        "name": "Suudi Arabistan riyali",
+        "symbol": null
+    },
+    "SBD": {
+        "name": "Solomon Adaları doları",
+        "symbol": "$"
+    },
+    "SCR": {
+        "name": "Seyşeller rupisi",
+        "symbol": null
+    },
+    "SDD": {
+        "name": "Eski Sudan Dinarı",
+        "symbol": null
+    },
+    "SDG": {
+        "name": "Sudan lirası",
+        "symbol": null
+    },
+    "SDP": {
+        "name": "Eski Sudan Lirası",
+        "symbol": null
+    },
+    "SEK": {
+        "name": "İsveç kronu",
+        "symbol": "kr"
+    },
+    "SGD": {
+        "name": "Singapur doları",
+        "symbol": "$"
+    },
+    "SHP": {
+        "name": "Saint Helena lirası",
+        "symbol": "£"
+    },
+    "SIT": {
+        "name": "Slovenya Toları",
+        "symbol": null
+    },
+    "SKK": {
+        "name": "Slovak Korunası",
+        "symbol": null
+    },
+    "SLE": {
+        "name": "Sierra Leone leonesi",
+        "symbol": null
+    },
+    "SLL": {
+        "name": "Sierra Leone leonesi (1964–2022)",
+        "symbol": null
+    },
+    "SOS": {
+        "name": "Somali şilini",
+        "symbol": null
+    },
+    "SRD": {
+        "name": "Surinam doları",
+        "symbol": "$"
+    },
+    "SRG": {
+        "name": "Surinam Guldeni",
+        "symbol": null
+    },
+    "SSP": {
+        "name": "Güney Sudan lirası",
+        "symbol": "£"
+    },
+    "STD": {
+        "name": "São Tomé ve Príncipe Dobrası (1977–2017)",
+        "symbol": null
+    },
+    "STN": {
+        "name": "Sao Tome ve Principe dobrası",
+        "symbol": "Db"
+    },
+    "SUR": {
+        "name": "Sovyet Rublesi",
+        "symbol": null
+    },
+    "SVC": {
+        "name": "El Salvador Kolonu",
+        "symbol": null
+    },
+    "SYP": {
+        "name": "Suriye lirası",
+        "symbol": "£"
+    },
+    "SZL": {
+        "name": "Svaziland lilangenisi",
+        "symbol": null
+    },
+    "THB": {
+        "name": "Tayland bahtı",
+        "symbol": "฿"
+    },
+    "TJR": {
+        "name": "Tacikistan Rublesi",
+        "symbol": null
+    },
+    "TJS": {
+        "name": "Tacikistan somonisi",
+        "symbol": null
+    },
+    "TMM": {
+        "name": "Türkmenistan Manatı (1993–2009)",
+        "symbol": null
+    },
+    "TMT": {
+        "name": "Türkmenistan manatı",
+        "symbol": null
+    },
+    "TND": {
+        "name": "Tunus dinarı",
+        "symbol": null
+    },
+    "TOP": {
+        "name": "Tonga paʻangası",
+        "symbol": "T$"
+    },
+    "TPE": {
+        "name": "Timor Esküdosu",
+        "symbol": null
+    },
+    "TRL": {
+        "name": "Eski Türk Lirası",
+        "symbol": null
+    },
+    "TRY": {
+        "name": "Türk lirası",
+        "symbol": "₺"
+    },
+    "TTD": {
+        "name": "Trinidad ve Tobago doları",
+        "symbol": "$"
+    },
+    "TWD": {
+        "name": "Yeni Tayvan doları",
+        "symbol": "NT$"
+    },
+    "TZS": {
+        "name": "Tanzanya şilini",
+        "symbol": null
+    },
+    "UAH": {
+        "name": "Ukrayna grivnası",
+        "symbol": "₴"
+    },
+    "UAK": {
+        "name": "Ukrayna Karbovanetz",
+        "symbol": null
+    },
+    "UGS": {
+        "name": "Uganda Şilini (1966–1987)",
+        "symbol": null
+    },
+    "UGX": {
+        "name": "Uganda şilini",
+        "symbol": null
+    },
+    "USD": {
+        "name": "ABD doları",
+        "symbol": "$"
+    },
+    "USN": {
+        "name": "ABD Doları (Ertesi gün)",
+        "symbol": null
+    },
+    "USS": {
+        "name": "ABD Doları (Aynı gün)",
+        "symbol": null
+    },
+    "UYI": {
+        "name": "Uruguay Peso en Unidades Indexadas",
+        "symbol": null
+    },
+    "UYP": {
+        "name": "Uruguay Pezosu (1975–1993)",
+        "symbol": null
+    },
+    "UYU": {
+        "name": "Uruguay pesosu",
+        "symbol": "$"
+    },
+    "UZS": {
+        "name": "Özbekistan somu",
+        "symbol": null
+    },
+    "VEB": {
+        "name": "Venezuela Bolivarı (1871–2008)",
+        "symbol": null
+    },
+    "VEF": {
+        "name": "Venezuela Bolivarı (2008–2018)",
+        "symbol": "Bs"
+    },
+    "VES": {
+        "name": "Venezuela bolivarı",
+        "symbol": null
+    },
+    "VND": {
+        "name": "Vietnam dongu",
+        "symbol": "₫"
+    },
+    "VNN": {
+        "name": "Vietnam Dongu (1978–1985)",
+        "symbol": null
+    },
+    "VUV": {
+        "name": "Vanuatu vatusu",
+        "symbol": null
+    },
+    "WST": {
+        "name": "Samoa talası",
+        "symbol": null
+    },
+    "XAF": {
+        "name": "Orta Afrika CFA frangı",
+        "symbol": "FCFA"
+    },
+    "XAG": {
+        "name": "Gümüş",
+        "symbol": null
+    },
+    "XAU": {
+        "name": "Altın",
+        "symbol": null
+    },
+    "XBA": {
+        "name": "Birleşik Avrupa Birimi",
+        "symbol": null
+    },
+    "XBB": {
+        "name": "Avrupa Para Birimi (EMU)",
+        "symbol": null
+    },
+    "XBC": {
+        "name": "Avrupa Hesap Birimi (XBC)",
+        "symbol": null
+    },
+    "XBD": {
+        "name": "Avrupa Hesap Birimi (XBD)",
+        "symbol": null
+    },
+    "XCD": {
+        "name": "Doğu Karayip doları",
+        "symbol": "EC$"
+    },
+    "XCG": {
+        "name": "Karayip guldeni",
+        "symbol": "Cg."
+    },
+    "XDR": {
+        "name": "Özel Çekme Hakkı (SDR)",
+        "symbol": null
+    },
+    "XEU": {
+        "name": "Avrupa Para Birimi",
+        "symbol": null
+    },
+    "XFO": {
+        "name": "Fransız Altın Frangı",
+        "symbol": null
+    },
+    "XFU": {
+        "name": "Fransız UIC-Frangı",
+        "symbol": null
+    },
+    "XOF": {
+        "name": "Batı Afrika CFA frangı",
+        "symbol": "F CFA"
+    },
+    "XPD": {
+        "name": "Paladyum",
+        "symbol": null
+    },
+    "XPF": {
+        "name": "CFP frangı",
+        "symbol": "CFPF"
+    },
+    "XPT": {
+        "name": "Platin",
+        "symbol": null
+    },
+    "XRE": {
+        "name": "RINET Fonları",
+        "symbol": null
+    },
+    "XSU": {
+        "name": "Sucre",
+        "symbol": null
+    },
+    "XTS": {
+        "name": "Test Para Birimi Kodu",
+        "symbol": null
+    },
+    "XUA": {
+        "name": "ADB Hesap Birimi",
+        "symbol": null
+    },
+    "XXX": {
+        "name": "Bilinmeyen Para Birimi",
+        "symbol": "¤"
+    },
+    "YDD": {
+        "name": "Yemen Dinarı",
+        "symbol": null
+    },
+    "YER": {
+        "name": "Yemen riyali",
+        "symbol": null
+    },
+    "YUD": {
+        "name": "Yugoslav Dinarı (Hard)",
+        "symbol": null
+    },
+    "YUM": {
+        "name": "Yeni Yugoslav Dinarı",
+        "symbol": null
+    },
+    "YUN": {
+        "name": "Konvertibl Yugoslav Dinarı",
+        "symbol": null
+    },
+    "YUR": {
+        "name": "İyileştirilmiş Yugoslav Dinarı (1992–1993)",
+        "symbol": null
+    },
+    "ZAL": {
+        "name": "Güney Afrika Randı (finansal)",
+        "symbol": null
+    },
+    "ZAR": {
+        "name": "Güney Afrika randı",
+        "symbol": "R"
+    },
+    "ZMK": {
+        "name": "Zambiya Kvaçası (1968–2012)",
+        "symbol": null
+    },
+    "ZMW": {
+        "name": "Zambiya kvaçası",
+        "symbol": "ZK"
+    },
+    "ZRN": {
+        "name": "Yeni Zaire Zairesi",
+        "symbol": null
+    },
+    "ZRZ": {
+        "name": "Zaire Zairesi",
+        "symbol": null
+    },
+    "ZWD": {
+        "name": "Zimbabve Doları",
+        "symbol": null
+    },
+    "ZWG": {
+        "name": "Zimbabve altını",
+        "symbol": null
+    },
+    "ZWL": {
+        "name": "Zimbabve Doları (2009)",
+        "symbol": null
+    },
+    "ZWR": {
+        "name": "Zimbabve Doları (2008)",
+        "symbol": null
+    }
+}

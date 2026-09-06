@@ -1,0 +1,1122 @@
+{
+    "ADP": {
+        "name": "andorska peseta",
+        "symbol": null
+    },
+    "AED": {
+        "name": "dirham Združenih arabskih emiratov",
+        "symbol": null
+    },
+    "AFA": {
+        "name": "stari afganistanski afgani (1927–2002)",
+        "symbol": null
+    },
+    "AFN": {
+        "name": "afgani",
+        "symbol": "؋"
+    },
+    "ALL": {
+        "name": "albanski lek",
+        "symbol": null
+    },
+    "AMD": {
+        "name": "armenski dram",
+        "symbol": "֏"
+    },
+    "ANG": {
+        "name": "nizozemsko-antilski gulden",
+        "symbol": null
+    },
+    "AOA": {
+        "name": "angolska kvanza",
+        "symbol": "Kz"
+    },
+    "AOK": {
+        "name": "stara angolska kvanza (1977–1990)",
+        "symbol": null
+    },
+    "AON": {
+        "name": "angolska nova kvanza (1990–2000)",
+        "symbol": null
+    },
+    "AOR": {
+        "name": "konvertibilna angolska kvanza (1995–1999)",
+        "symbol": null
+    },
+    "ARA": {
+        "name": "argentinski avstral",
+        "symbol": null
+    },
+    "ARP": {
+        "name": "argentinski peso (1983–1985)",
+        "symbol": null
+    },
+    "ARS": {
+        "name": "argentinski peso",
+        "symbol": "$"
+    },
+    "ATS": {
+        "name": "avstrijski šiling",
+        "symbol": null
+    },
+    "AUD": {
+        "name": "avstralski dolar",
+        "symbol": null
+    },
+    "AWG": {
+        "name": "arubski florin",
+        "symbol": null
+    },
+    "AZM": {
+        "name": "stari azerbajdžanski manat (1993–2006)",
+        "symbol": null
+    },
+    "AZN": {
+        "name": "azerbajdžanski manat",
+        "symbol": "₼"
+    },
+    "BAD": {
+        "name": "bosansko-hercegovski dinar",
+        "symbol": null
+    },
+    "BAM": {
+        "name": "bosansko-hercegovska konvertibilna marka",
+        "symbol": "KM"
+    },
+    "BBD": {
+        "name": "barbadoški dolar",
+        "symbol": "$"
+    },
+    "BDT": {
+        "name": "bangladeška taka",
+        "symbol": "৳"
+    },
+    "BEC": {
+        "name": "belgijski konvertibilni frank",
+        "symbol": null
+    },
+    "BEF": {
+        "name": "belgijski frank",
+        "symbol": null
+    },
+    "BEL": {
+        "name": "belgijski finančni frank",
+        "symbol": null
+    },
+    "BGL": {
+        "name": "stari bolgarski lev",
+        "symbol": null
+    },
+    "BGN": {
+        "name": "bolgarski lev",
+        "symbol": null
+    },
+    "BHD": {
+        "name": "bahrajnski dinar",
+        "symbol": null
+    },
+    "BIF": {
+        "name": "burundski frank",
+        "symbol": null
+    },
+    "BMD": {
+        "name": "bermudski dolar",
+        "symbol": "$"
+    },
+    "BND": {
+        "name": "brunejski dolar",
+        "symbol": "$"
+    },
+    "BOB": {
+        "name": "bolivijski boliviano",
+        "symbol": "Bs"
+    },
+    "BOP": {
+        "name": "bolivijski peso",
+        "symbol": null
+    },
+    "BOV": {
+        "name": "bolivijski mvdol",
+        "symbol": null
+    },
+    "BRB": {
+        "name": "brazilski novi kruzeiro (1967–1986)",
+        "symbol": null
+    },
+    "BRC": {
+        "name": "brazilski kruzado",
+        "symbol": null
+    },
+    "BRE": {
+        "name": "stari brazilski kruzeiro (1990–1993)",
+        "symbol": null
+    },
+    "BRL": {
+        "name": "brazilski real",
+        "symbol": null
+    },
+    "BRN": {
+        "name": "novi brazilski kruzado",
+        "symbol": null
+    },
+    "BRR": {
+        "name": "brazilski kruzeiro",
+        "symbol": null
+    },
+    "BSD": {
+        "name": "bahamski dolar",
+        "symbol": "$"
+    },
+    "BTN": {
+        "name": "butanski ngultrum",
+        "symbol": null
+    },
+    "BUK": {
+        "name": "burmanski kjat",
+        "symbol": null
+    },
+    "BWP": {
+        "name": "bocvanska pula",
+        "symbol": "P"
+    },
+    "BYB": {
+        "name": "beloruski novi rubelj (1994–1999)",
+        "symbol": null
+    },
+    "BYN": {
+        "name": "beloruski rubelj",
+        "symbol": "р."
+    },
+    "BYR": {
+        "name": "beloruski rubelj (2000–2016)",
+        "symbol": null
+    },
+    "BZD": {
+        "name": "belizejski dolar",
+        "symbol": "$"
+    },
+    "CAD": {
+        "name": "kanadski dolar",
+        "symbol": null
+    },
+    "CDF": {
+        "name": "kongovski frank",
+        "symbol": null
+    },
+    "CHE": {
+        "name": "evro WIR",
+        "symbol": null
+    },
+    "CHF": {
+        "name": "švicarski frank",
+        "symbol": null
+    },
+    "CHW": {
+        "name": "frank WIR",
+        "symbol": null
+    },
+    "CLF": {
+        "name": "čilski unidades de fomento",
+        "symbol": null
+    },
+    "CLP": {
+        "name": "čilski peso",
+        "symbol": "$"
+    },
+    "CNH": {
+        "name": "kitajski juan (offshore)",
+        "symbol": null
+    },
+    "CNY": {
+        "name": "kitajski juan",
+        "symbol": "CN¥"
+    },
+    "COP": {
+        "name": "kolumbijski peso",
+        "symbol": "$"
+    },
+    "COU": {
+        "name": "kolumbijska enota realne vrednosti",
+        "symbol": null
+    },
+    "CRC": {
+        "name": "kostariški kolon",
+        "symbol": "₡"
+    },
+    "CSD": {
+        "name": "stari srbski dinar",
+        "symbol": null
+    },
+    "CSK": {
+        "name": "češkoslovaška krona",
+        "symbol": null
+    },
+    "CUC": {
+        "name": "kubanski konvertibilni peso",
+        "symbol": "$"
+    },
+    "CUP": {
+        "name": "kubanski peso",
+        "symbol": "$"
+    },
+    "CVE": {
+        "name": "zelenortski eskudo",
+        "symbol": null
+    },
+    "CYP": {
+        "name": "ciprski funt",
+        "symbol": null
+    },
+    "CZK": {
+        "name": "češka krona",
+        "symbol": "Kč"
+    },
+    "DDM": {
+        "name": "vzhodnonemška marka",
+        "symbol": null
+    },
+    "DEM": {
+        "name": "nemška marka",
+        "symbol": null
+    },
+    "DJF": {
+        "name": "džibutski frank",
+        "symbol": null
+    },
+    "DKK": {
+        "name": "danska krona",
+        "symbol": "kr"
+    },
+    "DOP": {
+        "name": "dominikanski peso",
+        "symbol": "$"
+    },
+    "DZD": {
+        "name": "alžirski dinar",
+        "symbol": null
+    },
+    "ECS": {
+        "name": "ekvadorski sukre",
+        "symbol": null
+    },
+    "ECV": {
+        "name": "ekvadorska enota realne vrednosti (UVC)",
+        "symbol": null
+    },
+    "EEK": {
+        "name": "estonska krona",
+        "symbol": null
+    },
+    "EGP": {
+        "name": "egiptovski funt",
+        "symbol": "E£"
+    },
+    "ERN": {
+        "name": "eritrejska nakfa",
+        "symbol": null
+    },
+    "ESA": {
+        "name": "španska pezeta (račun A)",
+        "symbol": null
+    },
+    "ESB": {
+        "name": "španska pezeta (račun B)",
+        "symbol": null
+    },
+    "ESP": {
+        "name": "španska pezeta",
+        "symbol": "₧"
+    },
+    "ETB": {
+        "name": "etiopski bir",
+        "symbol": null
+    },
+    "EUR": {
+        "name": "evro",
+        "symbol": "€"
+    },
+    "FIM": {
+        "name": "finska marka",
+        "symbol": null
+    },
+    "FJD": {
+        "name": "fidžijski dolar",
+        "symbol": "$"
+    },
+    "FKP": {
+        "name": "falklandski funt",
+        "symbol": "£"
+    },
+    "FRF": {
+        "name": "francoski frank",
+        "symbol": null
+    },
+    "GBP": {
+        "name": "britanski funt",
+        "symbol": null
+    },
+    "GEK": {
+        "name": "gruzijski bon lari",
+        "symbol": null
+    },
+    "GEL": {
+        "name": "gruzijski lari",
+        "symbol": "₾"
+    },
+    "GHC": {
+        "name": "stari ganski cedi (1979–2007)",
+        "symbol": null
+    },
+    "GHS": {
+        "name": "ganski cedi",
+        "symbol": "GH₵"
+    },
+    "GIP": {
+        "name": "gibraltarski funt",
+        "symbol": "£"
+    },
+    "GMD": {
+        "name": "gambijski dalasi",
+        "symbol": null
+    },
+    "GNF": {
+        "name": "gvinejski frank",
+        "symbol": "FG"
+    },
+    "GNS": {
+        "name": "gvinejski sili",
+        "symbol": null
+    },
+    "GQE": {
+        "name": "ekwele Ekvatorialne Gvineje",
+        "symbol": null
+    },
+    "GRD": {
+        "name": "grška drahma",
+        "symbol": null
+    },
+    "GTQ": {
+        "name": "gvatemalski kecal",
+        "symbol": "Q"
+    },
+    "GWE": {
+        "name": "eskudo Portugalske Gvineje",
+        "symbol": null
+    },
+    "GWP": {
+        "name": "peso Gvineje Bissau",
+        "symbol": null
+    },
+    "GYD": {
+        "name": "gvajanski dolar",
+        "symbol": "$"
+    },
+    "HKD": {
+        "name": "hongkonški dolar",
+        "symbol": "HK$"
+    },
+    "HNL": {
+        "name": "honduraška lempira",
+        "symbol": "L"
+    },
+    "HRD": {
+        "name": "hrvaški dinar",
+        "symbol": null
+    },
+    "HRK": {
+        "name": "hrvaška kuna",
+        "symbol": "kn"
+    },
+    "HTG": {
+        "name": "haitijski gurd",
+        "symbol": null
+    },
+    "HUF": {
+        "name": "madžarski forint",
+        "symbol": "Ft"
+    },
+    "IDR": {
+        "name": "indonezijska rupija",
+        "symbol": "Rp"
+    },
+    "IEP": {
+        "name": "irski funt",
+        "symbol": null
+    },
+    "ILP": {
+        "name": "izraelski funt",
+        "symbol": null
+    },
+    "ILS": {
+        "name": "izraelski šekel",
+        "symbol": "₪"
+    },
+    "INR": {
+        "name": "indijska rupija",
+        "symbol": "₹"
+    },
+    "IQD": {
+        "name": "iraški dinar",
+        "symbol": null
+    },
+    "IRR": {
+        "name": "iranski rial",
+        "symbol": null
+    },
+    "ISK": {
+        "name": "islandska krona",
+        "symbol": "kr"
+    },
+    "ITL": {
+        "name": "italijanska lira",
+        "symbol": null
+    },
+    "JMD": {
+        "name": "jamajški dolar",
+        "symbol": "$"
+    },
+    "JOD": {
+        "name": "jordanski dinar",
+        "symbol": null
+    },
+    "JPY": {
+        "name": "japonski jen",
+        "symbol": "¥"
+    },
+    "KES": {
+        "name": "kenijski šiling",
+        "symbol": null
+    },
+    "KGS": {
+        "name": "kirgiški som",
+        "symbol": "⃀"
+    },
+    "KHR": {
+        "name": "kamboški riel",
+        "symbol": "៛"
+    },
+    "KMF": {
+        "name": "komorski frank",
+        "symbol": "CF"
+    },
+    "KPW": {
+        "name": "severnokorejski von",
+        "symbol": "₩"
+    },
+    "KRW": {
+        "name": "južnokorejski von",
+        "symbol": "₩"
+    },
+    "KWD": {
+        "name": "kuvajtski dinar",
+        "symbol": null
+    },
+    "KYD": {
+        "name": "kajmanski dolar",
+        "symbol": "$"
+    },
+    "KZT": {
+        "name": "kazahstanski tenge",
+        "symbol": "₸"
+    },
+    "LAK": {
+        "name": "laoški kip",
+        "symbol": "₭"
+    },
+    "LBP": {
+        "name": "libanonski funt",
+        "symbol": "L£"
+    },
+    "LKR": {
+        "name": "šrilanška rupija",
+        "symbol": "Rs"
+    },
+    "LRD": {
+        "name": "liberijski dolar",
+        "symbol": "$"
+    },
+    "LSL": {
+        "name": "lesotski loti",
+        "symbol": null
+    },
+    "LTL": {
+        "name": "litovski litas",
+        "symbol": "Lt"
+    },
+    "LTT": {
+        "name": "litvanski litas",
+        "symbol": null
+    },
+    "LUC": {
+        "name": "luksemburški konvertibilni frank",
+        "symbol": null
+    },
+    "LUF": {
+        "name": "luksemburški frank",
+        "symbol": null
+    },
+    "LUL": {
+        "name": "luksemburški finančni frank",
+        "symbol": null
+    },
+    "LVL": {
+        "name": "latvijski lats",
+        "symbol": "Ls"
+    },
+    "LVR": {
+        "name": "latvijski rubelj",
+        "symbol": null
+    },
+    "LYD": {
+        "name": "libijski dinar",
+        "symbol": null
+    },
+    "MAD": {
+        "name": "maroški dirham",
+        "symbol": null
+    },
+    "MAF": {
+        "name": "maroški frank",
+        "symbol": null
+    },
+    "MDL": {
+        "name": "moldavski lev",
+        "symbol": null
+    },
+    "MGA": {
+        "name": "madagaskarski ariari",
+        "symbol": "Ar"
+    },
+    "MGF": {
+        "name": "malgaški frank",
+        "symbol": null
+    },
+    "MKD": {
+        "name": "makedonski denar",
+        "symbol": null
+    },
+    "MLF": {
+        "name": "malijski frank",
+        "symbol": null
+    },
+    "MMK": {
+        "name": "mjanmarski kjat",
+        "symbol": "K"
+    },
+    "MNT": {
+        "name": "mongolski tugrik",
+        "symbol": "₮"
+    },
+    "MOP": {
+        "name": "macajska pataka",
+        "symbol": null
+    },
+    "MRO": {
+        "name": "mavretanska uguija (1973–2017)",
+        "symbol": null
+    },
+    "MRU": {
+        "name": "mavretanska uguija",
+        "symbol": null
+    },
+    "MTL": {
+        "name": "malteška lira",
+        "symbol": null
+    },
+    "MTP": {
+        "name": "malteški funt",
+        "symbol": null
+    },
+    "MUR": {
+        "name": "mavricijska rupija",
+        "symbol": "Rs"
+    },
+    "MVR": {
+        "name": "maldivska rufija",
+        "symbol": null
+    },
+    "MWK": {
+        "name": "malavijska kvača",
+        "symbol": null
+    },
+    "MXN": {
+        "name": "mehiški peso",
+        "symbol": null
+    },
+    "MXP": {
+        "name": "mehiški srebrni peso (1861–1992)",
+        "symbol": null
+    },
+    "MXV": {
+        "name": "mehiška inverzna enota (UDI)",
+        "symbol": null
+    },
+    "MYR": {
+        "name": "malezijski ringit",
+        "symbol": "RM"
+    },
+    "MZE": {
+        "name": "mozambiški eskudo",
+        "symbol": null
+    },
+    "MZM": {
+        "name": "stari mozambiški metikal",
+        "symbol": null
+    },
+    "MZN": {
+        "name": "mozambiški metikal",
+        "symbol": null
+    },
+    "NAD": {
+        "name": "namibijski dolar",
+        "symbol": "$"
+    },
+    "NGN": {
+        "name": "nigerijska naira",
+        "symbol": "₦"
+    },
+    "NIC": {
+        "name": "nikaraška kordova",
+        "symbol": null
+    },
+    "NIO": {
+        "name": "nikaragovska kordova",
+        "symbol": "C$"
+    },
+    "NLG": {
+        "name": "nizozemski gulden",
+        "symbol": null
+    },
+    "NOK": {
+        "name": "norveška krona",
+        "symbol": "kr"
+    },
+    "NPR": {
+        "name": "nepalska rupija",
+        "symbol": "Rs"
+    },
+    "NZD": {
+        "name": "novozelandski dolar",
+        "symbol": null
+    },
+    "OMR": {
+        "name": "omanski rial",
+        "symbol": null
+    },
+    "PAB": {
+        "name": "panamska balboa",
+        "symbol": null
+    },
+    "PEI": {
+        "name": "perujski inti",
+        "symbol": null
+    },
+    "PEN": {
+        "name": "perujski sol",
+        "symbol": null
+    },
+    "PES": {
+        "name": "perujski sol (1863–1965)",
+        "symbol": null
+    },
+    "PGK": {
+        "name": "kina Papue Nove Gvineje",
+        "symbol": null
+    },
+    "PHP": {
+        "name": "filipinski peso",
+        "symbol": null
+    },
+    "PKR": {
+        "name": "pakistanska rupija",
+        "symbol": "Rs"
+    },
+    "PLN": {
+        "name": "poljski zlot",
+        "symbol": "zł"
+    },
+    "PLZ": {
+        "name": "stari poljski zlot (1950–1995)",
+        "symbol": null
+    },
+    "PTE": {
+        "name": "portugalski eskudo",
+        "symbol": null
+    },
+    "PYG": {
+        "name": "paragvajski gvarani",
+        "symbol": "₲"
+    },
+    "QAR": {
+        "name": "katarski rial",
+        "symbol": null
+    },
+    "RHD": {
+        "name": "rodezijski dolar",
+        "symbol": null
+    },
+    "ROL": {
+        "name": "stari romunski leu",
+        "symbol": null
+    },
+    "RON": {
+        "name": "romunski lev",
+        "symbol": "lei"
+    },
+    "RSD": {
+        "name": "srbski dinar",
+        "symbol": null
+    },
+    "RUB": {
+        "name": "ruski rubelj",
+        "symbol": "₽"
+    },
+    "RUR": {
+        "name": "ruski rubelj (1991–1998)",
+        "symbol": null
+    },
+    "RWF": {
+        "name": "ruandski frank",
+        "symbol": "RF"
+    },
+    "SAR": {
+        "name": "saudski rial",
+        "symbol": null
+    },
+    "SBD": {
+        "name": "solomonski dolar",
+        "symbol": "$"
+    },
+    "SCR": {
+        "name": "sejšelska rupija",
+        "symbol": null
+    },
+    "SDD": {
+        "name": "stari sudanski dinar",
+        "symbol": null
+    },
+    "SDG": {
+        "name": "sudanski funt",
+        "symbol": null
+    },
+    "SDP": {
+        "name": "stari sudanski funt",
+        "symbol": null
+    },
+    "SEK": {
+        "name": "švedska krona",
+        "symbol": "kr"
+    },
+    "SGD": {
+        "name": "singapurski dolar",
+        "symbol": "$"
+    },
+    "SHP": {
+        "name": "funt Sv. Helene",
+        "symbol": "£"
+    },
+    "SIT": {
+        "name": "slovenski tolar",
+        "symbol": null
+    },
+    "SKK": {
+        "name": "slovaška krona",
+        "symbol": null
+    },
+    "SLE": {
+        "name": "sierraleonski leone",
+        "symbol": null
+    },
+    "SLL": {
+        "name": "sierraleonski leone (1964—2022)",
+        "symbol": null
+    },
+    "SOS": {
+        "name": "somalski šiling",
+        "symbol": null
+    },
+    "SRD": {
+        "name": "surinamski dolar",
+        "symbol": "$"
+    },
+    "SRG": {
+        "name": "surinamski gulden",
+        "symbol": null
+    },
+    "SSP": {
+        "name": "južnosudanski funt",
+        "symbol": "£"
+    },
+    "STD": {
+        "name": "saotomejska dobra (1977–2017)",
+        "symbol": null
+    },
+    "STN": {
+        "name": "dobra Svetega Tomaža in Princa",
+        "symbol": "Db"
+    },
+    "SUR": {
+        "name": "sovjetski rubelj",
+        "symbol": null
+    },
+    "SVC": {
+        "name": "salvadorski kolon",
+        "symbol": null
+    },
+    "SYP": {
+        "name": "sirijski funt",
+        "symbol": "£"
+    },
+    "SZL": {
+        "name": "esvatinski lilangeni",
+        "symbol": null
+    },
+    "THB": {
+        "name": "tajski baht",
+        "symbol": "฿"
+    },
+    "TJR": {
+        "name": "tadžikistanski rubelj",
+        "symbol": null
+    },
+    "TJS": {
+        "name": "tadžikistanski somoni",
+        "symbol": null
+    },
+    "TMM": {
+        "name": "turkmenski manat",
+        "symbol": null
+    },
+    "TMT": {
+        "name": "turkmenistanski manat",
+        "symbol": null
+    },
+    "TND": {
+        "name": "tunizijski dinar",
+        "symbol": null
+    },
+    "TOP": {
+        "name": "tongovska paanga",
+        "symbol": "T$"
+    },
+    "TPE": {
+        "name": "timorski eskudo",
+        "symbol": null
+    },
+    "TRL": {
+        "name": "stara turška lira",
+        "symbol": null
+    },
+    "TRY": {
+        "name": "turška lira",
+        "symbol": "₺"
+    },
+    "TTD": {
+        "name": "dolar Trinidada in Tobaga",
+        "symbol": "$"
+    },
+    "TWD": {
+        "name": "novi tajvanski dolar",
+        "symbol": null
+    },
+    "TZS": {
+        "name": "tanzanijski šiling",
+        "symbol": null
+    },
+    "UAH": {
+        "name": "ukrajinska grivna",
+        "symbol": "₴"
+    },
+    "UAK": {
+        "name": "ukrajinski karbovanci",
+        "symbol": null
+    },
+    "UGS": {
+        "name": "stari ugandski šiling (1966–1987)",
+        "symbol": null
+    },
+    "UGX": {
+        "name": "ugandski šiling",
+        "symbol": null
+    },
+    "USD": {
+        "name": "ameriški dolar",
+        "symbol": "$"
+    },
+    "USN": {
+        "name": "ameriški dolar, naslednji dan",
+        "symbol": null
+    },
+    "USS": {
+        "name": "ameriški dolar, isti dan",
+        "symbol": null
+    },
+    "UYP": {
+        "name": "stari urugvajski peso (1975–1993)",
+        "symbol": null
+    },
+    "UYU": {
+        "name": "urugvajski peso",
+        "symbol": "$"
+    },
+    "UZS": {
+        "name": "uzbeški sum",
+        "symbol": null
+    },
+    "VEB": {
+        "name": "venezuelski bolivar (1871–2008)",
+        "symbol": null
+    },
+    "VEF": {
+        "name": "venezuelski bolivar (2008–2018)",
+        "symbol": "Bs"
+    },
+    "VES": {
+        "name": "venezuelski bolivar",
+        "symbol": null
+    },
+    "VND": {
+        "name": "vietnamski dong",
+        "symbol": "₫"
+    },
+    "VUV": {
+        "name": "vanuatujski vatu",
+        "symbol": null
+    },
+    "WST": {
+        "name": "samoanska tala",
+        "symbol": null
+    },
+    "XAF": {
+        "name": "srednjeafriški frank CFA",
+        "symbol": "FCFA"
+    },
+    "XAG": {
+        "name": "srebro",
+        "symbol": null
+    },
+    "XAU": {
+        "name": "zlato",
+        "symbol": null
+    },
+    "XBA": {
+        "name": "evropska sestavljena enota",
+        "symbol": null
+    },
+    "XBB": {
+        "name": "evropska monetarna enota",
+        "symbol": null
+    },
+    "XBC": {
+        "name": "evropska obračunska enota (XBC)",
+        "symbol": null
+    },
+    "XBD": {
+        "name": "evropska obračunska enota (XBD)",
+        "symbol": null
+    },
+    "XCD": {
+        "name": "vzhodnokaribski dolar",
+        "symbol": null
+    },
+    "XCG": {
+        "name": "karibski gulden",
+        "symbol": "Cg."
+    },
+    "XDR": {
+        "name": "posebne pravice črpanja",
+        "symbol": null
+    },
+    "XEU": {
+        "name": "evropska denarna enota",
+        "symbol": null
+    },
+    "XFO": {
+        "name": "zlati frank",
+        "symbol": null
+    },
+    "XFU": {
+        "name": "frank UIC",
+        "symbol": null
+    },
+    "XOF": {
+        "name": "zahodnoafriški frank CFA",
+        "symbol": "F CFA"
+    },
+    "XPD": {
+        "name": "paladij",
+        "symbol": null
+    },
+    "XPF": {
+        "name": "frank CFP",
+        "symbol": "CFPF"
+    },
+    "XPT": {
+        "name": "platina",
+        "symbol": null
+    },
+    "XTS": {
+        "name": "koda za potrebe testiranja",
+        "symbol": null
+    },
+    "XXX": {
+        "name": "neznana valuta",
+        "symbol": "¤"
+    },
+    "YDD": {
+        "name": "jemenski dinar",
+        "symbol": null
+    },
+    "YER": {
+        "name": "jemenski rial",
+        "symbol": null
+    },
+    "YUD": {
+        "name": "stari jugoslovanski dinar",
+        "symbol": null
+    },
+    "YUM": {
+        "name": "novi jugoslovanski dinar",
+        "symbol": null
+    },
+    "YUN": {
+        "name": "jugoslovanski konvertibilni dinar",
+        "symbol": null
+    },
+    "ZAL": {
+        "name": "južnoafriški finančni rand",
+        "symbol": null
+    },
+    "ZAR": {
+        "name": "južnoafriški rand",
+        "symbol": "R"
+    },
+    "ZMK": {
+        "name": "zambijska kvača (1968–2012)",
+        "symbol": null
+    },
+    "ZMW": {
+        "name": "zambijska kvača",
+        "symbol": "ZK"
+    },
+    "ZRN": {
+        "name": "zairski novi zaire",
+        "symbol": null
+    },
+    "ZRZ": {
+        "name": "zairski zaire",
+        "symbol": null
+    },
+    "ZWD": {
+        "name": "zimbabvejski dolar",
+        "symbol": null
+    },
+    "ZWG": {
+        "name": "zimbabvejsko zlato",
+        "symbol": null
+    },
+    "ZWL": {
+        "name": "zimbabvejski dolar (2009)",
+        "symbol": null
+    }
+}

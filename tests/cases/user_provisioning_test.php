@@ -215,20 +215,31 @@ wallos_test('payment methods and currencies are seeded in the account language',
     $en->close();
 });
 
-wallos_test('a missing payment or currency translation falls back to English, not the key', function () {
-    // Japanese has the shared keys but not the payment or currency ones yet
-    // (Phase 2). The English fallback in wallos_translations must then produce
-    // the English name rather than seeding the raw key as a name.
+wallos_test('a missing payment translation falls back to English, not the key', function () {
+    // Japanese has the shared keys but not the payment ones yet. The English
+    // fallback in wallos_translations must then produce the English name rather
+    // than seeding the raw key as a name. (Currencies no longer work this way —
+    // they come from CLDR, checked below and in currency_localization_test.php.)
     $names = array_column(wallos_default_payment_methods('ja'), 'name');
     assert_true(in_array('Credit Card', $names, true), 'a missing payment key falls back to English');
     assert_true(!in_array('payment_method_credit_card', $names, true), 'never the raw payment key');
-
-    $currencyNames = array_column(wallos_default_currencies('ja'), 'name');
-    assert_true(in_array('US Dollar', $currencyNames, true), 'a missing currency key falls back to English');
-    assert_true(!in_array('currency_name_usd', $currencyNames, true), 'never the raw currency key');
 });
 
-wallos_test('the payment and currency name keys have English translations', function () {
+wallos_test('currency names come from CLDR in the account language', function () {
+    // Currencies are no longer key-based. A Japanese account gets the Japanese
+    // CLDR name, an English one the English CLDR name, and neither ever shows a
+    // raw key or a bare code for a currency CLDR knows. The exact spelling is
+    // CLDR's, so the test reads it from the dataset rather than inventing it.
+    $ja = array_column(wallos_default_currencies('ja'), 'name', 'code');
+    assert_true($ja['USD'] !== 'USD' && $ja['USD'] !== '' && strpos($ja['USD'], 'currency_name_') === false,
+        'ja USD has a real CLDR name, not the code or a key (got ' . $ja['USD'] . ')');
+
+    $en = array_column(wallos_default_currencies('en'), 'name', 'code');
+    assert_same('US Dollar', $en['USD'], 'en USD is the English CLDR name');
+    assert_same('Japanese Yen', $en['JPY'], 'en JPY is the English CLDR name');
+});
+
+wallos_test('the payment method keys have English translations', function () {
     // A key without a translation would seed the key itself as the stored name.
     $translations = wallos_translations('en');
 
@@ -236,9 +247,5 @@ wallos_test('the payment and currency name keys have English translations', func
         if (isset($method['key'])) {
             assert_true(isset($translations[$method['key']]), $method['key'] . ' has an English translation');
         }
-    }
-
-    foreach (WALLOS_DEFAULT_CURRENCIES as $currency) {
-        assert_true(isset($translations[$currency['key']]), $currency['key'] . ' has an English translation');
     }
 });
