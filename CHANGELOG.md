@@ -1,5 +1,96 @@
 # Changelog
 
+## [5.15.0](https://github.com/thorstenhornung1/Wallos/releases/tag/v5.15.0) (2026-09-07)
+
+### Security
+
+* **oidc:** OIDC Session Authority v2 is complete — phases 3 and 4 add identity
+  and back-channel hardening on top of the lifetime authority shipped in 5.14.0.
+  Every login and every silent revalidation now fully validates the ID token:
+  signature against the provider's JWKS (with a one-time refresh for an unknown
+  key id), an algorithm allow-list, and the `iss` / `aud` / `azp` / `exp` /
+  `iat` / `sub` / `nonce` claims. A linked account is keyed by
+  `(issuer, subject)` rather than a bare subject, and UserInfo's subject must
+  match the ID token's — a provider that returns a different subject, or reuses
+  one across issuers, is refused rather than conflated. Session cookies are
+  marked `Secure`.
+
+* **oidc:** the OIDC remember-me cookie is now a resume handle stored only as a
+  hash. A leaked database row can no longer reconstruct a usable cookie, and the
+  handle resumes a session only through the same provider-authoritative guard as
+  any other request.
+
+* **oidc:** back-channel logout is replay-hardened — a logout token must carry a
+  `jti` and an expiry, each `jti` is honoured once (a replay cache rejects a
+  re-sent token), and a one-time migration revokes and clears the pre-v2 legacy
+  sessions, including the inert "zombie" rows an earlier version could leave
+  behind.
+
+* **oidc:** a central logout has its own honest login-page message. When the
+  provider ends a `prompt=none` revalidation with `login_required`, the sign-in
+  page says the session was ended centrally instead of showing a generic prompt
+  or a data error. (#166)
+
+* **currency:** the direct Fixer path tries HTTPS first and falls back to
+  cleartext HTTP only on a proven free-plan restriction, warning when it does.
+  (#141)
+
+### Added
+
+* **i18n:** German (`de`) is now complete — every key in the English base has a
+  German counterpart in the formal *Sie* form, and renewal and notification
+  texts are rendered in each account's own language rather than always in
+  English. (#130, #160)
+
+* **ui:** a dismissible banner points still-default accounts at the
+  currency/format localizer, and stays gone once dismissed. (#165)
+
+### Fixed
+
+* **write integrity:** eleven write paths that answered "success" without ever
+  consulting the write they depended on now read the result first and report a
+  database failure honestly — custom CSS/theme, the Google-search key, the AI
+  settings / translation / recommendation writes, the category and
+  payment-method reorders, the subscription-delete cascade, and the
+  OIDC-enablement toggle. Each is anchored by a test that reported success over
+  a blocked write before the fix. (#87, #137, #139)
+
+* **currency:** changing the main currency reports success only when a rate was
+  actually converted (#143); a held rate in the old base is invalidated instead
+  of surviving as a silently-wrong number (#149); saving a provider API key
+  costs one request and replaces the key in a single transaction, so a mid-save
+  failure no longer leaves the account with no credential (#142); an invented
+  currency code is rejected against the CLDR/ISO set and the provider's symbol
+  list instead of being accepted and converted at 1:1 (#133); and the
+  unused-currency usage count no longer runs a query per currency (#134).
+
+* **google-search:** saving a SerpAPI key validates the candidate before
+  deleting the one already configured, so a rejected key — a typo, an expired
+  key — no longer erases the working credential.
+
+* **cron:** a skipped startup run no longer overwrites the report of the run
+  that did the work. The liveness timestamps still advance, but the status and
+  detail of the last real run survive a no-op skip. (#136)
+
+* **subscriptions:** a logo that cannot be fetched names the specific reason and
+  logs it (with the host sanitized) instead of failing silently. (#158)
+
+* **subscriptions:** `renew.php` writes once and reports the write that ran,
+  rather than issuing a duplicated UPDATE. (#138)
+
+* **container:** the container starts on IPv4-only hosts — nginx falls back to a
+  `0.0.0.0` listen when the host has no IPv6, instead of failing to boot. (#129)
+
+### Changed
+
+* **docs:** the README leads with the fork's active-development warning and
+  states what the fork adds over upstream.
+
+* **tests:** the dual-backend test harness and its audit gates are reliable
+  inside agent worktrees — a stale sandbox is rebuilt, subprocess tests get
+  their own database and session isolation, and an empty semgrep scan fails the
+  gate rather than passing vacuously. (#145, #146, #148)
+
 ## [5.14.0](https://github.com/thorstenhornung1/Wallos/releases/tag/v5.14.0) (2026-09-06)
 
 ### Security
