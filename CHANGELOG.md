@@ -1,5 +1,28 @@
 # Changelog
 
+## [5.16.1](https://github.com/thorstenhornung1/Wallos/releases/tag/v5.16.1) (2026-09-07)
+
+### Fixed
+
+* **localizer:** the migration page's redirect now fires. It asked for it after
+  the document had already started, where PHP discards the header — so instead
+  of returning to the dashboard, the page stopped after the navigation and
+  showed nothing (silently, with `display_errors` off). This affected both ways
+  the page is meant to end: after a successful run, and on a direct call with
+  nothing left to rename. (#172)
+
+* **localizer:** the per-row checkboxes are visible again, so single entries can
+  be excluded from the rename. Wallos hides every checkbox and draws a switch
+  through an adjacent label; these rows wrap their checkbox, so nothing was
+  drawn — the list looked like it offered no choice, while in fact every row was
+  ticked. Inherited from the collapsed panel in the settings page, where it was
+  never seen.
+
+* **ci:** a page may no longer send a redirect after including the page header;
+  the rule is now a test. `admin.php` carries the same defect and is recorded as
+  a known exception — moving an admin guard is a security change and gets its
+  own review.
+
 ## [5.16.0](https://github.com/thorstenhornung1/Wallos/releases/tag/v5.16.0) (2026-09-07)
 
 ### Changed
