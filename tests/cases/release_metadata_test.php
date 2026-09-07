@@ -54,3 +54,37 @@ wallos_test('the version matches the changelog it was released with', function (
     assert_same('v' . $match[1], $version,
         'includes/version.php and the newest changelog entry name the same release');
 });
+
+wallos_test('the page header defines $i18n even after a translation helper ran', function () {
+    // A trap worth spelling out, because it cost a release.
+    //
+    // wallos_translations() requires a language file from inside a function, so
+    // that $i18n stays local there and a second language can be loaded safely.
+    // But PHP records the file as included whichever form is used, so a later
+    // require_once of that same file is skipped — and header.php used
+    // require_once to put $i18n into global scope. Any page whose request runs a
+    // translation helper before header.php reaches that line therefore lost
+    // $i18n entirely and died on the first translate() call, after the document
+    // had already started: a page with a header and nothing under it.
+    //
+    // localize.php did exactly that, through the redirect guard in
+    // checkredirect.php, which asks for localization candidates. So header.php
+    // uses require, and these assertions hold the reason.
+    wallos_translations('de');
+
+    $i18n = null;
+    require WALLOS_ROOT . '/includes/i18n/de.php';
+    assert_true(is_array($i18n) && $i18n !== [],
+        'require still defines $i18n after the helper loaded the same file');
+
+    $i18n = null;
+    require_once WALLOS_ROOT . '/includes/i18n/de.php';
+    assert_true($i18n === null,
+        'require_once is skipped here — which is precisely why header.php must not use it');
+
+    $header = file_get_contents(WALLOS_ROOT . '/includes/header.php');
+    assert_contains("require 'i18n/' . \$lang . '.php';", $header,
+        'header.php loads the language file with require');
+    assert_not_contains("require_once 'i18n/' . \$lang . '.php';", $header,
+        'and not with require_once');
+});
