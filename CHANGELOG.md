@@ -1,5 +1,21 @@
 # Changelog
 
+## [5.16.2](https://github.com/thorstenhornung1/Wallos/releases/tag/v5.16.2) (2026-09-07)
+
+### Fixed
+
+* **release:** 5.16.1 shipped with an empty `includes/version.php`, so `$version`
+  was undefined and the cache-busting query string on every stylesheet and script
+  was broken. With `display_errors` on it carried a PHP warning; with it off — a
+  normal installation — it would have been silently empty and identical for every
+  version, meaning the cache would never be busted again and 5.16.1's CSS fix
+  would not have reached anyone holding a warm browser cache.
+
+  Two gates now cover this: the version file must declare a usable version and
+  actually set it when included, and it must name the same release as the newest
+  changelog entry. `build` depends on `test`, so a release that gets this wrong
+  no longer produces an image.
+
 ## [5.16.1](https://github.com/thorstenhornung1/Wallos/releases/tag/v5.16.1) (2026-09-07)
 
 ### Fixed
