@@ -1,5 +1,28 @@
 # Changelog
 
+## [5.15.1](https://github.com/thorstenhornung1/Wallos/releases/tag/v5.15.1) (2026-09-07)
+
+### Fixed
+
+* **currency:** the keyless Frankfurter provider is now recognised everywhere it
+  matters. Accounts using multiple currencies no longer get the "set a Fixer API
+  key" warning on Statistics and Calendar, and the "convert to main currency"
+  toggle in Settings is no longer locked, when Frankfurter is active — all three
+  had checked for the presence of a Fixer key rather than whether a usable
+  provider is configured. The `get_fixer` REST endpoint now reports Frankfurter's
+  provider name instead of returning null. (#168)
+
+* **google-search:** saving a SerpAPI key replaces the stored credential in a
+  single transaction, so a database failure between clearing the old key and
+  writing the new one can no longer leave the account with no key.
+
+### Changed
+
+* **localizer:** the default-name localizer (currencies and payment methods) now
+  follows the app's design standard — its actions are proper buttons and the
+  candidate list is styled — and its German strings, together with the
+  central-logout sign-in message, are now plain formal German. (#169)
+
 ## [5.15.0](https://github.com/thorstenhornung1/Wallos/releases/tag/v5.15.0) (2026-09-07)
 
 ### Security
