@@ -1,15 +1,7 @@
 <?php
 require_once 'includes/header.php';
 require_once 'includes/integration_config.php';
-require_once 'includes/user_provisioning.php';
 require_once 'includes/currency_rates.php';
-
-// Opt-in localizer (issue #164 part B): the still-default English currency and
-// payment-method rows this account could rename to its own language. Empty for
-// an account that has none, which hides the controls in the sections below.
-$accountLanguage = wallos_resolve_language($db->scalar('SELECT language FROM "user" WHERE id = :userId', [':userId' => $userId]));
-$currencyLocalizationCandidates = wallos_default_currency_localization_candidates($db, $userId, $accountLanguage);
-$paymentLocalizationCandidates = wallos_default_payment_method_localization_candidates($db, $userId, $accountLanguage);
 
 $currencies = array();
 $query = "SELECT * FROM currencies WHERE user_id = :userId";
@@ -1392,39 +1384,6 @@ if ($budgetPeriodAnchorDate === '1970-01-01' || !preg_match('/^\d{4}-\d{2}-\d{2}
                 <input type="submit" value="<?= translate('add', $i18n) ?>" id="addCurrency"
                     onClick="addCurrencyButton()" class="thin mobile-grow" />
             </div>
-            <?php if (!empty($currencyLocalizationCandidates)): ?>
-            <div class="localize-defaults" id="localize-currencies"
-                data-endpoint="endpoints/localize/localizedefaults.php">
-                <div class="buttons">
-                    <button type="button" class="button thin mobile-grow"
-                        onClick="toggleLocalizeDefaults('localize-currencies')">
-                        <?= translate('localize_currencies_button', $i18n) ?>
-                    </button>
-                </div>
-                <div class="localize-defaults-panel" hidden>
-                    <div class="settings-notes">
-                        <p>
-                            <i class="fa-solid fa-circle-info"></i>
-                            <?= translate('localize_defaults_info', $i18n) ?>
-                        </p>
-                    </div>
-                    <?php foreach ($currencyLocalizationCandidates as $candidate): ?>
-                        <label class="localize-defaults-row">
-                            <input type="checkbox" class="localize-currency-checkbox" value="<?= (int) $candidate['id'] ?>" checked>
-                            <span class="localize-old"><?= htmlspecialchars($candidate['current']) ?></span>
-                            <i class="fa-solid fa-arrow-right-long"></i>
-                            <span class="localize-new"><?= htmlspecialchars($candidate['localized']) ?></span>
-                        </label>
-                    <?php endforeach; ?>
-                    <div class="buttons">
-                        <button type="button" class="button thin mobile-grow"
-                            onClick="applyLocalizeDefaults('localize-currencies', 'currencies', 'localize-currency-checkbox')">
-                            <?= translate('localize_defaults_apply', $i18n) ?>
-                        </button>
-                    </div>
-                </div>
-            </div>
-            <?php endif; ?>
             <div class="settings-notes">
                 <p>
                     <i class="fa-solid fa-circle-info"></i>
@@ -1922,39 +1881,6 @@ if ($budgetPeriodAnchorDate === '1970-01-01' || !preg_match('/^\d{4}-\d{2}-\d{2}
             }
             ?>
         </div>
-        <?php if (!empty($paymentLocalizationCandidates)): ?>
-        <div class="localize-defaults" id="localize-payments"
-            data-endpoint="endpoints/localize/localizedefaults.php">
-            <div class="buttons">
-                <button type="button" class="button thin mobile-grow"
-                    onClick="toggleLocalizeDefaults('localize-payments')">
-                    <?= translate('localize_payments_button', $i18n) ?>
-                </button>
-            </div>
-            <div class="localize-defaults-panel" hidden>
-                <div class="settings-notes">
-                    <p>
-                        <i class="fa-solid fa-circle-info"></i>
-                        <?= translate('localize_defaults_info', $i18n) ?>
-                    </p>
-                </div>
-                <?php foreach ($paymentLocalizationCandidates as $candidate): ?>
-                    <label class="localize-defaults-row">
-                        <input type="checkbox" class="localize-payment-checkbox" value="<?= (int) $candidate['id'] ?>" checked>
-                        <span class="localize-old"><?= htmlspecialchars($candidate['current']) ?></span>
-                        <i class="fa-solid fa-arrow-right-long"></i>
-                        <span class="localize-new"><?= htmlspecialchars($candidate['localized']) ?></span>
-                    </label>
-                <?php endforeach; ?>
-                <div class="buttons">
-                    <button type="button" class="button thin mobile-grow"
-                        onClick="applyLocalizeDefaults('localize-payments', 'payment_methods', 'localize-payment-checkbox')">
-                        <?= translate('localize_defaults_apply', $i18n) ?>
-                    </button>
-                </div>
-            </div>
-        </div>
-        <?php endif; ?>
         <div class="settings-notes">
             <p>
                 <i class="fa-solid fa-circle-info"></i>

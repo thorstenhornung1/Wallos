@@ -598,6 +598,7 @@ $i18n = [
     "localize_payments_button" => "Namen der Zahlungsarten auf Deutsch übersetzen",
     "localize_defaults_info" => "Diese Einträge tragen noch die englischen Standardnamen. Sie können sie auf Deutsch übersetzen lassen. Umbenannte und eigene Einträge bleiben unverändert.",
     "localize_defaults_apply" => "Ausgewählte übersetzen",
+    "localize_page_title" => "Standardnamen übersetzen",
     "localize_defaults_nothing_selected" => "Es wurde nichts zum Übersetzen ausgewählt.",
     "localize_defaults_failed" => "Die Namen konnten nicht übersetzt werden. Bitte versuchen Sie es erneut.",
     "localize_defaults_done" => "{count} Name(n) auf Deutsch übersetzt.",

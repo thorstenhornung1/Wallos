@@ -3195,20 +3195,30 @@ input[type="radio"]:checked+label::after {
   cursor: pointer;
 }
 
-.localize-defaults {
-  margin: 18px 0px 24px;
-}
-
-.localize-defaults-panel {
-  margin-top: 12px;
-  padding: 4px 18px 16px;
+/* The one-off migration page (localize.php). It is its own page rather than two
+   blocks inside the settings sections, so it needs the box the account sections
+   get, not a panel nested inside one. */
+.localize-page {
+  padding: 20px 24px 24px;
   border: 1px solid var(--box-border-color);
   border-radius: 12px;
   background-color: var(--box-background-color);
 }
 
-.localize-defaults-panel .settings-notes {
-  margin: 12px 0px 4px;
+.localize-page h3 {
+  margin: 22px 0px 4px;
+  font-size: 1rem;
+}
+
+.localize-page .settings-notes {
+  margin: 4px 0px 8px;
+}
+
+.localize-page .buttons {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  margin-top: 20px;
 }
 
 .localize-defaults-row {
@@ -3239,30 +3249,6 @@ input[type="radio"]:checked+label::after {
 .localize-new {
   color: var(--text-color);
   font-weight: 500;
-}
-
-.localize-defaults-panel .buttons {
-  margin-top: 14px;
-}
-
-/* The dashboard banner links to #localize-currencies, and scroll-margin keeps
-   the landing clear of the sticky header. The highlight itself belongs on the
-   button, not on this container: the container is a full-width block whose
-   only visible child is a right-aligned button, so painting it drew a wide
-   empty box with the button jammed into its right edge — it read as a broken
-   input field rather than as "here is the control we brought you to". An
-   outline is used instead of a box-shadow because .button already sets one
-   and replaces it again on :hover, which would have made the ring blink out
-   under the pointer. */
-#localize-currencies,
-#localize-payments {
-  scroll-margin-top: 80px;
-}
-
-#localize-currencies:target>.buttons>.button,
-#localize-payments:target>.buttons>.button {
-  outline: 3px solid rgba(var(--accent-color-rgb), 0.55);
-  outline-offset: 3px;
 }
 
 .demo-banner {

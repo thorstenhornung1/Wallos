@@ -632,6 +632,7 @@ $i18n = [
     "localize_payments_button" => "Localize default payment method names to my language",
     "localize_defaults_info" => "These entries still use the English default names. You can rename them to your language. Renamed and custom entries are never changed.",
     "localize_defaults_apply" => "Localize selected",
+    "localize_page_title" => "Localize default names",
     "localize_defaults_nothing_selected" => "Nothing was selected to localize.",
     "localize_defaults_failed" => "Could not localize the names. Please try again.",
     "localize_defaults_done" => "Localized {count} name(s) to your language.",

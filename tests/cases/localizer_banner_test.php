@@ -85,3 +85,112 @@ wallos_test('the dashboard wires the banner to #164 detection', function () {
     assert_true(wallos_test_file_calls('includes/user_provisioning.php', 'wallos_default_name_localization_candidates'),
         'the decision helper reuses the #164 candidate detection');
 });
+
+// The state the suite could not reach until this fixture existed: one half of
+// the migration done, the other still waiting. wallos_test_create_user() seeds
+// a single payment method named 'Fixture card' with an empty icon, which is
+// never a candidate (the detector matches on the generic icons), so every case
+// above reasons about currencies alone. That blind spot is exactly where the
+// banner misled a user in practice: the currencies were renamed, the banner
+// stayed up because four payment methods still held their English names, and
+// the offer looked broken rather than half-finished.
+function wallos_test_seed_generic_payment_methods($db, $userId)
+{
+    $english = wallos_translations('en');
+    foreach (WALLOS_DEFAULT_PAYMENT_METHODS as $method) {
+        if (!isset($method['key'])) {
+            continue;
+        }
+        $stmt = $db->prepare('INSERT INTO payment_methods (name, icon, enabled, "order", user_id)
+                              VALUES (:name, :icon, 1, 1, :userId)');
+        $stmt->bindValue(':name', $english[$method['key']] ?? $method['key']);
+        $stmt->bindValue(':icon', $method['icon']);
+        $stmt->bindValue(':userId', (int) $userId);
+        $stmt->execute();
+    }
+}
+
+wallos_test('the banner stays while a renamed account still has payment methods to do', function () {
+    $db = wallos_test_open_database();
+    wallos_test_create_user($db, 5002, 'de-half-done');
+    wallos_test_seed_generic_payment_methods($db, 5002);
+
+    // Rename the one currency candidate, the way the user did on the instance.
+    $usdId = wallos_currency_id_for_code($db, 5002, 'USD');
+    $stmt = $db->prepare('UPDATE currencies SET name = :name WHERE id = :id');
+    $stmt->bindValue(':name', 'US-Dollar');
+    $stmt->bindValue(':id', $usdId);
+    $stmt->execute();
+
+    assert_same([], wallos_default_currency_localization_candidates($db, 5002, 'de'),
+        'the currencies are done (precondition)');
+    assert_equals(4, count(wallos_default_payment_method_localization_candidates($db, 5002, 'de')),
+        'the four generic payment methods are still candidates');
+    assert_true(wallos_should_offer_default_localization_banner($db, 5002, 'de', false),
+        'the banner stays up while either half still has work');
+
+    $db->close();
+});
+
+wallos_test('brands are never candidates, so the offer can actually end', function () {
+    // 27 of the seeded payment methods are brand names -- PayPal, Klarna, SEPA --
+    // which read the same in every language. If they counted as "still English"
+    // the banner could never go away, however much a user localized. They are
+    // excluded before any name comparison, by carrying no translation key.
+    $db = wallos_test_open_database();
+    wallos_test_create_user($db, 5003, 'de-brands');
+
+    $english = wallos_translations('en');
+    foreach (WALLOS_DEFAULT_PAYMENT_METHODS as $method) {
+        $name = isset($method['key']) ? ($english[$method['key']] ?? $method['key']) : $method['name'];
+        $stmt = $db->prepare('INSERT INTO payment_methods (name, icon, enabled, "order", user_id)
+                              VALUES (:name, :icon, 1, 1, :userId)');
+        $stmt->bindValue(':name', $name);
+        $stmt->bindValue(':icon', $method['icon']);
+        $stmt->bindValue(':userId', 5003);
+        $stmt->execute();
+    }
+
+    $candidates = wallos_default_payment_method_localization_candidates($db, 5003, 'de');
+    assert_equals(4, count($candidates), 'only the four generic terms are candidates');
+
+    // Localize everything the detector offers, and the offer is over -- no
+    // brand keeps it alive.
+    wallos_apply_default_name_localization($db, 5003, 'de', null);
+    assert_same([], wallos_default_name_localization_candidates($db, 5003, 'de'),
+        'nothing is left once the generic terms are renamed');
+    assert_true(!wallos_should_offer_default_localization_banner($db, 5003, 'de', false),
+        'the banner ends, rather than being held open by the brands');
+
+    $db->close();
+});
+
+wallos_test('the banner leads to the migration page, which owns both halves', function () {
+    // The banner offers currency *and* payment-method names, so it needs one
+    // destination that holds both. It used to link to settings.php#localize-currencies,
+    // where a user who had already renamed the currencies landed on a section
+    // with nothing left to do while the payment methods waited ~500 lines below.
+    $dashboard = file_get_contents(WALLOS_ROOT . '/index.php');
+    assert_contains('href="localize.php"', $dashboard,
+        'the banner links to the migration page');
+    assert_not_contains('settings.php#localize', $dashboard,
+        'no link to a half of the job inside the settings page');
+
+    // The page carries both halves and nothing detects on its own.
+    assert_true(wallos_test_file_calls('localize.php', 'wallos_default_currency_localization_candidates'),
+        'the page previews the currency candidates');
+    assert_true(wallos_test_file_calls('localize.php', 'wallos_default_payment_method_localization_candidates'),
+        'the page previews the payment-method candidates');
+
+    // The page is meant to disappear on its own: an account with nothing left
+    // to rename is sent to the dashboard rather than shown an empty page, which
+    // is also what makes the reload after a successful run leave it for good.
+    $page = file_get_contents(WALLOS_ROOT . '/localize.php');
+    assert_contains("header('Location: index.php')", $page,
+        'an account without candidates is redirected away');
+
+    // Settings no longer carries the migration UI at all.
+    $settings = file_get_contents(WALLOS_ROOT . '/settings.php');
+    assert_not_contains('localize-defaults', $settings,
+        'the settings page no longer hosts the localizer');
+});
