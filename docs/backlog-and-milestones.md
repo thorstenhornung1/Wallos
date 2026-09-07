@@ -5,23 +5,19 @@ _Working document, 2026-09-06. Not a public commitment; internal planning for mi
 ## Released
 - **5.13.0** — Frankfurter v2, instance-config notifications (Telegram/Pushover/ntfy/Gotify), OIDC session-lifetime + back-channel/logout hardening, PKCE, https/issuer verification, remember-me correctness, image −25%, FPM ondemand.
 - **5.14.0** — **OIDC Session Authority v2 phases 1+2** (provider authoritative for the whole session lifetime; the idle-gap refresh-oracle closed, `prompt=none` silent revalidation; **live-proven in QA**), server-side enforcement of IdP-managed fields (#156), **Web Push** (#162), **currency i18n via Unicode CLDR** (#163) + seed-time localization (#160) + first-admin/opt-in localizer (#164), the #147 PostgreSQL admin fixes, the `dev/bind-audit` gate (#157).
+- **5.15.0** (2026-09-07, b0ff259) — **OIDC Session Authority v2 phases 3+4 complete** (ID-token validation + `(iss,sub)` identity + Secure cookies (WP2/WP3), remember-me as a hashed resume handle (WP6), back-channel jti/replay + one-time legacy sweep (WP8/WP10), honest central-logout message #166); **Write integrity** (#87/#137/#139/#136) + the google_search validate-before-delete (#142 shape); **Currency correctness** (#143/#149/#142/#133/#134); **complete German i18n** (#130/#160); localizer banner (#165); the #141/#158/#138/#129 fixes; harness/gate isolation in worktrees (#145/#146/#148). QA ordered from the operator session.
 
 ## On main, unreleased (next release candidate)
-- Test-harness isolation fixes (#146/#148/#145) — worktree-stale sandbox, subprocess DB+session isolation, semgrep empty-scan gate.
-- #141 — fixer direct path tries https first, warns on cleartext http.
-- #129 — container starts on hosts without IPv6.
-- #158 — subscription logo fetch names the failure reason and logs it.
-- #138 — renew.php duplicate UPDATE removed.
-- Localizer discovery banner (#165).
-- **OIDC v2 Phase 3a** (ID-token validator + `(iss,sub)` identity + Secure cookies) merged; **Phase 3b** (remember-me as hashed resume handle) ready to merge.
+- _Empty_ — everything above shipped in 5.15.0. The next candidate is the Price history epic (#13).
 
 ## OIDC Session Authority v2 — phase status (milestone #15)
 - **Phase 1** ✅ close the refresh-oracle (four-state guard, coverage boundary, fail-closed). LIVE-proven.
 - **Phase 2** ✅ silent `prompt=none` resume guard + #159 (XHR reauth). LIVE-proven.
-- **Phase 3a** ✅ ID-token validator (WP2), `(iss,sub)` + UserInfo-sub-equality (WP3), Secure cookie (§15).
-- **Phase 3b** ✅ (pending merge) remember-me as hashed resume handle (WP6).
-- **Phase 4** ⏳ jti + replay cache + mandatory exp on logout tokens (WP8); one-time legacy-session revoke/cleanup (WP10 — also clears the inert pre-v2 "zombie" rows).
-- **#166** ⏳ a distinct login-page message for a central logout (`login_required`).
+- **Phase 3a** ✅ ID-token validator (WP2), `(iss,sub)` + UserInfo-sub-equality (WP3), Secure cookie (§15). _Released 5.15.0._
+- **Phase 3b** ✅ remember-me as hashed resume handle (WP6). _Released 5.15.0._
+- **Phase 4** ✅ jti + replay cache + mandatory exp on logout tokens (WP8); one-time legacy-session revoke/cleanup (WP10 — also clears the inert pre-v2 "zombie" rows). _Released 5.15.0._
+- **#166** ✅ a distinct login-page message for a central logout (`login_required`). _Released 5.15.0._
+- **Milestone #15 is complete** — the whole OIDC Session Authority v2 shipped across 5.14.0 (phases 1+2) and 5.15.0 (phases 3+4, #166).
 - Deferred (gold-plating): refresh-token encryption at rest, `__Host-` cookies, the normalized `oidc_identities` table, SSF/CAEP.
 
 ## Fork differentiators (vs upstream ellite/Wallos)
