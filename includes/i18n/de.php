@@ -595,19 +595,19 @@ $i18n = [
     // Währungen und Zahlungsmethoden nur angezeigt, solange englische Standardnamen
     // vorhanden sind; sie werden nur nach ausdrücklicher, zeilenweiser Bestätigung
     // in die Kontosprache umbenannt und umbenannte oder eigene Einträge nie geändert.
-    "localize_currencies_button" => "Standard-Währungsnamen in meine Sprache übersetzen",
-    "localize_payments_button" => "Standard-Zahlungsmethodennamen in meine Sprache übersetzen",
-    "localize_defaults_info" => "Diese Einträge verwenden noch die englischen Standardnamen. Du kannst sie in deine Sprache umbenennen. Umbenannte und eigene Einträge werden nie geändert.",
-    "localize_defaults_apply" => "Ausgewählte lokalisieren",
-    "localize_defaults_nothing_selected" => "Es wurde nichts zum Lokalisieren ausgewählt.",
-    "localize_defaults_failed" => "Die Namen konnten nicht lokalisiert werden. Bitte versuche es erneut.",
-    "localize_defaults_done" => "{count} Name(n) in deine Sprache lokalisiert.",
+    "localize_currencies_button" => "Währungsnamen auf Deutsch übersetzen",
+    "localize_payments_button" => "Namen der Zahlungsarten auf Deutsch übersetzen",
+    "localize_defaults_info" => "Diese Einträge tragen noch die englischen Standardnamen. Sie können sie auf Deutsch übersetzen lassen. Umbenannte und eigene Einträge bleiben unverändert.",
+    "localize_defaults_apply" => "Ausgewählte übersetzen",
+    "localize_defaults_nothing_selected" => "Es wurde nichts zum Übersetzen ausgewählt.",
+    "localize_defaults_failed" => "Die Namen konnten nicht übersetzt werden. Bitte versuchen Sie es erneut.",
+    "localize_defaults_done" => "{count} Name(n) auf Deutsch übersetzt.",
     // Entdeckungs-Banner auf dem Dashboard (Issue #165): ein ausblendbarer
     // einzeiliger Hinweis, der ein Konto mit noch englischen Standardnamen auf
     // den Lokalisierer oben in den Einstellungen verweist. Er bietet nur an; erst
     // die zeilenweise Bestätigung dort ändert etwas.
-    "localize_banner_offer" => "Deine Standardnamen für Währungen und Zahlungsmethoden sind noch auf Englisch. Du kannst sie in deine Sprache übersetzen.",
-    "localize_banner_action" => "Meine Standardnamen lokalisieren",
+    "localize_banner_offer" => "Ihre Währungs- und Zahlungsart-Namen sind noch auf Englisch. Sie können sie in den Einstellungen mit einem Klick auf Deutsch übersetzen lassen.",
+    "localize_banner_action" => "Jetzt auf Deutsch übersetzen",
     "localize_banner_dismiss" => "Ausblenden",
     // Währungsnamen und -symbole werden hier nicht mehr gepflegt: sie kommen zur
     // Kontoerstellung aus Unicode CLDR (includes/currency_localization.php,
@@ -628,7 +628,7 @@ $i18n = [
     "cron_diagnostics" => "Geplante Aufgaben",
     "cron_diagnostics_hint" => "Jede Aufgabe protokolliert ihren letzten Lauf. Eine als überfällig gemeldete Aufgabe wurde nicht gestartet, obwohl sie hätte laufen sollen — meist läuft Cron in diesem Container nicht.",
     "oidc_session_expired" => "Die Anmeldung hat zu lange gedauert oder die Sitzung ging verloren. Bitte versuchen Sie es erneut.",
-    "oidc_logged_out" => "Du wurdest zentral abgemeldet. Bitte neu anmelden.",
+    "oidc_logged_out" => "Sie wurden zentral abgemeldet. Bitte melden Sie sich neu an.",
     "oidc_state_mismatch" => "Die Anmeldung konnte nicht überprüft werden und wurde zu Ihrer Sicherheit abgebrochen. Bitte versuchen Sie es erneut.",
     "oidc_invalid_response" => "Der Identitätsanbieter hat eine unvollständige Antwort gesendet. Bitte versuchen Sie es erneut.",
     "oidc_user_not_found" => "Anmeldung fehlgeschlagen: Zu dieser Identität gibt es kein Wallos-Konto, und das automatische Anlegen ist deaktiviert. Bitten Sie Ihre Administration um ein Konto.",

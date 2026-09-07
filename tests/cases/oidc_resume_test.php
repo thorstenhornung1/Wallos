@@ -575,7 +575,7 @@ wallos_test('#166: the oidc_logged_out message resolves in en and de and falls b
         . 'echo "dehas=" . (array_key_exists("oidc_logged_out", $de) ? "yes" : "no");'
     );
 
-    assert_contains('de=Du wurdest zentral abgemeldet. Bitte neu anmelden.', $out,
+    assert_contains('de=Sie wurden zentral abgemeldet. Bitte melden Sie sich neu an.', $out,
         'the German message resolves (' . $out . ')');
     assert_contains('en=You were signed out by your login provider. Please sign in again.', $out,
         'the English message resolves');
