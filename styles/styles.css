@@ -3245,17 +3245,24 @@ input[type="radio"]:checked+label::after {
   margin-top: 14px;
 }
 
+/* The dashboard banner links to #localize-currencies, and scroll-margin keeps
+   the landing clear of the sticky header. The highlight itself belongs on the
+   button, not on this container: the container is a full-width block whose
+   only visible child is a right-aligned button, so painting it drew a wide
+   empty box with the button jammed into its right edge — it read as a broken
+   input field rather than as "here is the control we brought you to". An
+   outline is used instead of a box-shadow because .button already sets one
+   and replaces it again on :hover, which would have made the ring blink out
+   under the pointer. */
 #localize-currencies,
 #localize-payments {
   scroll-margin-top: 80px;
-  border-radius: 12px;
-  transition: background-color .3s ease-in-out, box-shadow .3s ease-in-out;
 }
 
-#localize-currencies:target,
-#localize-payments:target {
-  background-color: rgba(var(--main-color-rgb), 0.08);
-  box-shadow: 0 0 0 3px rgba(var(--accent-color-rgb), 0.55), 0 0 0 6px rgba(var(--main-color-rgb), 0.12);
+#localize-currencies:target>.buttons>.button,
+#localize-payments:target>.buttons>.button {
+  outline: 3px solid rgba(var(--accent-color-rgb), 0.55);
+  outline-offset: 3px;
 }
 
 .demo-banner {
