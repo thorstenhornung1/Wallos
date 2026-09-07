@@ -1,5 +1,16 @@
 # Changelog
 
+## [5.16.3](https://github.com/thorstenhornung1/Wallos/releases/tag/v5.16.3) (2026-09-07)
+
+### Fixed
+
+* **calendar:** the monthly "active subscriptions" tile counted payments rather
+  than subscriptions. An account with five subscriptions, one of them paying
+  daily, was told it had 29 — the daily one contributed one "subscription" per
+  day. The amounts were never affected: a sum over 24 daily payments of 1.00 is
+  correctly 24.00. The projection now reports payments and subscriptions
+  separately, since the grid needs the first and the tile names the second.
+
 ## [5.16.2](https://github.com/thorstenhornung1/Wallos/releases/tag/v5.16.2) (2026-09-07)
 
 ### Fixed
