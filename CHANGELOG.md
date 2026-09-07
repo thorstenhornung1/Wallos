@@ -1,5 +1,24 @@
 # Changelog
 
+## [5.15.3](https://github.com/thorstenhornung1/Wallos/releases/tag/v5.15.3) (2026-09-07)
+
+### Fixed
+
+* **localizer:** the highlight that the dashboard banner's link lands on now
+  marks the localizer button itself. It had been painted on the container
+  around it — a full-width block whose only visible child is a right-aligned
+  button — which drew a wide empty box with the button pressed into its right
+  edge, reading as a broken input field rather than as the control the banner
+  points at. (follow-up to #169)
+
+* **ci:** a lost race for the shared build cache no longer fails a build that
+  has already pushed its image. Overlapping runs (a release pushes the tag and
+  the main commit seconds apart) write the same cache scope, and the loser
+  received `not_found` after a green build — which failed the arm64 job and
+  skipped the `merge` and `release` jobs, leaving a finished multi-arch image
+  untagged. A cache export is now allowed to fail without failing the build,
+  and still logs the error.
+
 ## [5.15.2](https://github.com/thorstenhornung1/Wallos/releases/tag/v5.15.2) (2026-09-07)
 
 ### Changed
