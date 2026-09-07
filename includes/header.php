@@ -9,7 +9,14 @@ require_once 'libs/csrf.php';
 
 require_once 'i18n/languages.php';
 require_once 'i18n/getlang.php';
-require_once 'i18n/' . $lang . '.php';
+// require, not require_once: wallos_translations() loads the same file from
+// inside a function (so that $i18n stays local there), and PHP records it as
+// included either way — a require_once here would then be skipped and $i18n
+// would never reach global scope, killing every page that ran a translation
+// helper earlier in this request. That is what happened to localize.php, whose
+// redirect guard in checkredirect.php asks for localization candidates before
+// this line runs.
+require 'i18n/' . $lang . '.php';
 
 require_once 'getsettings.php';
 
