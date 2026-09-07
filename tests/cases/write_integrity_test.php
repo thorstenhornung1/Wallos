@@ -283,6 +283,32 @@ wallos_test('google_search replaces the key when the candidate is accepted', fun
     $db->close();
 });
 
+wallos_test('google_search keeps the working key when the accepted candidate cannot be stored (#142 shape)', function () {
+    // Broken-to-count: the validated candidate deletes the working key and then
+    // fails to insert. Without a transaction the DELETE commits and the account
+    // is left with no credential; the atomic replacement rolls the DELETE back
+    // so the working key survives (5.15.0 QA #3 — the residual of the #142
+    // "validate before destroy" shape, this time between the two writes).
+    $db = wallos_test_open_database();
+    wallos_test_create_user($db, 1, 'alice');
+    $db->exec("INSERT INTO google_search (api_key, user_id) VALUES ('old-serp-key', 1)");
+    wallos_test_block_writes($db, 'google_search', 'INSERT');
+
+    $out = wi_invoke(WALLOS_ROOT . '/endpoints/settings/google_search.php', 1,
+        ['api_key' => 'new-serp-key'], null,
+        'function wallos_serpapi_key_is_valid($k) { return true; }');
+
+    wallos_test_unblock_writes($db, 'google_search');
+
+    assert_contains('"success":false', $out,
+        'a store that could not be written is reported as failure on ' . $db->driver() . ' (' . $out . ')');
+    assert_same('old-serp-key',
+        (string) $db->scalar('SELECT api_key FROM google_search WHERE user_id = 1'),
+        'the working key survives a store that fails on ' . $db->driver());
+
+    $db->close();
+});
+
 // endpoints/ai/save_settings.php is the fifth DELETE-then-INSERT and its result
 // check went in with this batch, but it has no runtime case here, on purpose and
 // after being tried: unlike the four above, ai_settings carries a UNIQUE index
