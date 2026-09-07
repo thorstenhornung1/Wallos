@@ -2,6 +2,7 @@
 require_once 'includes/header.php';
 require_once 'includes/currency_rates.php';
 require_once 'includes/integration_config.php';
+require_once 'includes/calendar_occurrences.php';
 
 function getPriceConverted($price, $currency, $database, $userId)
 {
@@ -167,70 +168,29 @@ if ($weekStartsSunday) {
     $todayYear = date('Y');
 
     // Project every payment occurrence into this month once, before rendering.
-    $monthKey = $calendarYear . '-' . str_pad($calendarMonth, 2, '0', STR_PAD_LEFT);
-    $startOfMonth = strtotime($monthKey . '-01');
-    $paymentsByDay = [];
+    // The projection itself lives in includes/calendar_occurrences.php so it can
+    // be tested; the money stays here, because converting prices needs the
+    // database and the rate map loaded above.
+    $projection = wallos_calendar_month_occurrences($subscriptions, $calendarYear, $calendarMonth, $yearsToLoad);
+    $paymentsByDay = $projection['byDay'];
 
-    $registerPayment = function ($date, $subscription) use (&$paymentsByDay, &$totalCostThisMonth, &$numberOfSubscriptionsToPayThisMonth, &$amountDueThisMonth, $today, $db, $userId) {
-      $paymentsByDay[(int) date('j', $date)][] = $subscription;
-      $convertedPrice = getPriceConverted($subscription['price'], $subscription['currency_id'], $db, $userId);
-      $totalCostThisMonth += $convertedPrice;
-      $numberOfSubscriptionsToPayThisMonth++;
-      if ($date >= $today) {
-        $amountDueThisMonth += $convertedPrice;
-      }
-    };
+    // How many subscriptions pay this month — not how many payments there are.
+    // These differ for anything paying more than once a month, and the tile is
+    // labelled "active subscriptions": a daily subscription used to report
+    // itself once per day.
+    $numberOfSubscriptionsToPayThisMonth = $projection['subscriptions'];
 
-    foreach ($subscriptions as $subscription) {
-      $nextPaymentDate = strtotime($subscription['next_payment']);
-      $subscriptionStartDate = !empty($subscription['start_date'])
-        ? strtotime($subscription['start_date'])
-        : $nextPaymentDate;
-      $cycle = $subscription['cycle'];
-      $frequency = $subscription['frequency'];
-
-      if ($cycle == 5) {
-        // One-time purchase: only shown on its exact payment date
-        if (date('Y-m', $nextPaymentDate) == $monthKey) {
-          $registerPayment($nextPaymentDate, $subscription);
+    foreach ($paymentsByDay as $day => $paymentsOfDay) {
+        $dayDate = strtotime(sprintf('%04d-%02d-%02d', $calendarYear, $calendarMonth, $day));
+        foreach ($paymentsOfDay as $subscription) {
+            $convertedPrice = getPriceConverted($subscription['price'], $subscription['currency_id'], $db, $userId);
+            $totalCostThisMonth += $convertedPrice;
+            if ($dayDate >= $today) {
+                $amountDueThisMonth += $convertedPrice;
+            }
         }
-        continue;
-      }
-
-      switch ($cycle) {
-        case 1: // Days
-          $incrementString = "+{$frequency} days";
-          break;
-        case 2: // Weeks
-          $incrementString = "+{$frequency} weeks";
-          break;
-        case 3: // Months
-          $incrementString = "+{$frequency} months";
-          break;
-        case 4: // Years
-          $incrementString = "+{$frequency} years";
-          break;
-        default:
-          $incrementString = "+{$frequency} months";
-      }
-
-      $endDate = strtotime("+" . $yearsToLoad . " years", $nextPaymentDate);
-
-      // Find the first payment date of the month by moving backwards
-      $startDate = $nextPaymentDate;
-      while ($startDate > $startOfMonth) {
-        $startDate = strtotime("-" . $incrementString, $startDate);
-      }
-
-      for ($date = $startDate; $date <= $endDate; $date = strtotime($incrementString, $date)) {
-        if ($date < $subscriptionStartDate) {
-          continue;
-        }
-        if (date('Y-m', $date) == $monthKey) {
-          $registerPayment($date, $subscription);
-        }
-      }
     }
+
     ?>
 
     <div class="calendar">
