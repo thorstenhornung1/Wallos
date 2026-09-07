@@ -150,7 +150,7 @@ while ($row = $result->fetchArray(SQLITE3_ASSOC)) {
             ?>
             <div class="update-banner localizer-banner" id="localizer-banner">
                 <?= translate('localize_banner_offer', $i18n) ?>
-                <span><a href="settings.php#localize-currencies"><?= translate('localize_banner_action', $i18n) ?></a></span>
+                <span><a href="localize.php"><?= translate('localize_banner_action', $i18n) ?></a></span>
                 <button type="button" class="localizer-banner-dismiss" onClick="dismissLocalizerBanner()"
                     aria-label="<?= htmlspecialchars(translate('localize_banner_dismiss', $i18n)) ?>"
                     title="<?= htmlspecialchars(translate('localize_banner_dismiss', $i18n)) ?>">&times;</button>
