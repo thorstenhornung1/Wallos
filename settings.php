@@ -1396,7 +1396,7 @@ if ($budgetPeriodAnchorDate === '1970-01-01' || !preg_match('/^\d{4}-\d{2}-\d{2}
             <div class="localize-defaults" id="localize-currencies"
                 data-endpoint="endpoints/localize/localizedefaults.php">
                 <div class="buttons">
-                    <button type="button" class="secondary-button thin mobile-grow"
+                    <button type="button" class="button thin mobile-grow"
                         onClick="toggleLocalizeDefaults('localize-currencies')">
                         <?= translate('localize_currencies_button', $i18n) ?>
                     </button>
@@ -1417,7 +1417,7 @@ if ($budgetPeriodAnchorDate === '1970-01-01' || !preg_match('/^\d{4}-\d{2}-\d{2}
                         </label>
                     <?php endforeach; ?>
                     <div class="buttons">
-                        <button type="button" class="secondary-button thin mobile-grow"
+                        <button type="button" class="button thin mobile-grow"
                             onClick="applyLocalizeDefaults('localize-currencies', 'currencies', 'localize-currency-checkbox')">
                             <?= translate('localize_defaults_apply', $i18n) ?>
                         </button>
@@ -1926,7 +1926,7 @@ if ($budgetPeriodAnchorDate === '1970-01-01' || !preg_match('/^\d{4}-\d{2}-\d{2}
         <div class="localize-defaults" id="localize-payments"
             data-endpoint="endpoints/localize/localizedefaults.php">
             <div class="buttons">
-                <button type="button" class="secondary-button thin mobile-grow"
+                <button type="button" class="button thin mobile-grow"
                     onClick="toggleLocalizeDefaults('localize-payments')">
                     <?= translate('localize_payments_button', $i18n) ?>
                 </button>
@@ -1947,7 +1947,7 @@ if ($budgetPeriodAnchorDate === '1970-01-01' || !preg_match('/^\d{4}-\d{2}-\d{2}
                     </label>
                 <?php endforeach; ?>
                 <div class="buttons">
-                    <button type="button" class="secondary-button thin mobile-grow"
+                    <button type="button" class="button thin mobile-grow"
                         onClick="applyLocalizeDefaults('localize-payments', 'payment_methods', 'localize-payment-checkbox')">
                         <?= translate('localize_defaults_apply', $i18n) ?>
                     </button>
