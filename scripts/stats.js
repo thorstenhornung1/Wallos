@@ -63,7 +63,13 @@ function loadGraph(container, dataPoints, currency, run) {
         item.addEventListener('click', () => {
             hidden[i] = !hidden[i];
             item.classList.toggle('graph-legend-item--off', hidden[i]);
-            chart.updateOptions(activeSubset());
+            // Options first, series second. Passing the shorter series inside
+            // updateOptions leaves the removed slice on screen in ApexCharts 4.x
+            // (the library Wallos pins for its MIT licence, see #171); going
+            // through updateSeries redraws correctly on 4.x and 5.x alike.
+            const subset = activeSubset();
+            chart.updateOptions({ labels: subset.labels, colors: subset.colors });
+            chart.updateSeries(subset.series);
         });
         legend.appendChild(item);
     });

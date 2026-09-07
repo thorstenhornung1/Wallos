@@ -67,3 +67,52 @@ authorization of the copyright holder.
 
 SPDX-License-Identifier: Unicode-3.0
 ```
+
+---
+
+## ApexCharts
+
+`scripts/libs/apexcharts.min.js` is the vendored, unmodified `dist/apexcharts.min.js`
+of the ApexCharts npm package. The statistics page renders every chart with it.
+
+- **Source:** ApexCharts — https://github.com/apexcharts/apexcharts.js
+- **Pinned release:** `4.7.0` — the last release published under the MIT licence
+- **Copyright:** © 2018 ApexCharts
+- **License:** MIT — `SPDX-License-Identifier: MIT`
+- **Provenance:** npm `apexcharts@4.7.0`, tarball verified against the registry
+  integrity hash `sha512-iZSrrBGvVlL+nt2B1NpqfDuBZ9jX61X9I2+XV0hlYXHtTwhwLTHDKGXjNXAgFBDLuvSYCB/rq2nPWVPRv2DrGA==`
+
+Wallos is GPL-3.0. ApexCharts changed its licensing model with the 5.x line, and
+5.x is therefore not distributed here — the version is pinned rather than merely
+current (issue #171). Anything that upgrades this file must check the licence of
+the release it brings in; a newer version is not automatically a permitted one.
+The charts use no 5.x-only functionality. One call had to be written so that it
+works on both lines: the donut legend toggle updates options and series
+separately, because passing a shortened series to `updateOptions` leaves the
+removed slice on screen in 4.x.
+
+### MIT License text as distributed with ApexCharts 4.7.0
+
+```
+The MIT License (MIT)
+
+Copyright (c) 2018 ApexCharts
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+THE SOFTWARE.
+```
