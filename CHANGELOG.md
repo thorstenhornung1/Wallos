@@ -1,5 +1,23 @@
 # Changelog
 
+## [5.16.4](https://github.com/thorstenhornung1/Wallos/releases/tag/v5.16.4) (2026-09-07)
+
+### Changed
+
+* **licensing:** the bundled ApexCharts is pinned to 4.7.0, its last MIT-licensed
+  release, replacing 5.15.2. Wallos is GPL-3.0 and ApexCharts changed its
+  licensing model with the 5.x line, so the previously bundled build was not one
+  this project can redistribute. `THIRD_PARTY_LICENSES.md` now records the
+  provenance, the pinned version and the MIT text. Nothing on the statistics page
+  needed 5.x. (#171)
+
+### Fixed
+
+* **statistics:** clicking a donut legend entry removes its slice again. The
+  toggle passed a shortened series to `updateOptions`, which leaves the removed
+  slice on screen in ApexCharts 4.x; options and series are now updated
+  separately, which is correct on both lines.
+
 ## [5.16.3](https://github.com/thorstenhornung1/Wallos/releases/tag/v5.16.3) (2026-09-07)
 
 ### Fixed
