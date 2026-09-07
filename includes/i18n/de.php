@@ -90,7 +90,6 @@ $i18n = [
     "Yearly" => "Jährlich",
     "One-time" => "Einmalig",
     "lifetime_purchases" => "Lebenslange Käufe",
-    "dayly" => "Tag(e)",
     "weekly" => "Woche(n)",
     "monthly" => "Monat(e)",
     "yearly" => "Jahr(e)",

@@ -1,5 +1,18 @@
 # Changelog
 
+## [5.15.2](https://github.com/thorstenhornung1/Wallos/releases/tag/v5.15.2) (2026-09-07)
+
+### Changed
+
+* **localizer:** the "translate default names" actions are now primary buttons,
+  matching "Add" and "Save", instead of the faint secondary chips they had been
+  (they were `<button>` elements missing the `button` class, so no button style
+  applied). The dashboard banner now scrolls to and briefly highlights the
+  localizer, so the offer is easy to find. (follow-up to #169)
+
+* **i18n:** removed a stray duplicate translation key (`dayly`, a typo of the
+  live `daily` key) that had no English counterpart.
+
 ## [5.15.1](https://github.com/thorstenhornung1/Wallos/releases/tag/v5.15.1) (2026-09-07)
 
 ### Fixed
