@@ -58,7 +58,17 @@ if (!wallos_serpapi_key_is_valid($apiKey)) {
     ]));
 }
 
+// Atomic replacement (#142 shape, 5.15.0 QA #3): the delete and the insert are
+// one transaction, so an insert that fails cannot leave the account with its
+// old key gone and no new one stored. The candidate was already validated
+// above, so this guards a database failure between the two statements, not a
+// bad key.
+$db->exec('BEGIN');
+
 if ($removeStmt->execute() === false) {
+    // Rolled back rather than left half-done: the working key stays in place.
+    $db->exec('ROLLBACK');
+
     die(json_encode([
         "success" => false,
         "message" => translate('failed_to_store_api_key', $i18n)
@@ -70,14 +80,19 @@ $stmt = $db->prepare($insertCredentials);
 $stmt->bindParam(':api_key', $apiKey, SQLITE3_TEXT);
 $stmt->bindParam(':userId', $userId, SQLITE3_INTEGER);
 
-if ($stmt->execute()) {
+if ($stmt->execute() === false) {
+    // The delete above is undone with it, restoring the previous credential.
+    $db->exec('ROLLBACK');
+
     die(json_encode([
-        "success" => true,
-        "message" => translate('api_key_saved', $i18n)
+        "success" => false,
+        "message" => translate('failed_to_store_api_key', $i18n)
     ]));
 }
 
+$db->exec('COMMIT');
+
 die(json_encode([
-    "success" => false,
-    "message" => translate('failed_to_store_api_key', $i18n)
+    "success" => true,
+    "message" => translate('api_key_saved', $i18n)
 ]));
