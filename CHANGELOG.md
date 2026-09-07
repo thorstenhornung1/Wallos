@@ -1,5 +1,16 @@
 # Changelog
 
+## [5.16.5](https://github.com/thorstenhornung1/Wallos/releases/tag/v5.16.5) (2026-09-07)
+
+### Fixed
+
+* **localizer:** the migration page showed a header and nothing else. Loading
+  localization candidates before the page header runs left the header unable to
+  define `$i18n` — a language file already loaded from inside a helper function
+  is skipped by `require_once` — so the page died on its first translation, after
+  the document had started. Any page could hit this; the localizer page did,
+  through the redirect guard added in 5.16.1. (#172 follow-up)
+
 ## [5.16.4](https://github.com/thorstenhornung1/Wallos/releases/tag/v5.16.4) (2026-09-07)
 
 ### Changed
