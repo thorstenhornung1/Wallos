@@ -185,12 +185,51 @@ wallos_test('the banner leads to the migration page, which owns both halves', fu
     // The page is meant to disappear on its own: an account with nothing left
     // to rename is sent to the dashboard rather than shown an empty page, which
     // is also what makes the reload after a successful run leave it for good.
-    $page = file_get_contents(WALLOS_ROOT . '/localize.php');
-    assert_contains("header('Location: index.php')", $page,
-        'an account without candidates is redirected away');
+    $redirects = file_get_contents(WALLOS_ROOT . '/includes/checkredirect.php');
+    assert_contains("\$currentPage == 'localize.php'", $redirects,
+        'the redirect runs from checkredirect.php, before the document starts');
+    assert_not_contains("header('Location", file_get_contents(WALLOS_ROOT . '/localize.php'),
+        'the page itself does not attempt a redirect it cannot perform');
 
     // Settings no longer carries the migration UI at all.
     $settings = file_get_contents(WALLOS_ROOT . '/settings.php');
     assert_not_contains('localize-defaults', $settings,
         'the settings page no longer hosts the localizer');
+});
+
+wallos_test('no page tries to redirect after the document has started', function () {
+    // includes/header.php prints <!DOCTYPE html> at line 82. A Location header
+    // sent after that first byte is discarded by PHP with "headers already
+    // sent" -- but the exit next to it still runs, so the visitor gets a page
+    // that stops after the navigation instead of the redirect. It looks like a
+    // blank page, and with display_errors off there is not even a warning.
+    //
+    // That is exactly how localize.php shipped in 5.16.0. The redirect belongs
+    // in includes/checkredirect.php, which header.php loads at line 5, well
+    // before any output.
+    //
+    // admin.php carries the same defect and predates this case. It is recorded
+    // here rather than fixed in passing: moving an admin guard is a security
+    // change and wants its own review. The list may shrink, never grow.
+    $known = ['admin.php'];
+
+    $offenders = [];
+    foreach (glob(WALLOS_ROOT . '/*.php') as $path) {
+        $name = basename($path);
+        $source = file_get_contents($path);
+
+        $header = strpos($source, "require_once 'includes/header.php'");
+        if ($header === false) {
+            continue;
+        }
+
+        if (preg_match('/header\s*\(\s*[\'"]Location/i', $source, $match, PREG_OFFSET_CAPTURE)
+            && $match[0][1] > $header) {
+            $offenders[] = $name;
+        }
+    }
+
+    sort($offenders);
+    assert_same($known, $offenders,
+        'a page redirects only from checkredirect.php, before the first byte of output');
 });
