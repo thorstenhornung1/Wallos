@@ -62,7 +62,8 @@ if ($_SERVER["REQUEST_METHOD"] === "POST" || $_SERVER["REQUEST_METHOD"] === "GET
     $userId = $user['id'];
     $providers = [
         0 => "Fixer.io",
-        1 => "APILayer.com"
+        1 => "APILayer.com",
+        2 => "Frankfurter"
     ]; 
 
     $query = "SELECT * FROM fixer WHERE user_id = :userId";
@@ -75,7 +76,7 @@ if ($_SERVER["REQUEST_METHOD"] === "POST" || $_SERVER["REQUEST_METHOD"] === "GET
 
     if ($fixer) {
         unset($fixer['user_id']);
-        $fixer['provider_name'] = $providers[$fixer['provider']];
+        $fixer['provider_name'] = $providers[$fixer['provider']] ?? '';
         if ($fixer['api_key']) {
             $fixer['api_key'] = "********";
         }

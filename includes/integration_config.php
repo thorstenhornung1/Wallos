@@ -548,6 +548,29 @@ function wallos_build_effective_currency_config($db, $userId)
 }
 
 /**
+ * Whether a multi-currency account should be warned that its statistics cannot
+ * be converted.
+ *
+ * The presence of a fixer row never meant a usable provider, and its absence
+ * never meant an unusable one: with no row the effective provider is Frankfurter
+ * (id 2), which converts without a key. So the warning follows the one signal
+ * that already tells the difference — an effective currency configuration is
+ * invalid only when a key-needing provider (fixer/apilayer) has no key, and
+ * stays valid for Frankfurter, whatever the fixer row does or does not say
+ * (#168).
+ *
+ * @param SQLite3 $db
+ * @param int     $userId
+ * @param bool    $usesMultipleCurrencies
+ * @return bool
+ */
+function wallos_show_cant_convert_warning($db, $userId, $usesMultipleCurrencies)
+{
+    return $usesMultipleCurrencies
+        && !wallos_get_effective_currency_config($db, $userId)['valid'];
+}
+
+/**
  * Builds a custom currency configuration from submitted form values so that
  * validating, testing and storing a key all use the same structure.
  *
