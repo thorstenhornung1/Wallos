@@ -251,7 +251,18 @@ jobs:
           outputs: type=image,name=${{ env.IMAGE }},push-by-digest=true,name-canonical=true,push=${{ github.event_name != 'pull_request' }}
           # Scope cache per platform to prevent architecture-mismatched layers
           cache-from: type=gha,scope=${{ github.workflow }}-${{ matrix.platform }}
-          cache-to: type=gha,mode=max,scope=${{ github.workflow }}-${{ matrix.platform }}
+          # A cache export is an optimisation, not a result, so it must not be
+          # able to fail a build — hence ignore-error. Runs of this workflow
+          # overlap by design: a release pushes the tag and the main commit
+          # within seconds, and two main commits follow each other just as
+          # closely, so several runs write the same gha scope at once. On
+          # 2026-09-07 the loser of that race got `not_found` from the cache
+          # backend *after* its image was already pushed and every test was
+          # green; that failed the arm64 job and took `merge` and `release`
+          # down with it, so a finished multi-arch image was never tagged. The
+          # export still logs the error, the build now survives it, and the
+          # next run repopulates the scope.
+          cache-to: type=gha,mode=max,ignore-error=true,scope=${{ github.workflow }}-${{ matrix.platform }}
 
       - name: Export digest
         if: github.event_name != 'pull_request'
