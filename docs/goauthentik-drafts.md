@@ -18,7 +18,12 @@ whichever you want; they do not depend on each other.
 4. Report 1 and Report 4 are ready as they stand and are the ones worth posting
    first.
 
-Nothing here has been sent. No account of yours has posted anything.
+**Status (2026-09-07):**
+
+- **Report 1** — POSTED as goauthentik/authentik#25826. Reviewed and corrected before posting: the notification window is the access-token lifetime (via `ExpiringModel`'s default manager excluding expired rows), *not* a `clean_expired_models` race; `access_token_validity` was five minutes *in this deployment*, not a 2026.8.1 default (the branch default is `hours=1`). An issue search found no existing duplicate.
+- **Report 2** — NOT posted: already fixed upstream by PR #25816 "core: fix bulk session revocation" (merged 2026-09-06 21:47 UTC), the exact `session=` → `instance=` one-liner. Our three production events (2026-09-03 ×2, 2026-09-04 ×1; authentik event UUIDs 53d0e029/abbd1810/a423e2ff) were this bug, and the root cause was confirmed line-for-line before the upstream fix was found. Held as a duplicate.
+- **Report 3** — held (unconfirmed hang).
+- **Report 4** — separate (avatar / access-token bloat).
 
 ---
 
@@ -129,7 +134,7 @@ session deletion. The request fails; the deletion does not complete cleanly.
 Deleting a single session from the user's detail page works and returns 204.
 Only the bulk path fails.
 
-Observed four times on 2026-09-04.
+Observed three times (2026-09-03 07:29:47, 2026-09-03 07:29:54, 2026-09-04 14:52:29 +02), all identical. Fixed upstream by PR #25816 (merged 2026-09-06); not posted as a duplicate.
 
 #### Traceback
 
