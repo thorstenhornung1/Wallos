@@ -1,5 +1,33 @@
 # Changelog
 
+## [5.16.0](https://github.com/thorstenhornung1/Wallos/releases/tag/v5.16.0) (2026-09-07)
+
+### Changed
+
+* **localizer:** renaming the seeded English currency and payment-method names
+  now happens on a page of its own instead of in two blocks inside the settings
+  page. Both halves are one list with one button, and the page is reachable only
+  from the dashboard banner that offers it.
+
+  The banner offers currency *and* payment-method names, but a link can only
+  land on one anchor, and it pointed at the currencies. An account that renamed
+  those was sent to a section with nothing left to do, while the four generic
+  payment methods still held their English names some 500 lines further down —
+  so the banner stayed up and the offer looked broken rather than half-finished.
+
+  The page removes itself once it has nothing to do: an account with no
+  remaining default names is redirected to the dashboard, which is also what
+  makes the reload after a successful run leave it behind for good.
+
+### Fixed
+
+* **tests:** the suite could not produce a payment-method candidate at all — the
+  fixture seeds one method with an empty icon, and the detector matches on the
+  generic icons — so the state above was never covered. Three cases now pin it:
+  the half-finished account that still sees the banner, the property that lets
+  the offer end at all (brand names are never candidates, so they cannot hold it
+  open), and the wiring from banner to page.
+
 ## [5.15.3](https://github.com/thorstenhornung1/Wallos/releases/tag/v5.15.3) (2026-09-07)
 
 ### Fixed
