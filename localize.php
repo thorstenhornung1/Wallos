@@ -21,7 +21,8 @@
   shown an empty page.
 
   To remove it in a later version: delete this file, the banner block in
-  index.php, and scripts/localize.js. The detection helpers in
+  index.php, scripts/localize.js, and the localize.php branch in
+  includes/checkredirect.php. The detection helpers in
   includes/user_provisioning.php stay — they also seed new accounts in their
   own language, which is not going away.
 */
@@ -35,13 +36,10 @@ $accountLanguage = wallos_resolve_language(
 $currencyCandidates = wallos_default_currency_localization_candidates($db, $userId, $accountLanguage);
 $paymentCandidates = wallos_default_payment_method_localization_candidates($db, $userId, $accountLanguage);
 
-// Nothing to rename means this page has no reason to exist for this account —
-// including the moment right after a successful run, so the reload the endpoint
-// triggers lands back on the dashboard by itself.
-if ($currencyCandidates === [] && $paymentCandidates === []) {
-    header('Location: index.php');
-    exit;
-}
+// An account with nothing left to rename never reaches this point: the redirect
+// lives in includes/checkredirect.php, which runs before header.php prints the
+// first byte of the document. Doing it here failed with "headers already sent"
+// and left the empty page standing.
 ?>
 
 <section class="contain localize-page" id="localize-defaults"

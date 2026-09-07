@@ -3221,6 +3221,22 @@ input[type="radio"]:checked+label::after {
   margin-top: 20px;
 }
 
+/* Wallos hides every checkbox (opacity 0, absolute) and draws a switch through
+   an adjacent label instead. These rows are labels *around* their checkbox, so
+   there is no adjacent label to draw and the box vanished entirely — the list
+   looked like it offered no choice at all, when in fact every row was ticked.
+   A row here is one item in a list of 38, not a settings toggle, so it gets a
+   plain native checkbox back rather than a 54px switch. */
+.localize-defaults-row input[type="checkbox"] {
+  opacity: 1;
+  position: static;
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+  accent-color: var(--main-color);
+  cursor: pointer;
+}
+
 .localize-defaults-row {
   display: flex;
   flex-direction: row;
