@@ -1,6 +1,7 @@
 <?php
 require_once 'includes/header.php';
 require_once 'includes/currency_rates.php';
+require_once 'includes/integration_config.php';
 
 function getPriceConverted($price, $currency, $database, $userId)
 {
@@ -62,16 +63,7 @@ while ($row = $result->fetchArray(SQLITE3_ASSOC)) {
 $currenciesInUse = array_unique($currenciesInUse);
 $usesMultipleCurrencies = count($currenciesInUse) > 1;
 
-$showCantConverErrorMessage = false;
-if ($usesMultipleCurrencies) {
-  $query = "SELECT api_key FROM fixer WHERE user_id = :userId";
-  $stmt = $db->prepare($query);
-  $stmt->bindValue(':userId', $userId, SQLITE3_INTEGER);
-  $result = $stmt->execute();
-  if ($result->fetchArray(SQLITE3_ASSOC) === false) {
-    $showCantConverErrorMessage = true;
-  }
-}
+$showCantConverErrorMessage = wallos_show_cant_convert_warning($db, $userId, $usesMultipleCurrencies);
 
 // Get code of main currency to display on statistics
 $query = "SELECT c.code

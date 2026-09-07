@@ -11,7 +11,7 @@
 #
 # Do not edit by hand — run dev/db-audit.sh --update and commit the diff.
 #
-# total: 1541 matches in 238 file(s)
+# total: 1542 matches in 239 file(s)
 admin.php	5
 api/admin/get_admin_settings.php	1
 api/admin/set_admin_settings.php	2
@@ -39,7 +39,7 @@ api/subscriptions/get_subscriptions.php	9
 api/subscriptions/set_subscriptions.php	62
 api/users/get_user.php	1
 api/users/set_budget.php	7
-calendar.php	8
+calendar.php	6
 dev/generate-pgsql-schema.php	15
 dev/migrate-to-pgsql.php	23
 dev/seed.php	13
@@ -129,7 +129,7 @@ includes/currency_rates.php	4
 includes/db/archive.php	1
 includes/getdbkeys.php	10
 includes/getsettings.php	7
-includes/integration_config.php	33
+includes/integration_config.php	34
 includes/list_subscriptions.php	2
 includes/mailer.php	2
 includes/notification_settings.php	4
@@ -146,7 +146,7 @@ includes/remember_me.php	8
 includes/run_migrations.php	2
 includes/session_tokens.php	2
 includes/ssrf_helper.php	6
-includes/stats_calculations.php	21
+includes/stats_calculations.php	19
 includes/stats_extra_calculations.php	2
 includes/totp_state.php	13
 includes/user_provisioning.php	4
@@ -216,6 +216,7 @@ settings.php	46
 stats.php	2
 subscriptions.php	5
 tests/bootstrap.php	30
+tests/cases/cant_convert_warning_test.php	4
 tests/cases/currency_code_validation_test.php	1
 tests/cases/currency_frankfurter_test.php	14
 tests/cases/currency_key_save_test.php	3

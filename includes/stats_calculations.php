@@ -1,6 +1,7 @@
 <?php
 require_once __DIR__ . '/budget_period_calculations.php';
 require_once __DIR__ . '/currency_rates.php';
+require_once __DIR__ . '/integration_config.php';
 
 function getPricePerMonth($cycle, $frequency, $price)
 {
@@ -358,16 +359,7 @@ if ($periodDiffersFromCalendarMonth && isset($userData['period_budget']) && $use
 $showVsBudgetGraph = $showVsMonthlyBudgetGraph;
 $vsBudgetDataPoints = $vsMonthlyBudgetDataPoints;
 
-$showCantConverErrorMessage = false;
-if ($usesMultipleCurrencies) {
-    $query = "SELECT api_key FROM fixer WHERE user_id = :userId";
-    $stmt = $db->prepare($query);
-    $stmt->bindValue(':userId', $userId, SQLITE3_INTEGER);
-    $result = $stmt->execute();
-    if ($result->fetchArray(SQLITE3_ASSOC) === false) {
-        $showCantConverErrorMessage = true;
-    }
-}
+$showCantConverErrorMessage = wallos_show_cant_convert_warning($db, $userId, $usesMultipleCurrencies);
 
 $query = "SELECT * FROM total_yearly_cost WHERE user_id = :userId";
 $stmt = $db->prepare($query);
