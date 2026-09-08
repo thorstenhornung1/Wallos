@@ -35,3 +35,23 @@ if ($currentPage == 'localize.php') {
         exit;
     }
 }
+
+// Sending a non-admin away from the admin page (issue #173).
+//
+// admin.php checked this itself, but only after header.php had printed the
+// document, so the Location header was discarded and the visitor got a page
+// that stopped after the navigation rather than a redirect. The content was
+// never exposed — the exit did run — but the redirect never happened.
+//
+// The check asks the database directly instead of reading $isAdmin, which
+// header.php does not set until line 55, well after this file runs. Reading it
+// here would test an undefined variable, and `undefined != 1` is true, so the
+// guard would appear to work while actually checking nothing.
+if ($currentPage == 'admin.php') {
+    require_once __DIR__ . '/user_roles.php';
+
+    if (!wallos_user_is_admin($db, $userId)) {
+        header('Location: index.php');
+        exit;
+    }
+}

@@ -7,8 +7,12 @@ require_once 'includes/database/diagnostics.php';
 require_once 'includes/ssrf_helper.php';
 require_once 'includes/integration_config.php';
 
+// A non-admin is redirected away in includes/checkredirect.php, which runs
+// before header.php prints the first byte; a Location header here would arrive
+// after the document had started and be discarded (#173). This stays as a
+// second line of defence: if that guard is ever removed or bypassed, this page
+// must still refuse to render its contents rather than rely on being unreachable.
 if ($isAdmin != 1) {
-    header('Location: index.php');
     exit;
 }
 
