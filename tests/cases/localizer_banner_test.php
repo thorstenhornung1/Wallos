@@ -208,10 +208,10 @@ wallos_test('no page tries to redirect after the document has started', function
     // in includes/checkredirect.php, which header.php loads at line 5, well
     // before any output.
     //
-    // admin.php carries the same defect and predates this case. It is recorded
-    // here rather than fixed in passing: moving an admin guard is a security
-    // change and wants its own review. The list may shrink, never grow.
-    $known = ['admin.php'];
+    // admin.php carried the same defect and was fixed under #173. The list is
+    // empty and may never grow: a page that needs to send someone elsewhere
+    // does it from checkredirect.php, before the first byte of output.
+    $known = [];
 
     $offenders = [];
     foreach (glob(WALLOS_ROOT . '/*.php') as $path) {
