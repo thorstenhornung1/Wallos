@@ -1,5 +1,16 @@
 # Changelog
 
+## [5.16.6](https://github.com/thorstenhornung1/Wallos/releases/tag/v5.16.6) (2026-09-08)
+
+### Fixed
+
+* **admin:** a non-admin opening the admin page is redirected again. The check
+  ran after the page header had printed the document, so the redirect was
+  discarded and the visitor got a page that stopped after the navigation, with a
+  PHP warning. No content was exposed — the page still refused to render — but
+  the redirect did nothing. It now runs before any output, and asks the role
+  store directly. (#173)
+
 ## [5.16.5](https://github.com/thorstenhornung1/Wallos/releases/tag/v5.16.5) (2026-09-07)
 
 ### Fixed
