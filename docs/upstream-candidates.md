@@ -77,6 +77,25 @@ that. What follows is prepared work sitting on `origin`.
 |---|---|---|
 | `upstream-fix/webhook-json-escape` | +44/−5, 2 files | 79 tests pass; 6 assertions fail with the old line back |
 | `upstream-fix/oidc-account-language` | +215/−13, 4 files | 88 tests pass; broken two ways, both caught |
+| `upstream-feat/instance-smtp` | +690/−32, 8 files | 89 tests pass; broken five ways, all caught |
+
+A1 turned out to be the smallest of the three arguments and the largest of the
+three diffs, and both halves of that are worth knowing before it goes out. The
+argument is small because `OIDC_CLIENT_SECRET_FILE` is already in his tree: the
+whole proposal is "the same thing, for the fields the mail server needs". The
+diff is large because seven places read the admin row and they all have to read
+the same one — a mail job that uses the environment while `login.php` still asks
+the database whether mail is configured is how "I configured it and the reset
+link never appeared" happens.
+
+What the five breakage checks were, because they are the five ways this kind of
+layer goes wrong: an empty variable read as a configuration (switches mail off
+and calls the field managed); the plain variable standing in for a missing
+secret file (undoes the reason the file was mounted); the save endpoint writing
+every column again (an environment value copied into the database outlives the
+variable, so removing it restores a stale server); the managed password rendered
+into the page source; and the environment layer switched off entirely, which is
+the one that proves the end-to-end case rather than the plumbing.
 
 Both were run in a **clean export of the branch**, not in this working copy —
 `git archive | tar -x` into a scratch directory — because `.claude/` holds agent
