@@ -77,6 +77,7 @@ because the rule says approval is a fact rather than an inference.
 | 2026-09-12 | [#1214](https://github.com/ellite/Wallos/pull/1214) | `upstream-fix/webhook-json-escape` |
 | 2026-09-12 | [#1215](https://github.com/ellite/Wallos/pull/1215) | `upstream-fix/oidc-account-language` |
 | 2026-09-12 | [#1216](https://github.com/ellite/Wallos/pull/1216) | `upstream-fix/localized-default-names` |
+| 2026-09-12 | [#1217](https://github.com/ellite/Wallos/pull/1217) | `upstream-feat/instance-smtp` |
 
 ### Upstream's CI cannot build a pull request from a fork
 
