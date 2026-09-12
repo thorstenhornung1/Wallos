@@ -80,6 +80,50 @@ that. What follows is prepared work sitting on `origin`.
 | `upstream-feat/instance-smtp` | +690/−32, 8 files | 89 tests pass; broken five ways, all caught |
 | `upstream-fix/migration-000016` | +211/−3, 3 files | 82 tests pass; each half broken separately |
 | `upstream-fix/migration-runner` | +306/−7, 2 files | 85 tests pass; reverting the file fails five cases |
+| `upstream-fix/gates-skip-nested-checkouts` | +96/−5, 2 files | 80 tests pass; the same file in a dot directory is ignored, at a real path it fails both gates |
+| `upstream-feat/frankfurter-provider` | +698/−10, 9 files | 90 tests pass; seventeen breakage checks |
+| `upstream-fix/localized-default-names` | +641/−157, 7 files | 88 tests pass; ten breakage checks |
+
+Eight branches, all on `origin`, none sent. Each was re-verified here from a
+clean export of the pushed branch rather than from the report that came with it.
+
+**What building A4 and A6 found that the plan did not know.**
+
+* A4 uses Frankfurter **v1**, not the v2 this fork uses. v1 drops a symbol it
+  cannot price instead of refusing the request, so the code partitioning that
+  costs sixty lines here is unnecessary there, and `{"rates":{...}}` is already
+  fixer's shape so upstream's update loop is untouched. The two trees therefore
+  speak different versions of the same API - acceptable, and worth knowing
+  before anybody reconciles them.
+* A4 also found that the block writing the rates has **no `else` at all**: a
+  provider answering without rates ended the request in silence, and the only
+  trace was that the stored rates had not moved. Same class as #1197, new place.
+* A6 found a **fourth** English seed list the plan had missed -
+  `endpoints/cronjobs/createdatabase.php` seeds categories at install time and
+  migration `000020` hands them to user 1, which is why `registration.php`
+  guards seeding with `if ($userId > 1)`. Without covering it, the single-user
+  self-hoster - the typical install - would have seen no change at all.
+* A6 measured the translation cost rather than guessing: sixteen new keys across
+  twenty-nine non-English files is **464 strings**, and this fork translated
+  them into two languages. It shipped `en` and `de` and let the other
+  twenty-seven fall back to English, said out loud in the commit message. No
+  name was machine-translated, which is the right answer for a maintainer who
+  publishes our work verbatim.
+* Prior art worth citing in that pull request: upstream already ships
+  **"Translate with AI"** for categories. The maintainer agrees this is a
+  problem; today's answer needs an LLM provider configured and a click. This
+  makes the default correct with neither, and the button still covers renamed
+  and existing ones.
+* The two i18n branches **compose**: test-merged, clean, 98 tests pass on the
+  merged tree.
+
+**A5 (Web Push) is measured and held.** Roughly 1,400 lines over about twenty
+files. The largest feature pull request the maintainer has merged recently is
+#1207 at +492/-3 over 37 files, so A5 is about three times that. It also carries
+one design decision that changes the diff materially: the VAPID keypair is an
+instance credential, which in this fork lives in the configuration layer A1
+proposes. Upstream would have to keep it in the `admin` table instead, or A5
+waits on A1. Not built.
 
 A1 turned out to be the smallest of the three arguments and the largest of the
 three diffs, and both halves of that are worth knowing before it goes out. The
