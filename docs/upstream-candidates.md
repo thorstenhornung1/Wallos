@@ -75,6 +75,7 @@ because the rule says approval is a fact rather than an inference.
 | sent | upstream PR | branch |
 |---|---|---|
 | 2026-09-12 | [#1214](https://github.com/ellite/Wallos/pull/1214) | `upstream-fix/webhook-json-escape` |
+| 2026-09-12 | [#1215](https://github.com/ellite/Wallos/pull/1215) | `upstream-fix/oidc-account-language` |
 
 One at a time, and wait — that is the rule this list has followed since #1181,
 and it is why eleven of thirteen landed. The next one goes out when #1214 has
