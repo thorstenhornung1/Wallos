@@ -66,6 +66,40 @@ The proposal below is not "adopt our architecture"; it is "you built this for
 OIDC — here is the same thing for the other three integrations, using your
 helpers".
 
+## 2026-09-12, later: the plan is approved, and the first two are built
+
+Thorsten approved the plan. **Approved means built, not sent** — the standing
+rule is unchanged and it is the one rule on this page that has never bent:
+nothing appears in `ellite/Wallos` without him asking for it *and* approving
+that. What follows is prepared work sitting on `origin`.
+
+| branch | files | against upstream's own suite |
+|---|---|---|
+| `upstream-fix/webhook-json-escape` | +44/−5, 2 files | 79 tests pass; 6 assertions fail with the old line back |
+| `upstream-fix/oidc-account-language` | +215/−13, 4 files | 88 tests pass; broken two ways, both caught |
+
+Both were run in a **clean export of the branch**, not in this working copy —
+`git archive | tar -x` into a scratch directory — because `.claude/` holds agent
+worktrees and upstream's own `order_by` and `delete_before_replace` gates walk
+them. In this tree they report eight failures that do not exist in the branch.
+Which is itself a finding: **those two gates are ours**, from #1197 and #1198,
+and they are the ones misbehaving. The fork's copies are fixed; upstream's are
+not. That is a B-track item now, and it is our bug to fix in his tree, not his.
+
+One decision changed while building. The plan said to ride **B2** — applying the
+escape to the other seven placeholders — along with A0. It does not. A0 is a
+regression with a one-line cause and a five-note test; B2 is defensive work
+whose own case needs a doubled backslash to bite. Putting them together invites
+a question about the weak half, and a question stalls a pull request with a
+maintainer who never answers one. B2 goes on its own, after.
+
+Also learned, and worth the next person's time: **upstream's tree is CRLF**, and
+a search-and-replace that assumes `\n` silently matches nothing. Every edit to
+an upstream branch goes through a line-ending-preserving patch, and
+`git diff --stat upstream/main` before the push is what catches it when it does
+not — a branch touching more files than the change touches is either that or a
+stray `git add -A`.
+
 ## Two tracks from here
 
 The small fixes keep going, because they cost nothing and keep the channel warm.
