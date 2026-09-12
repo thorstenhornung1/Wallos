@@ -552,6 +552,12 @@ reproduce in thirty seconds. A1 is the bigger prize and wants the reviewer warm.
 Re-verified against `upstream/main` on 2026-09-12; every one still present.
 
 **B1. `api/settings/set_settings.php` — the file that contradicts itself.**
+**Built: `upstream-fix/settings-api-unchecked-writes`**, +190/-16 over two
+files, 81 of upstream's own tests passing, broken two ways. One thing worth
+carrying into the pull request: the delete-before-replace gate deliberately
+leaves a pair alone when *neither* half is read, so it never flagged this —
+reading both is what brings these two pairs under it, and an edit that drops
+either check then fails there as well as in the new case.
 Four writes discarded (`:87`, `:92` custom CSS; `:137`, `:144` custom colours),
 then `success: true` — while the settings UPDATE in the same file (`:248`)
 reads its result and answers "Database error". #1197 fixed the identical shape
