@@ -78,6 +78,8 @@ that. What follows is prepared work sitting on `origin`.
 | `upstream-fix/webhook-json-escape` | +44/−5, 2 files | 79 tests pass; 6 assertions fail with the old line back |
 | `upstream-fix/oidc-account-language` | +215/−13, 4 files | 88 tests pass; broken two ways, both caught |
 | `upstream-feat/instance-smtp` | +690/−32, 8 files | 89 tests pass; broken five ways, all caught |
+| `upstream-fix/migration-000016` | +211/−3, 3 files | 82 tests pass; each half broken separately |
+| `upstream-fix/migration-runner` | +306/−7, 2 files | 85 tests pass; reverting the file fails five cases |
 
 A1 turned out to be the smallest of the three arguments and the largest of the
 three diffs, and both halves of that are worth knowing before it goes out. The
@@ -355,7 +357,8 @@ upstream has not taken yet.
 
 ---
 
-**A7. The migration runner, behind migration 000016.**
+**A7. The migration runner, behind migration 000016.** Built, and larger than
+the plan said — see below.
 
 Small diff, nine-year consequence, and not a tidy-up.
 
@@ -377,6 +380,41 @@ whole loop — the same lock, one layer up. Ours is portable except for
 data integrity, addressed to the maintainer, and it is strong enough alone. Send
 000016 first and the runner second: the first is the proof that the second is
 needed.
+
+**What building it found, which the plan had wrong.** 000016 is not one
+`finalize()`. The table cannot be removed at all, for two independent reasons,
+and fixing either alone leaves it there:
+
+* the migration drops the table while its own read of it is open, so the drop
+  never runs and the migration records itself as applied anyway; **and**
+* `createdatabase.php` runs on every container start and recreates the table
+  whenever it is missing — its v0.9-to-v1.0 block asks whether the table exists,
+  not whether the installation is from v0.9. So even a drop that worked would be
+  undone by the next restart.
+
+Measured rather than reasoned, on `upstream/main` as it stands:
+
+```
+after first start        : notifications present
+after a working drop     : notifications gone
+after the next start     : notifications present
+```
+
+Fixing only the migration would have held until the next restart, which is worse
+than not fixing it, because it would have looked fixed. The branch carries both
+halves and the test breaks them separately — removing the finalise brings the
+table back on the first start; letting `createdatabase.php` recreate it fails
+only the restart case.
+
+**And a breakage check caught a false claim in our own comment.** The runner's
+second `finalize()`, after the loop that reads the recorded migrations, was
+committed with a comment calling it the same lock as 000016. Removing it fails
+nothing: that loop fetches until it gets false, which steps the statement past
+its last row and releases the lock on its own. The load-bearing one is the
+*first* read — the `sqlite_master` check, which calls `fetchArray()` once and
+never again, exactly the 000016 shape. Removing that one does fail the case. Both
+comments now say which is which. This is the third time the rule has caught the
+gate rather than the code.
 
 ---
 
