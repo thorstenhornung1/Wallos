@@ -301,7 +301,35 @@ if (!$schemaExisted) {
     $result = $db->query("SELECT name FROM sqlite_master WHERE type='table' AND name='notifications'");
     $notificationsTableExists = $result->fetchArray(SQLITE3_ASSOC) !== false;
     $result->finalize();
-    if (!$notificationsTableExists) {
+
+    // Migration 000016 splits this table into the per-provider tables and drops
+    // it, and the chain runs after this file on every start — so recreating it
+    // here once that has happened put it straight back, every start. The drop
+    // itself was fixed long ago (000016 finalises its read now); this is the
+    // other half, and without it the fix held for exactly one boot. Measured:
+    // gone after the first start, present again after the second.
+    //
+    // Only an installation that has not reached that migration still needs the
+    // table. The recorded path has been written both with and without a leading
+    // '../../', so it is matched by name.
+    $notificationsMigrated = false;
+
+    if ($db->tableExists('migrations')) {
+        $migrationCheck = $db->prepare(
+            "SELECT COUNT(*) AS applied FROM migrations WHERE migration LIKE '%000016.php'");
+
+        if ($migrationCheck !== false) {
+            $migrationResult = $migrationCheck->execute();
+            $migrationRow = $migrationResult ? $migrationResult->fetchArray() : false;
+            $notificationsMigrated = $migrationRow && (int) $migrationRow['applied'] > 0;
+        }
+    }
+
+    if ($notificationsTableExists) {
+        echo "Table 'notifications' already exists.\n";
+    } elseif ($notificationsMigrated) {
+        echo "Table 'notifications' was migrated away and is not recreated.\n";
+    } else {
         $db->exec('CREATE TABLE notifications (
             id INTEGER PRIMARY KEY,
             enabled BOOLEAN DEFAULT false,
@@ -312,8 +340,6 @@ if (!$schemaExisted) {
             smtp_password VARCHAR(255)
         )');
         echo "Table 'notifications' created.\n";
-    } else {
-        echo "Table 'notifications' already exists.\n";
     }
 
     $result = $db->query("PRAGMA table_info(subscriptions)");

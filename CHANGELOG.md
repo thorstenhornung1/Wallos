@@ -79,6 +79,18 @@ What is genuinely new from upstream, and is now here:
 
 ### Fixed
 
+* **schema:** the `notifications` table migration 000016 removes stays removed.
+  The drop itself has worked here since the #87 work put a `finalize()` in front
+  of it — but `createdatabase.php` runs on every container start and its
+  v0.9-to-v1.0 block asked whether the table exists rather than whether the
+  installation is from v0.9, so it put the table straight back on the next boot.
+  Measured before the fix: gone after the first start, present again after the
+  second. Which made the drop correct and useless — it held for exactly one
+  boot. Nothing reads the table, so the cost was weight in every backup and
+  every restore rather than wrong behaviour; what it was worth fixing for is
+  that "the migration ran and the thing it did came back" makes a schema
+  untrustworthy. A database with no migration history is still given the table,
+  which is the case the block exists for.
 * **logos:** `deleteLogoFileIfUnused()` named one bound parameter three times
   in one statement. SQLite repeats a named parameter happily; PDO with native
   prepares does not, so the query would have thrown on PostgreSQL the first
