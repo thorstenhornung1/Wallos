@@ -44,6 +44,14 @@ $db->exec('CREATE TABLE IF NOT EXISTS notification_settings (
 $result = $db->query('SELECT COUNT(*) as count FROM notifications');
 $row = $result->fetchArray(SQLITE3_ASSOC);
 
+// Finalised before the table it reads is dropped below. A result set that is
+// still open holds a shared read lock on that table, and SQLite answers the
+// DROP with "database table is locked" rather than dropping anything. The
+// exec() result is not read, so the migration records itself as applied with
+// its work undone - which is why the notifications table is still present on
+// installations that ran this migration years ago.
+$result->finalize();
+
 if ($row['count'] > 0) {
     // Copy data from notifications to email_notifications
     $db->exec('INSERT INTO email_notifications (enabled, smtp_address, smtp_port, smtp_username, smtp_password, from_email, encryption)

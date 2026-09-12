@@ -249,8 +249,34 @@ if (!file_exists($databaseFile)) {
     # Added new notifications table
     # Added notify column to subscriptions table
 
+    // Migration 000016 splits this table into the per-provider notification
+    // tables and removes it, and the migration chain runs after this file on
+    // every start. So recreating the table here once that has happened puts it
+    // straight back, every time - which is the second reason it is still
+    // present on installations that ran the migration years ago, and the reason
+    // fixing only the migration would have held until the next restart.
+    //
+    // Only an installation that has not reached that migration still needs the
+    // table. The recorded path has been written both with and without a
+    // leading '../../' over the years, so it is matched by its name.
+    $migrationApplied = false;
+    $migrationsTable = $db->query("SELECT name FROM sqlite_master WHERE type='table' AND name='migrations'");
+
+    if ($migrationsTable !== false && $migrationsTable->fetchArray(SQLITE3_ASSOC)) {
+        $migrationsTable->finalize();
+        $migrationApplied = (int) $db->querySingle(
+            "SELECT COUNT(*) FROM migrations WHERE migration LIKE '%000016.php'") > 0;
+    }
+
     $result = $db->query("SELECT name FROM sqlite_master WHERE type='table' AND name='notifications'");
-    if (!$result->fetchArray(SQLITE3_ASSOC)) {
+    $notificationsTableExists = (bool) $result->fetchArray(SQLITE3_ASSOC);
+    $result->finalize();
+
+    if ($notificationsTableExists) {
+        echo "Table 'notifications' already exists.\n";
+    } elseif ($migrationApplied) {
+        echo "Table 'notifications' was migrated away and is not recreated.\n";
+    } else {
         $db->exec('CREATE TABLE notifications (
             id INTEGER PRIMARY KEY,
             enabled BOOLEAN DEFAULT false,
@@ -261,8 +287,6 @@ if (!file_exists($databaseFile)) {
             smtp_password VARCHAR(255)
         )');
         echo "Table 'notifications' created.\n";
-    } else {
-        echo "Table 'notifications' already exists.\n";
     }
 
     $result = $db->query("PRAGMA table_info(subscriptions)");
