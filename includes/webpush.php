@@ -119,6 +119,53 @@ function wallos_webpush_pad($value, $length)
 }
 
 /* -------------------------------------------------------------------------
+   One VAPID keypair for the instance, not one per user
+
+   Asked deliberately in 2026-09 rather than inherited, because the keypair
+   looks like a credential and therefore looks as though it ought to belong to
+   somebody.
+
+   It does not. RFC 8292 §1 calls it a way for an application server "to
+   voluntarily identify itself to a push service": the service uses it to
+   recognise a sender over time (§1.1) and to refuse anyone who cannot sign for
+   a restricted subscription (§4.2). It never touches the message. What keeps a
+   notification private is RFC 8291 — the browser generates its own P-256 key
+   pair and a sixteen-octet auth secret for each subscription (§3.1, §3.2),
+   keeps the private half, and we encrypt to it with a throwaway key per
+   message. wallos_webpush_encrypt() below takes only p256dh and auth and makes
+   its own ephemeral pair; the VAPID key is not one of its arguments. So the
+   secret that protects the content is already per user, in fact per device, and
+   it is not ours to hold.
+
+   A per-user keypair would therefore protect no content. It would only split
+   the right to *send*, and that right cannot be split here: one cron run sends
+   for everyone and needs every share at once, out of one database, in one
+   backup. Whatever leaks the instance key leaks all of them.
+
+   It would cost something, twice over. A per-user key would live in the same
+   row as that user's endpoint, so a row leak that today yields nothing sendable
+   — the subscription is restricted, and the push service answers 403 without a
+   valid token — would start yielding something. And a subscription is bound to
+   the key it was made with: subscribe() with a different applicationServerKey
+   on a registration that already has one rejects with InvalidStateError. On the
+   family tablet where two people share a browser that turns the second person's
+   login into an error, where one instance key lets the browser hand back its
+   single subscription and the unique endpoint move the device to whoever
+   subscribed last — the only answer a browser can honestly give.
+
+   Checked against what others do, and the answer was unanimous: Home Assistant,
+   Nextcloud, Mastodon and ntfy all keep one keypair per instance, including the
+   two that host thousands of mutually distrusting accounts. No project was
+   found that keys VAPID per user; the one place the idea appears in public is a
+   web-push-php issue proposing it to survive a key rotation, not for security.
+
+   What this does not protect against, plainly: anyone who can read the database
+   or a backup can forge notifications to every device in the household. A key
+   per user would not have changed that. The thing that does help is keeping the
+   key out of the database altogether — WALLOS_VAPID_PRIVATE_KEY, below.
+   ------------------------------------------------------------------------- */
+
+/* -------------------------------------------------------------------------
    VAPID keypair (RFC 8292)
    ------------------------------------------------------------------------- */
 
