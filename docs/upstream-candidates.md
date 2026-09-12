@@ -144,11 +144,25 @@ one piece of it that needs no architecture decision:
   page.
 
 Scope it honestly rather than shipping all 1,937 lines: **one integration per
-pull request**, SMTP first. SMTP is the one where the pain is loudest (password
-resets and verification mail do not work at all until somebody configures a
-server), the one with the smallest surface, and the one whose failure mode is
-most visible. Currency and AI follow the same shape once it lands, which is then
-a review of the diff rather than of the idea.
+pull request**, SMTP first. Currency and AI follow the same shape once it lands,
+which is then a review of the diff rather than of the idea.
+
+SMTP first for a reason worth stating precisely, because it is smaller than the
+proposal sounds. **Upstream already has an instance SMTP.** `migrations/000020.php`
+puts `smtp_address`, `smtp_port`, `smtp_username`, `smtp_password`, `from_email`,
+`encryption` and `server_url` on the `admin` table; `admin.php` renders them; and
+`passwordreset.php:41` refuses to work at all until `smtp_address` and
+`server_url` are filled in. So the concept is his, the table is his, and the
+screen is his. What is missing is only the layer that lets the *deployment* own
+those fields instead of a person typing them in after every fresh volume — which
+is exactly what `OIDC_CLIENT_SECRET_FILE` already concedes for the one
+integration that has it.
+
+That turns A1 from "adopt our configuration architecture" into "the admin SMTP
+fields can come from `WALLOS_SMTP_*` and `WALLOS_SMTP_PASSWORD_FILE`, shown
+read-only with the variable that owns them, exactly as you already do for
+`OIDC_CLIENT_SECRET`". One concern, his own precedent, and inert unless a
+variable is set.
 
 The one adaptation: `wallos_build_instance_settings()` asks
 `$db->tableExists()`, which is this fork's boundary. Upstream gets the
