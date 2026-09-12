@@ -93,6 +93,15 @@ What is genuinely new from upstream, and is now here:
 * **api:** the payment-method and payment logo endpoints keep answering
   400 with a JSON body when a logo cannot be fetched. Upstream's version of
   our own #1200 answers 200.
+* **notifications:** a webhook whose note ends in a quotation mark is valid
+  JSON again. `webhookJsonEscape()` arrived with 5.7.0 as
+  `trim(json_encode($value), '"')`, and `trim()` with a character mask strips
+  every leading and trailing quote rather than the two `json_encode()` added —
+  so a note reading `cancel "soon"` came out as `cancel \"soon\`, the payload
+  ended in a bare backslash, and every webhook for that subscription was sent
+  with a body the receiver cannot parse. Nothing on screen said so; the request
+  went out and was nonsense. Found by reading the incoming code rather than by
+  a test: upstream's own case for this helper uses a note ending in `- Bob`.
 
 ### Internal
 

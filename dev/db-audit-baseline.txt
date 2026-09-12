@@ -11,7 +11,7 @@
 #
 # Do not edit by hand — run dev/db-audit.sh --update and commit the diff.
 #
-# total: 1607 matches in 245 file(s)
+# total: 1605 matches in 245 file(s)
 admin.php	5
 api/admin/get_admin_settings.php	1
 api/admin/set_admin_settings.php	2
@@ -232,7 +232,7 @@ tests/cases/delete_before_replace_test.php	6
 tests/cases/id_reuse_test.php	5
 tests/cases/integration_config_test.php	1
 tests/cases/language_migration_test.php	5
-tests/cases/logo_cleanup_test.php	8
+tests/cases/logo_cleanup_test.php	6
 tests/cases/migrate_pgsql_test.php	11
 tests/cases/migration_test.php	18
 tests/cases/notes_markdown_test.php	5
