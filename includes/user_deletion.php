@@ -30,6 +30,7 @@
  */
 
 require_once __DIR__ . '/database/connection.php';
+require_once __DIR__ . '/logo_cleanup.php';
 
 /**
  * The tables emptied before every other table the account owns.
@@ -125,9 +126,11 @@ function wallos_user_deletion_plan($db)
  *
  * @param WallosDatabase $db
  * @param int            $userId
+ * @param string|null    $logosDir path to images/uploads/logos, or null to
+ *                                 leave the files alone
  * @return array{success: bool, error: string|null, tables: int}
  */
-function wallos_delete_user($db, $userId)
+function wallos_delete_user($db, $userId, $logosDir = null)
 {
     $userId = (int) $userId;
 
@@ -138,6 +141,11 @@ function wallos_delete_user($db, $userId)
     }
 
     $plan = wallos_user_deletion_plan($db);
+
+    // Read before the rows go, because afterwards there is nothing left to say
+    // which files were this account's. The sweep itself happens after the
+    // commit: a rolled-back deletion must not have taken any logo with it.
+    $logoFiles = $logosDir === null ? [] : wallos_user_logo_files($db, $userId);
 
     if (!$db->beginTransaction()) {
         return wallos_user_deletion_failure('could not open a transaction');
@@ -175,7 +183,60 @@ function wallos_delete_user($db, $userId)
         return wallos_user_deletion_abort($db, 'the transaction could not be committed');
     }
 
+    // Best effort, and deliberately after the commit. A file another account
+    // still names is kept — clone.php copies a logo filename into a second row,
+    // so "this account's logo" and "a file nobody else uses" are not the same
+    // question — and a failure here leaves an orphan on disk, not a broken
+    // account.
+    foreach ($logoFiles as $logoFile) {
+        deleteLogoFileIfUnused($db, $logoFile, $logosDir);
+    }
+
     return ['success' => true, 'error' => null, 'tables' => count($plan)];
+}
+
+/**
+ * The uploaded logo files an account's rows name.
+ *
+ * Payment methods carrying one of the icons shipped with Wallos are skipped:
+ * their icon column holds a path under images/uploads/icons/, which is not a
+ * file this account uploaded and not one in the logos directory at all.
+ *
+ * @param WallosDatabase $db
+ * @param int            $userId
+ * @return string[] unique, non-empty file names
+ */
+function wallos_user_logo_files($db, $userId)
+{
+    $files = [];
+
+    $statements = [
+        'SELECT logo AS file FROM subscriptions WHERE user_id = :id',
+        'SELECT logo_variant AS file FROM subscriptions WHERE user_id = :id',
+        "SELECT icon AS file FROM payment_methods
+         WHERE user_id = :id AND icon NOT LIKE 'images/uploads/icons/%'",
+    ];
+
+    foreach ($statements as $sql) {
+        $statement = @$db->prepare($sql);
+
+        if ($statement === false) {
+            continue;
+        }
+
+        $statement->bindValue(':id', (int) $userId);
+        $result = @$statement->execute();
+
+        while ($result && ($row = $result->fetchArray())) {
+            $files[] = (string) $row['file'];
+        }
+    }
+
+    $files = array_filter($files, function ($file) {
+        return trim($file) !== '';
+    });
+
+    return array_values(array_unique($files));
 }
 
 /**

@@ -25,6 +25,10 @@ if ($main_color == $accent_color) {
     ]));
 }
 
+// Same pair as in customcss.php, and the same asymmetry: the insert that
+// replaces this row was checked, the delete was not. Two rows for one user
+// mean the colors the user just chose are one of two answers to the same
+// question, and nothing decides which one the next page load gets.
 $stmt = $db->prepare('DELETE FROM custom_colors WHERE user_id = :userId');
 $stmt->bindParam(':userId', $userId, SQLITE3_INTEGER);
 if ($stmt->execute() === false) {

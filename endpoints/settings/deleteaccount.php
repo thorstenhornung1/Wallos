@@ -20,7 +20,7 @@ if ($userIdToDelete == 1 || $userIdToDelete != $userId) {
     ]));
 }
 
-$deletion = wallos_delete_user($db, $userIdToDelete);
+$deletion = wallos_delete_user($db, $userIdToDelete, '../../images/uploads/logos/');
 
 if (!$deletion['success']) {
     // Nothing was deleted rather than some of it: the routine rolls back. The

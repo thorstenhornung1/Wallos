@@ -116,3 +116,20 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 ```
+
+---
+
+## Parsedown
+
+`libs/Parsedown.php` is the vendored, unmodified Parsedown 1.8.0. Subscription
+notes are Markdown from upstream 5.7.0 onwards, and `includes/markdown.php`
+renders them through it with `setSafeMode(true)`, so raw HTML in a note is
+escaped as text and link and image URLs are filtered against a scheme allowlist.
+
+- **Source:** Parsedown — https://github.com/erusev/parsedown
+- **Version:** 1.8.0 (`const version` in the file itself)
+- **Copyright:** © 2013-2018 Emanuil Rusev, erusev.com
+- **License:** MIT — `SPDX-License-Identifier: MIT`
+
+The license text as distributed with it is kept verbatim beside the library, in
+`libs/Parsedown-LICENSE.txt`.

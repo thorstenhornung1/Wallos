@@ -20,9 +20,14 @@
 wallos_test('no page writes a theme cookie into a script unencoded', function () {
     $emitters = [];
 
-    foreach (glob(WALLOS_ROOT . '/*.php') as $file) {
+    // includes/header.php emits the same pair for every page behind a session,
+    // so it belongs in the search rather than outside it: upstream's own copy
+    // of this gate found it, and a list of root pages never would.
+    $candidates = array_merge(glob(WALLOS_ROOT . '/*.php'), [WALLOS_ROOT . '/includes/header.php']);
+
+    foreach ($candidates as $file) {
         $source = file_get_contents($file);
-        $path = basename($file);
+        $path = str_replace(WALLOS_ROOT . '/', '', $file);
 
         // The emission, whatever the variable is called on that page.
         if (preg_match('/window\.(color_?[Tt]heme|theme)\s*=/', $source) !== 1) {
@@ -38,8 +43,8 @@ wallos_test('no page writes a theme cookie into a script unencoded', function ()
     }
 
     // A gate that finds nothing passes every assertion above it.
-    assert_same(3, count($emitters),
-        'the three pre-session pages were found: ' . implode(', ', $emitters));
+    assert_true(count($emitters) >= 4,
+        'the emitting pages were found: ' . implode(', ', $emitters));
 });
 
 wallos_test('every page reading a theme cookie validates it against a list', function () {
@@ -64,7 +69,15 @@ wallos_test('every page reading a theme cookie validates it against a list', fun
             }
 
             $readers[] = $path . ':' . $cookie;
-            assert_contains($sanitizer . '(' . $cookie . ')', $source,
+
+            // The cookie may carry a default on the way in —
+            // sanitize_theme_mode($_COOKIE['theme'] ?? null) — which is the
+            // same read, validated. manifest.php writes it that way because it
+            // serves requests that have no cookie at all.
+            $call = '/' . preg_quote($sanitizer, '/') . '\s*\(\s*'
+                . preg_quote($cookie, '/') . '\s*(?:\?\?[^)]*)?\)/';
+
+            assert_true(preg_match($call, $source) === 1,
                 $path . ' validates ' . $cookie . ' before using it');
         }
     }

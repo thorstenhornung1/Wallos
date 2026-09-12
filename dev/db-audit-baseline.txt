@@ -11,7 +11,7 @@
 #
 # Do not edit by hand — run dev/db-audit.sh --update and commit the diff.
 #
-# total: 1542 matches in 239 file(s)
+# total: 1607 matches in 245 file(s)
 admin.php	5
 api/admin/get_admin_settings.php	1
 api/admin/set_admin_settings.php	2
@@ -29,7 +29,7 @@ api/notifications/get_notification_settings.php	6
 api/payment_methods/get_payment_methods.php	3
 api/payment_methods/set_payment_methods.php	21
 api/settings/get_settings.php	4
-api/settings/set_settings.php	16
+api/settings/set_settings.php	17
 api/status/version.php	1
 api/subscriptions/get_ical_feed.php	10
 api/subscriptions/get_monthly_cost.php	5
@@ -59,7 +59,7 @@ endpoints/ai/translate_categories.php	7
 endpoints/categories/category.php	14
 endpoints/cronjobs/createdatabase.php	6
 endpoints/cronjobs/generaterecommendations.php	19
-endpoints/cronjobs/sendcancellationnotifications.php	13
+endpoints/cronjobs/sendcancellationnotifications.php	14
 endpoints/cronjobs/sendnotifications.php	3
 endpoints/cronjobs/sendresetpasswordemails.php	3
 endpoints/cronjobs/sendverificationemails.php	3
@@ -105,7 +105,6 @@ endpoints/settings/theme.php	2
 endpoints/settings/week_starts_sunday.php	2
 endpoints/subscription/add.php	28
 endpoints/subscription/clone.php	24
-endpoints/subscription/delete.php	4
 endpoints/subscription/exportcalendar.php	3
 endpoints/subscription/get.php	3
 endpoints/subscription/getcalendar.php	3
@@ -151,7 +150,7 @@ includes/stats_extra_calculations.php	2
 includes/totp_state.php	13
 includes/user_provisioning.php	4
 includes/user_roles.php	21
-index.php	10
+index.php	8
 login.php	16
 logout.php	1
 migrations/000002.php	2
@@ -216,6 +215,7 @@ settings.php	46
 stats.php	2
 subscriptions.php	5
 tests/bootstrap.php	30
+tests/cases/cancellation_notifications_test.php	18
 tests/cases/cant_convert_warning_test.php	4
 tests/cases/currency_code_validation_test.php	1
 tests/cases/currency_frankfurter_test.php	14
@@ -228,11 +228,14 @@ tests/cases/currency_scope_test.php	10
 tests/cases/currency_union_test.php	7
 tests/cases/currency_usage_test.php	4
 tests/cases/database_boundary_test.php	18
+tests/cases/delete_before_replace_test.php	6
 tests/cases/id_reuse_test.php	5
 tests/cases/integration_config_test.php	1
 tests/cases/language_migration_test.php	5
+tests/cases/logo_cleanup_test.php	8
 tests/cases/migrate_pgsql_test.php	11
 tests/cases/migration_test.php	18
+tests/cases/notes_markdown_test.php	5
 tests/cases/oidc_admin_role_test.php	4
 tests/cases/oidc_backchannel_test.php	12
 tests/cases/oidc_discovery_test.php	10
@@ -240,11 +243,14 @@ tests/cases/oidc_provisioning_test.php	1
 tests/cases/performance_test.php	31
 tests/cases/pgsql_upgrade_test.php	4
 tests/cases/portable_sql_test.php	2
+tests/cases/rate_freshness_test.php	4
 tests/cases/session_retention_test.php	9
 tests/cases/session_tokens_test.php	6
 tests/cases/settings_row_test.php	2
 tests/cases/stats_orphans_test.php	4
-tests/cases/subscription_index_test.php	6
+tests/cases/subscription_index_test.php	15
+tests/cases/subscriptions_notification_filter_test.php	9
+tests/cases/totp_enrolment_test.php	10
 tests/cases/totp_replay_test.php	6
 tests/cases/user_provisioning_test.php	2
 tests/cases/user_roles_test.php	5

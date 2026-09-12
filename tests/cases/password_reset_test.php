@@ -70,6 +70,26 @@ wallos_test('the page reports a failed issue rather than promising an email', fu
         'the outcome is known before the message is chosen');
 });
 
+wallos_test('no write in the file is discarded', function () {
+    // Upstream's guard for the same defect (#1195), kept because it covers the
+    // half this fork did not move into a helper: the token is consumed and the
+    // password written inline here, and both used to report success over
+    // results nobody read. A third write added later is caught by the same
+    // rule rather than by somebody remembering.
+    $lines = preg_split('/\R/', file_get_contents(WALLOS_ROOT . '/passwordreset.php'));
+    $discarded = [];
+
+    foreach ($lines as $number => $line) {
+        if (preg_match('/^\s*\$stmt->execute\(\)\s*;\s*$/', $line) === 1) {
+            $discarded[] = $number + 1;
+        }
+    }
+
+    assert_same([], $discarded,
+        'every execute() in passwordreset.php is read (lines with a discarded '
+        . 'one: ' . implode(', ', $discarded) . ')');
+});
+
 wallos_test('an unknown address still looks exactly like a successful request', function () {
     // Enumeration: the response may not differ between a registered address and
     // one that is not, so the success path must not depend on the user lookup.

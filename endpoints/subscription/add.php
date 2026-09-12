@@ -7,6 +7,7 @@ require_once '../../includes/reference_validation.php';
 require_once '../../includes/getsettings.php';
 require_once '../../includes/ssrf_helper.php';
 require_once '../../includes/logo_theme_variant.php';
+require_once '../../includes/logo_cleanup.php';
 
 if (!file_exists('../../images/uploads/logos')) {
     mkdir('../../images/uploads/logos', 0777, true);
@@ -280,7 +281,7 @@ $price = $_POST['price'];
 $nextPayment = $_POST["next_payment"];
 $autoRenew = isset($_POST['auto_renew']) ? true : false;
 $startDate = $_POST["start_date"];
-$notes = validate($_POST["notes"]);
+$notes = validate_markdown($_POST["notes"]);
 $url = validate($_POST['url']);
 $logoUrl = validate($_POST['logo-url']);
 $logo = "";
@@ -399,11 +400,35 @@ if (!$isEdit) {
                     )";
 } else {
     $id = $_POST['id'];
-    $sql = "UPDATE subscriptions SET 
-                        name = :name, 
-                        price = :price, 
+
+    // When the logo is being replaced, remember the old files so they can be
+    // removed after the update instead of lingering as orphans.
+    $oldLogo = null;
+    $oldLogoVariant = null;
+    if ($logo != "") {
+        // The logo this subscription had before the edit, so a replaced file
+        // can be swept afterwards. A prepare that fails means no sweep rather
+        // than a fatal in the middle of a save (#87).
+        $oldLogoStmt = $db->prepare("SELECT logo, logo_variant FROM subscriptions WHERE id = :id AND user_id = :userId");
+        $oldLogoResult = false;
+
+        if ($oldLogoStmt !== false) {
+            $oldLogoStmt->bindParam(':id', $id);
+            $oldLogoStmt->bindParam(':userId', $userId);
+            $oldLogoResult = $oldLogoStmt->execute();
+        }
+
+        if ($oldLogoResult && ($oldLogoRow = $oldLogoResult->fetchArray())) {
+            $oldLogo = $oldLogoRow['logo'];
+            $oldLogoVariant = $oldLogoRow['logo_variant'];
+        }
+    }
+
+    $sql = "UPDATE subscriptions SET
+                        name = :name,
+                        price = :price,
                         currency_id = :currencyId,
-                        next_payment = :nextPayment, 
+                        next_payment = :nextPayment,
                         auto_renew = :autoRenew,
                         start_date = :startDate,
                         cycle = :cycle, 
@@ -473,6 +498,17 @@ if ($stmt->execute()) {
     if ($logoError !== "") {
         $success['logo_warning'] = $logoError;
     }
+
+    // The logo was just replaced: drop the previous files if nothing else uses them.
+    if ($isEdit && $logo != "") {
+        if ($oldLogo !== null && $oldLogo !== $logo) {
+            deleteLogoFileIfUnused($db, $oldLogo, '../../images/uploads/logos/');
+        }
+        if ($oldLogoVariant !== null && $oldLogoVariant !== $logoVariant) {
+            deleteLogoFileIfUnused($db, $oldLogoVariant, '../../images/uploads/logos/');
+        }
+    }
+
     header('Content-Type: application/json');
     echo json_encode($success);
     exit();

@@ -4,6 +4,8 @@
   than scanning the table.
 */
 
+require_once WALLOS_ROOT . '/includes/upcoming_payments.php';
+
 /**
  * Returns the query plan of a statement as one string.
  *
@@ -56,6 +58,7 @@ wallos_test('the queries Wallos runs use an index instead of scanning', function
         'active subscriptions' => "SELECT * FROM subscriptions WHERE user_id = 1 AND inactive = 0",
         'notification cron' => "SELECT * FROM subscriptions WHERE user_id = 1 AND notify = 1 AND inactive = 0",
         'calendar range' => "SELECT * FROM subscriptions WHERE user_id = 1 AND inactive = 0 AND next_payment BETWEEN '2026-08-01' AND '2026-08-31'",
+        'dashboard cancellations' => "SELECT * FROM subscriptions WHERE user_id = 1 AND inactive = 0 AND cancellation_date IS NOT NULL AND cancellation_date != '' AND cancellation_date >= date('now') AND cycle != 5 ORDER BY cancellation_date ASC",
     ];
 
     foreach ($cases as $label => $sql) {
@@ -79,6 +82,77 @@ wallos_test('the migration can run twice', function () {
 
     assert_true((bool) $db->querySingle("SELECT COUNT(*) FROM sqlite_master WHERE type='index' AND name='idx_subscriptions_user_inactive_next_payment'"),
         'the index still exists after a second run');
+
+    $db->close();
+});
+
+wallos_test('the dashboard limit migration defaults existing users to three', function () {
+    // Upstream numbers this migration 000057; that number was already this
+    // fork's language canonicalisation when it arrived, so it runs here as
+    // 000087.
+    $db = wallos_test_open_database();
+
+    $row = $db->query('SELECT upcoming_payments_limit FROM settings WHERE user_id = 1')
+        ->fetchArray(SQLITE3_ASSOC);
+
+    assert_same(3, (int) $row['upcoming_payments_limit'], 'existing users keep the default limit');
+
+    $db->exec('UPDATE settings SET upcoming_payments_limit = 4 WHERE user_id = 1');
+    require WALLOS_ROOT . '/migrations/000087.php';
+    $row = $db->query('SELECT upcoming_payments_limit FROM settings WHERE user_id = 1')
+        ->fetchArray(SQLITE3_ASSOC);
+    assert_same(3, (int) $row['upcoming_payments_limit'], 'invalid stored values are reset to the default');
+
+    require WALLOS_ROOT . '/migrations/000087.php';
+    assert_same(3, (int) $db->querySingle('SELECT upcoming_payments_limit FROM settings WHERE user_id = 1'),
+        'the dashboard limit migration is safe to run twice');
+
+    $db->close();
+});
+
+wallos_test('dashboard limit parsing accepts only supported values', function () {
+    assert_same(20, parse_upcoming_payments_limit('20'), 'a supported string value is accepted');
+    assert_same(5, parse_upcoming_payments_limit(5), 'a supported numeric value is accepted');
+    assert_same(null, parse_upcoming_payments_limit(0), 'zero is no longer a supported value');
+    assert_same(null, parse_upcoming_payments_limit(4), 'unsupported numeric values are rejected');
+    assert_same(null, parse_upcoming_payments_limit(true), 'boolean values are rejected');
+});
+
+wallos_test('the dashboard keeps the legacy default of three upcoming payments', function () {
+    $db = wallos_test_open_database();
+    wallos_test_create_user($db, 1, 'alice');
+
+    $stmt = $db->prepare('INSERT INTO subscriptions (user_id, name, price, currency_id, next_payment, cycle, inactive)
+                          VALUES (1, :name, 9.99, :currencyId, :nextPayment, 3, 0)');
+    for ($i = 1; $i <= 5; $i++) {
+        $stmt->bindValue(':name', 'payment-' . $i, SQLITE3_TEXT);
+        $stmt->bindValue(':currencyId', wallos_test_currency_id(1, 0), SQLITE3_INTEGER);
+        $stmt->bindValue(':nextPayment', date('Y-m-d', strtotime('+' . $i . ' days')), SQLITE3_TEXT);
+        $stmt->execute();
+    }
+
+    assert_same(3, count(get_upcoming_payments($db, 1, 3)), 'the default limit remains three');
+
+    $db->close();
+});
+
+wallos_test('the dashboard supports the configured limits', function () {
+    $db = wallos_test_open_database();
+    wallos_test_create_user($db, 1, 'alice');
+
+    $stmt = $db->prepare('INSERT INTO subscriptions (user_id, name, price, currency_id, next_payment, cycle, inactive)
+                          VALUES (1, :name, 9.99, :currencyId, :nextPayment, 3, 0)');
+    for ($i = 1; $i <= 25; $i++) {
+        $stmt->bindValue(':name', 'payment-' . $i, SQLITE3_TEXT);
+        $stmt->bindValue(':currencyId', wallos_test_currency_id(1, 0), SQLITE3_INTEGER);
+        $stmt->bindValue(':nextPayment', date('Y-m-d', strtotime('+' . $i . ' days')), SQLITE3_TEXT);
+        $stmt->execute();
+    }
+
+    assert_same(5, count(get_upcoming_payments($db, 1, 5)), 'the five-payment option is honored');
+    assert_same(10, count(get_upcoming_payments($db, 1, 10)), 'the ten-payment option is honored');
+    assert_same(20, count(get_upcoming_payments($db, 1, 20)), 'the twenty-payment option is honored');
+    assert_same(3, count(get_upcoming_payments($db, 1, 7)), 'unsupported values fall back to three');
 
     $db->close();
 });

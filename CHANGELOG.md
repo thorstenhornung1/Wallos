@@ -1,5 +1,113 @@
 # Changelog
 
+## Unreleased
+
+**Upstream 5.7.1 is merged** — the third merge since the fork left 5.4.4, and
+the one where eleven of the thirty-three commits are this fork's own pull
+requests coming home. #1190 and #1192–#1200 were merged into 5.6.0 and the CI
+fix into the same release; what came back was our code in upstream's shape, so
+most of the thirty-four conflicts were the two versions of one fix meeting each
+other. Those were resolved to this tree's version, which is the one with the
+tests and the database boundary.
+
+What is genuinely new from upstream, and is now here:
+
+### Added
+
+* **notes:** subscription notes are Markdown. The editor gains a small toolbar
+  (bold, italic, list, link), the details popup renders the result, and
+  `includes/markdown.php` runs it through a vendored Parsedown 1.8.0 in safe
+  mode — raw HTML in a note is escaped as text and link schemes are filtered.
+  Storage goes back to plain text (`validate_markdown()` no longer escapes at
+  save time, because the renderer escapes at render time); migration `000088`
+  decodes the notes already stored, so an existing note does not render its own
+  entities. The webhook payload templates escape the note with
+  `webhookJsonEscape()`, without which a note containing a quote broke the
+  JSON body. The iCal export folds SUMMARY, DESCRIPTION and LOCATION to the
+  RFC 5545 75-octet limit, which a multi-paragraph note now passes routinely.
+* **dashboard:** the number of upcoming payments is a per-user setting — 3, 5,
+  10 or 20 — with the control on the settings page. Migration `000087` adds the
+  column and defaults existing accounts to the previous fixed 3.
+* **dashboard / statistics:** subscriptions with a cancellation date ahead of
+  them get their own dashboard section, and the statistics page gains a count
+  with the monthly and yearly amount cancelling them would stop costing.
+  One-time purchases are excluded everywhere the question is asked, including
+  the subscription list's notification filter, which used to count them as
+  cancellable.
+* **pwa:** `manifest.json` becomes `manifest.php`, so `theme_color` and
+  `background_color` follow the viewer's theme instead of being white for
+  everybody; an installed PWA uses them for the status bar and splash screen.
+  The service worker installs its static assets in batches of twelve rather
+  than firing ~150 fetches at once, which starved the largest files of
+  connections on HTTP/1.1, and it no longer precaches the manifest.
+* **i18n:** Azerbaijani (`az`), and the Korean translations reworked. The
+  CLDR currency dataset is regenerated for the new language from the same
+  pinned release, so nothing else in `data/currencies/` moved.
+* **logos:** deleting or editing a subscription, and deleting an account, now
+  remove the uploaded logo files nothing else references. A filename shared by
+  a clone is kept — `clone.php` copies it into a second row, so "this
+  subscription's logo" and "a file nobody uses" are not the same question.
+* **restore:** the upload limits a real backup archive needs (256M), in
+  `php-wallos.ini` beside the ephemeral-state settings rather than in a second
+  ini file, and matching the `client_max_body_size` this fork's nginx
+  configuration already carried.
+
+### Changed
+
+* **deletion:** the logo sweep goes through `wallos_delete_user()` rather than
+  being transcribed into both deletion endpoints. Upstream inlines it twice;
+  this fork has had one routine since the two copies drifted, and the files are
+  gathered before the transaction and swept after the commit, so a deletion
+  that rolls back takes no image with it.
+* **currency:** upstream's `includes/exchange_rate_freshness.php` is this
+  fork's `wallos_exchange_rates_fresh()` — our own #1199, refactored into a
+  file of its own on the way home. One implementation is kept, in
+  `includes/currency_provider.php` next to the client that acts on it, and
+  upstream's test now asks the function this tree calls.
+* **migrations:** upstream's `000057` and `000058` run here as `000087` and
+  `000088`. Both numbers were already taken by this fork, and a migration is
+  recorded by file name. Both were rewritten through the database boundary:
+  the column check asks `columnExists()` instead of SQLite's own table
+  metadata, and the notes decode reads its rows into memory before writing to
+  the table it read — the mistake migration `000016` made, which recorded
+  itself as applied with its work undone for nine years.
+* **dashboard:** upstream's two new query helpers compare against
+  `date('now')`, which PostgreSQL does not have. The boundary is computed once
+  in PHP with `gmdate()` — the day SQLite answered, whatever timezone PHP is
+  set to — and bound, which is what `index.php` already did before the query
+  moved into a helper.
+
+### Fixed
+
+* **logos:** `deleteLogoFileIfUnused()` named one bound parameter three times
+  in one statement. SQLite repeats a named parameter happily; PDO with native
+  prepares does not, so the query would have thrown on PostgreSQL the first
+  time anything called it.
+* **gates:** the two new upstream test gates walked `.claude/`, which holds
+  agent worktrees — whole second checkouts of this repository — and reported
+  every finding twice against paths the tree under review does not have. Both
+  now use the shared `wallos_test_repo_excluded()` rule. The `ORDER BY`
+  constant gate also read `' ORDER BY ' . implode(...)` as a constant and
+  fired on the comment that documents the defect it looks for; it now reads
+  neither.
+* **api:** the payment-method and payment logo endpoints keep answering
+  400 with a JSON body when a logo cannot be fetched. Upstream's version of
+  our own #1200 answers 200.
+
+### Internal
+
+* `portable_sql()` reads a query written over several lines, so moving a query
+  into a helper and reformatting it cannot switch a portability check off in
+  silence.
+* The theme-cookie gate now also looks at `includes/header.php`, which emits
+  the same pair for every page behind a session, and accepts a cookie read that
+  carries a default (`$_COOKIE['theme'] ?? null`) as the validated read it is.
+* The SQLite boundary baseline rises from 1542 to 1607 matches, which is the
+  documented cost of a merge: upstream's seven new test files and two of its
+  endpoints arrive written against the SQLite3 API. Everything this merge wrote
+  or adapted carries no `SQLITE3_*` constant at all, and two files got smaller
+  — `index.php` 10 → 8, `endpoints/subscription/delete.php` 4 → 0.
+
 ## [5.16.6](https://github.com/thorstenhornung1/Wallos/releases/tag/v5.16.6) (2026-09-08)
 
 ### Fixed
