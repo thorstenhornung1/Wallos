@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## [5.17.0](https://github.com/thorstenhornung1/Wallos/releases/tag/v5.17.0) (2026-09-12)
 
 **Upstream 5.7.1 is merged** — the third merge since the fork left 5.4.4, and
 the one where eleven of the thirty-three commits are this fork's own pull
