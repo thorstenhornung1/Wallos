@@ -6,10 +6,256 @@ below was confirmed to exist upstream by reading the upstream file; anything
 that could not be confirmed is marked as such.
 
 **Check the base before opening anything.** The comparison stand is
-`upstream/main`, release 5.5.0, since 2026-09-01 — see "the maintainer moved"
-below. `v5_6_0` is dead: #1187 carried its content home and it has not moved
-since. Line numbers written before that date still refer to `v5_6_0`, which is
-why each entry names the ref it was checked against.
+`upstream/main`, release **5.7.1**, since 2026-09-12. `v5_6_0` is dead: #1187
+carried its content home and it has not moved since. Line numbers written before
+a re-verification date still refer to the ref they were checked against, and
+each entry names it.
+
+**Read the 2026-09-12 section first.** Everything below it was written while the
+question was "which cheap fix next". Thirteen of those have been sent and all
+thirteen were merged; the question is now a different one, and the sections
+below are kept as the record of how the list was built rather than as the
+queue.
+
+## 2026-09-12: all thirteen prepared branches are spent, and that changes the question
+
+The 5.7.1 merge (`b98cd3c`) brought eleven of this fork's pull requests home.
+Every `upstream-fix/*` branch prepared here is now in `upstream/main`:
+
+| upstream PR | branch | released in |
+|---|---|---|
+| #1181 totp replay | `upstream-fix/totp-replay` | 5.5.0 |
+| #1184 logout token | `upstream-fix/logout-token` | 5.5.0 |
+| #1190 registration theme XSS | `upstream-fix/registration-theme-xss` | 5.6.0 |
+| #1192 account deletion coverage | `upstream-fix/delete-account-coverage` | 5.6.0 |
+| #1193 disable 2FA atomically | `upstream-fix/disable-totp` | 5.6.0 |
+| #1194 enable 2FA atomically | `upstream-fix/enable-totp` | 5.6.0 |
+| #1195 password reset | `upstream-fix/password-reset` | 5.6.0 |
+| #1196 verify email | `upstream-fix/verify-email` | 5.6.0 |
+| #1197 delete before replace | `upstream-fix/delete-before-replace` | 5.6.0 |
+| #1198 order by the column | `upstream-fix/order-by-constant` | 5.6.0 |
+| #1199 skip fresh rates | `upstream-fix/skip-fresh-rates` | 5.6.0 |
+| #1200 payment logo result | `upstream-fix/payment-logo-result` | 5.6.0 |
+| #1202 CI registry login | `upstream-fix/ci-pr-build-login` | 5.6.0 |
+
+Thirteen sent, thirteen merged, none refused, none discussed. Delete the
+branches or leave them; they are history now.
+
+### The question that follows
+
+Thirteen correctness fixes is a channel, not a contribution. Every one of them
+was chosen for how little the maintainer had to take on trust, and that was the
+right choice while the channel was unproven. It is proven. Continuing to pick
+only the cheapest items now optimises for a constraint that no longer binds.
+
+Two facts decide what to do instead, and both are new:
+
+**He runs this fork's test harness, and writes in it.** `tests/bootstrap.php`,
+`tests/run.php` and the migration-chain fixture went up with #1165–#1168.
+5.6.0 and 5.7.0 arrive carrying *his own* cases written against them —
+`logo_cleanup_test.php`, `pwa_manifest_test.php`, `notes_markdown_test.php`,
+`ical_export_test.php`. A proposal that lands with tests is no longer an unusual
+offer; it is the house style, and this fork set it.
+
+**He already shipped the shape of our largest feature.** `includes/oidc_settings.php`
+on `upstream/main` reads `OIDC_ENABLED`, `OIDC_CLIENT_ID`, `OIDC_CLIENT_SECRET`
+**and `OIDC_CLIENT_SECRET_FILE`**, records which fields the environment owns in a
+`managedFields` map, and reports the variable name that owns each one. That is
+this fork's instance-configuration design, for one integration, written by him.
+The proposal below is not "adopt our architecture"; it is "you built this for
+OIDC — here is the same thing for the other three integrations, using your
+helpers".
+
+## Two tracks from here
+
+The small fixes keep going, because they cost nothing and keep the channel warm.
+But they are no longer the plan; they are the background. The plan is one
+substantial proposal at a time, sent while a small fix is still settling.
+
+### Send first, before either track: a regression in 5.7.0
+
+**A0. `webhookJsonEscape()` breaks every note that ends in a quotation mark.**
+
+Found by this merge, in code the maintainer merged on 2026-09-10. The helper
+5.7.0 added to keep a Markdown note from breaking the webhook payload is:
+
+```php
+return trim(json_encode((string) $value), '"');
+```
+
+`trim()` with a character mask strips *every* leading and trailing quote
+character, not the two `json_encode()` added. A value ending in a quotation mark
+therefore loses the closing quote of its own `\"` escape and the payload ends in
+a bare backslash:
+
+```
+note     He said "hi"
+escaped  He said \"hi\
+payload  {"notes": "He said \"hi\"}      → json_decode(): syntax error
+```
+
+A note reading `cancel "soon"` is enough. Every webhook for that subscription is
+then sent with a body the receiver cannot parse, and nothing on any screen says
+so — the request goes out, it is simply nonsense. A note consisting of a single
+`"` escapes to `\`, which is the same failure in its shortest form. The fix is
+`substr($encoded, 1, -1)`: the two characters `json_encode()` actually added.
+
+Why this goes first, ahead of everything else on this page:
+
+* It is **his own newest code**, two days old, and it is a regression rather
+  than an old defect — the feature it belongs to does not work for a plausible
+  note.
+* The argument is one line of output. Nothing to take on trust.
+* It comes with a test in his harness, and his own test for this helper misses
+  it because the note it uses ends in `- Bob`. The new case asks about the
+  first and last character, which is exactly where a "strip the quotes"
+  implementation goes wrong.
+* It is the natural carrier for the rest of the escaping work below, which
+  would otherwise be a PR about a doubled backslash.
+
+Ride **B2** along with it, in the same pull request or immediately behind: the
+other seven placeholders in the same `str_replace()` block are still
+interpolated raw. Once the helper is correct, applying it to all eight is the
+obvious next line, and it needs no separate argument.
+
+The fork carries the fix already (`includes/webhook_helper.php`), with
+`tests/cases/notes_markdown_test.php` asserting it and verified by putting
+upstream's `trim()` back and watching six assertions fail.
+
+### Track A — the substantial one
+
+**A1. Instance-wide configuration for SMTP, currency and AI.**
+
+The single most-wanted thing this fork has for a self-hosting audience, and the
+one piece of it that needs no architecture decision:
+
+* It extends a pattern already in his tree, with his own helper names and his
+  own managed-fields concept. `wallos_get_oidc_env_value()` generalises to
+  `wallos_get_env_value()` without changing what it does.
+* **Inert unless used.** No `WALLOS_*` variable set means today's behaviour, to
+  the byte: every user keeps their own SMTP, key and provider. The resolution
+  order only ever *adds* a fallback beneath what the user already has.
+* It answers the complaint every Docker and Kubernetes operator has about this
+  application: credentials belong in the deployment, not typed into a settings
+  page per account, and a secret belongs in a mounted file — which is exactly
+  what `OIDC_CLIENT_SECRET_FILE` already concedes.
+* It carries a test suite in his harness: resolution order, precedence, the
+  `*_FILE` reader, a secret reported as status rather than rendered into the
+  page.
+
+Scope it honestly rather than shipping all 1,937 lines: **one integration per
+pull request**, SMTP first. Currency and AI follow the same shape once it lands,
+which is then a review of the diff rather than of the idea.
+
+SMTP first for a reason worth stating precisely, because it is smaller than the
+proposal sounds. **Upstream already has an instance SMTP.** `migrations/000020.php`
+puts `smtp_address`, `smtp_port`, `smtp_username`, `smtp_password`, `from_email`,
+`encryption` and `server_url` on the `admin` table; `admin.php` renders them; and
+`passwordreset.php:41` refuses to work at all until `smtp_address` and
+`server_url` are filled in. So the concept is his, the table is his, and the
+screen is his. What is missing is only the layer that lets the *deployment* own
+those fields instead of a person typing them in after every fresh volume — which
+is exactly what `OIDC_CLIENT_SECRET_FILE` already concedes for the one
+integration that has it.
+
+That turns A1 from "adopt our configuration architecture" into "the admin SMTP
+fields can come from `WALLOS_SMTP_*` and `WALLOS_SMTP_PASSWORD_FILE`, shown
+read-only with the variable that owns them, exactly as you already do for
+`OIDC_CLIENT_SECRET`". One concern, his own precedent, and inert unless a
+variable is set.
+
+The one adaptation: `wallos_build_instance_settings()` asks
+`$db->tableExists()`, which is this fork's boundary. Upstream gets the
+`sqlite_master` query it uses everywhere else. One line.
+
+**A2. The migration runner, behind migration 000016.**
+
+Small diff, nine-year consequence, and it is not a tidy-up:
+
+`migrations/000016.php` opens `SELECT COUNT(*) FROM notifications` and never
+finalises it, then runs `DROP TABLE IF EXISTS notifications` while that result
+is still open. SQLite refuses with "database table is locked", the `exec()`
+result is not read, and `includes/run_migrations.php` records the migration as
+applied regardless — in **every installation ever made**. The dead table is
+still there. That is demonstrable on his own database in one query, before he
+reads a line of the diff.
+
+The runner is the general case: `require_once` discards the migration's return
+value, the `INSERT INTO migrations` is unconditional, "completed successfully"
+is printed unconditionally, and the migrations query is held open across the
+whole loop — the same lock this defect is made of, one layer up. Our version is
+portable except for `$db->tableExists('migrations')`, which goes back to the
+`sqlite_master` query.
+
+Send 000016 first and the runner second, in that order: the first is the proof
+that the second is needed.
+
+**A3. The database boundary — the conversation, not yet a patch.**
+
+Still tier 3. What has changed is that there is now a reason to believe an issue
+would be read. What has not changed is that a 500-file diff is unreviewable and
+that PostgreSQL is a maintenance commitment he has never asked for. If it is
+opened at all, open it as *the boundary* — one interface, a SQLite adapter that
+is a pass-through, no second backend in the diff — and say plainly that the
+PostgreSQL adapter exists here and is his to take or leave. Not before A1 lands.
+
+### Track B — the background, one at a time between the big ones
+
+Re-verified against `upstream/main` on 2026-09-12; every one still present.
+
+**B1. `api/settings/set_settings.php` — the file that contradicts itself.**
+Four writes discarded (`:87`, `:92` custom CSS; `:137`, `:144` custom colours),
+then `success: true` — while the settings UPDATE in the same file (`:248`)
+reads its result and answers "Database error". #1197 fixed the identical shape
+in `api/fixer/set_fixer.php`; this is the copy it did not reach. The contrast is
+the whole argument and needs no second file.
+
+**B2. Finish the webhook escaping he just started.** 5.7.0 added
+`webhookJsonEscape()` and applied it to `{{subscription_notes}}` alone
+(`endpoints/cronjobs/sendnotifications.php:888`,
+`sendcancellationnotifications.php`). The other seven placeholders — name,
+price, currency, category, payer, date, url — are still interpolated raw into a
+JSON string field.
+
+On its own this is a weak candidate, and the measurement is worth writing down
+rather than repeating the guess: every one of those fields goes through
+`validate()`, which is `trim` → `stripslashes` → `htmlspecialchars`. A quote
+becomes `&quot;` and a single backslash is eaten by `stripslashes`, so the only
+input that still breaks the payload is a *doubled* backslash — `Acme\\Corp`
+stores as `Acme\Corp` and `{"name": "Acme\Corp"}` is a syntax error. Real, and
+not something anybody has hit.
+
+Which is why it rides with A0 rather than going alone. Once the helper is
+correct, "and apply it to the other seven" is a line in the same diff, and the
+argument is consistency with his own fix rather than a backslash nobody types.
+
+**B3. The `$payer` leak.** `sendnotifications.php:871-873` assigns `$payer`
+inside the per-user loop only `if ($user['name'])`, and never resets it, so a
+household member with no name inherits the previous member's name — into an
+outgoing webhook, under `{{subscription_payer}}`. Three lines. Worth more now
+that B2 puts somebody in that block anyway; send them together.
+
+**B4. `endpoints/db/backup.php` — the archive that outlives the download.**
+`readfile()` then `unlink()`: an aborted download ends the script inside
+`readfile()`, the unlink never runs, and a complete database-and-uploads archive
+stays in the temp directory. Offer `register_shutdown_function()`;
+unlink-before-read is POSIX-only and a reviewer will say so.
+
+**B5. `includes/validate_endpoint.php` — three refusals, all HTTP 200.** The
+whole file is 22 lines and contains no `http_response_code` at all. Ours asks
+`wallos_user_is_admin()`; upstream's asks `$userId !== 1`, so the admin half is
+dropped and only the status codes travel.
+
+### Still not portable
+
+Unchanged from the previous list: container hardening, cron reporting, the
+explicit admin role, OIDC back-channel logout and session authority, BCP-47 and
+the CLDR currency data, the localizer page. The nginx work still waits on the
+Dockerfile ownership split, which is wider upstream, not narrower.
+
+One correction to that list: **the instance configuration work is no longer part
+of the #32 conversation.** It was grouped there because it was assumed to need
+the boundary. It does not — see A1.
 
 ## Nothing goes to the maintainer without Thorsten asking for it
 

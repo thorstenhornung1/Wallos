@@ -29,7 +29,7 @@ if (wallos_is_last_admin($db, $userIdToDelete)) {
     ]));
 }
 
-$deletion = wallos_delete_user($db, $userIdToDelete);
+$deletion = wallos_delete_user($db, $userIdToDelete, '../../images/uploads/logos/');
 
 if (!$deletion['success']) {
     // The routine rolls its transaction back before answering false, so this

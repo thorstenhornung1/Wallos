@@ -25,7 +25,7 @@ function portable_sql($file, $marker)
 {
     $lines = preg_split('/\R/', file_get_contents(WALLOS_ROOT . '/' . $file));
 
-    foreach ($lines as $line) {
+    foreach ($lines as $number => $line) {
         if (strpos($line, $marker) === false) {
             continue;
         }
@@ -34,6 +34,17 @@ function portable_sql($file, $marker)
             || preg_match("/'([^']*\\b(?:SELECT|INSERT|UPDATE|DELETE)\\b[^']*)'/i", $line, $found)) {
             return $found[1];
         }
+
+        // The clause may sit inside a query written over several lines, which
+        // is how the shared dashboard helpers write theirs. Read it whole
+        // rather than making the gate depend on the formatting of the file it
+        // guards — a query reformatted is the one edit that must not switch a
+        // portability check off silently.
+        $whole = portable_sql_multiline($lines, $number);
+
+        if ($whole !== null) {
+            return $whole;
+        }
     }
 
     wallos_test_fail(sprintf('no SQL found in %s on a line containing "%s"', $file, $marker));
@@ -41,6 +52,47 @@ function portable_sql($file, $marker)
     // Matches nothing, so the assertions report the boundary that was missed
     // rather than a fatal error somewhere further down.
     return 'SELECT 1 WHERE 1 = 0';
+}
+
+/**
+ * The SQL literal that the line at $index sits inside, joined into one string.
+ *
+ * Walks up to the line that opens the literal with a SQL keyword, then down to
+ * the one that closes it with the same quote character.
+ *
+ * @param string[] $lines
+ * @param int      $index
+ * @return string|null null when the line is not inside one
+ */
+function portable_sql_multiline($lines, $index)
+{
+    for ($start = $index; $start >= 0 && $index - $start <= 20; $start--) {
+        if (preg_match('/(["\'])\s*(SELECT|INSERT|UPDATE|DELETE)\b/i', $lines[$start], $opening) !== 1) {
+            continue;
+        }
+
+        $quote = $opening[1];
+        $sql = substr($lines[$start], strpos($lines[$start], $quote) + 1);
+
+        for ($i = $start; $i < count($lines); $i++) {
+            $body = $i === $start ? $sql : $lines[$i];
+            $closes = strpos($body, $quote);
+
+            if ($closes !== false) {
+                $sql = $i === $start
+                    ? substr($body, 0, $closes)
+                    : $sql . ' ' . substr($body, 0, $closes);
+
+                return $i >= $index ? preg_replace('/\s+/', ' ', trim($sql)) : null;
+            }
+
+            if ($i !== $start) {
+                $sql .= ' ' . trim($body);
+            }
+        }
+    }
+
+    return null;
 }
 
 /**
@@ -153,6 +205,14 @@ function portable_sql_subscription_names($db, $sql, $today)
     $stmt = $db->prepare($sql);
     $stmt->bindValue(':userId', 1);
     $stmt->bindValue(':today', $today);
+
+    // The dashboard query carries the user's configurable row limit. Bound only
+    // when the query names it, so the overdue query — which has no limit — is
+    // not given a placeholder it never declared.
+    if (strpos($sql, ':limit') !== false) {
+        $stmt->bindValue(':limit', 10);
+    }
+
     $result = $stmt->execute();
 
     $names = [];
@@ -245,7 +305,12 @@ wallos_test('a subscription due today is upcoming, never overdue', function () {
     portable_sql_insert_subscription($db, 'today', $today);
     portable_sql_insert_subscription($db, 'tomorrow', gmdate('Y-m-d', $now + 86400));
 
-    $upcoming = portable_sql_subscription_names($db, portable_sql('index.php', 'next_payment >= '), $today);
+    // The upcoming query moved into includes/upcoming_payments.php when the
+    // dashboard limit became configurable (upstream #1191); the overdue one is
+    // still written out in index.php. Both are asked here, because the pair is
+    // what has to agree about today.
+    $upcoming = portable_sql_subscription_names(
+        $db, portable_sql('includes/upcoming_payments.php', 'next_payment >= '), $today);
     $overdue = portable_sql_subscription_names($db, portable_sql('index.php', 'next_payment < '), $today);
 
     assert_same(['today', 'tomorrow'], $upcoming, 'today belongs to the upcoming list, and is first');
@@ -262,6 +327,8 @@ wallos_test('the date boundaries are computed in UTC, where SQLite computed them
     // upcoming and overdue lists a few hours early.
     $expressions = [
         'index.php' => "gmdate('Y-m-d')",
+        'includes/upcoming_payments.php' => "gmdate('Y-m-d')",
+        'includes/upcoming_cancellations.php' => "gmdate('Y-m-d')",
         'passwordreset.php' => "gmdate('Y-m-d H:i:s', time() - 3600)",
         'endpoints/cronjobs/cleanupresettokens.php' => "gmdate('Y-m-d H:i:s', time() - 3600)",
     ];
@@ -273,7 +340,9 @@ wallos_test('the date boundaries are computed in UTC, where SQLite computed them
 
     $queries = [
         'passwordreset.php' => ['$matchCount = ', '$resetQuery = '],
-        'index.php' => ['next_payment >= ', 'next_payment < '],
+        'index.php' => ['next_payment < '],
+        'includes/upcoming_payments.php' => ['next_payment >= '],
+        'includes/upcoming_cancellations.php' => ['cancellation_date >= '],
         'endpoints/cronjobs/cleanupresettokens.php' => ['DELETE FROM password_resets'],
     ];
 

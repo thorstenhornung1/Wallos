@@ -8,6 +8,11 @@ $data = json_decode($postData, true);
 
 $customCss = $data['customCss'];
 
+// The insert below replaces the row this delete removes, and only the insert
+// was checked. A delete that fails while the insert succeeds leaves two rows
+// for one user, and the readers of this table take whichever row they are
+// handed first, so the page can go on serving the css this request replaced -
+// after telling the user it was saved.
 $stmt = $db->prepare('DELETE FROM custom_css_style WHERE user_id = :userId');
 $stmt->bindParam(':userId', $userId, SQLITE3_INTEGER);
 if ($stmt->execute() === false) {

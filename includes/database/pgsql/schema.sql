@@ -20,7 +20,7 @@
 --   * Every identifier is quoted, because "user" and "order" are reserved words
 --     and a keyword list kept in the generator would be wrong eventually.
 
--- 45 tables, 85 migrations recorded as applied.
+-- 45 tables, 87 migrations recorded as applied.
 
 CREATE TABLE "admin" (
     "id" SERIAL PRIMARY KEY,
@@ -363,7 +363,8 @@ CREATE TABLE "settings" (
     "show_original_price" INTEGER DEFAULT 0,
     "mobile_nav" INTEGER DEFAULT 0,
     "show_subscription_progress" INTEGER DEFAULT 0,
-    "week_starts_sunday" INTEGER DEFAULT 0
+    "week_starts_sunday" INTEGER DEFAULT 0,
+    "upcoming_payments_limit" INTEGER DEFAULT 3
 );
 
 CREATE TABLE "subscriptions" (
@@ -704,7 +705,9 @@ INSERT INTO "migrations" ("id", "migration") VALUES
     (82, 'migrations/000083.php'),
     (83, 'migrations/000084.php'),
     (84, 'migrations/000085.php'),
-    (85, 'migrations/000086.php');
+    (85, 'migrations/000086.php'),
+    (86, 'migrations/000087.php'),
+    (87, 'migrations/000088.php');
 
 INSERT INTO "payment_methods" ("id", "name", "icon", "enabled", "order", "user_id") VALUES
     (1, 'PayPal', 'images/uploads/icons/paypal.png', 1, 1, 1),
@@ -739,8 +742,8 @@ INSERT INTO "payment_methods" ("id", "name", "icon", "enabled", "order", "user_i
     (30, 'VeriFone', 'images/uploads/icons/verifone.png', 1, 30, 1),
     (31, 'WebMoney', 'images/uploads/icons/webmoney.png', 1, 31, 1);
 
-INSERT INTO "settings" ("dark_theme", "monthly_price", "convert_currency", "remove_background", "color_theme", "hide_disabled", "user_id", "disabled_to_bottom", "show_original_price", "mobile_nav", "show_subscription_progress", "week_starts_sunday") VALUES
-    (0, 0, 0, 0, 'blue', 0, 1, 0, 0, 0, 0, 0);
+INSERT INTO "settings" ("dark_theme", "monthly_price", "convert_currency", "remove_background", "color_theme", "hide_disabled", "user_id", "disabled_to_bottom", "show_original_price", "mobile_nav", "show_subscription_progress", "week_starts_sunday", "upcoming_payments_limit") VALUES
+    (0, 0, 0, 0, 'blue', 0, 1, 0, 0, 0, 0, 0, 3);
 
 -- The rows above carry their original ids, which leaves every sequence at 1 and
 -- the next insert colliding with seeded data.

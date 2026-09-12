@@ -19,6 +19,7 @@ function wallos_languages()
         "en" => ["name" => "English", "dir" => "ltr"],
         "ar" => ["name" => "العربية", "dir" => "rtl"],
         // Remaining sorted alphabetically by language code
+        "az" => ["name" => "Azərbaycan dili", "dir" => "ltr"],
         "ca" => ["name" => "Català", "dir" => "ltr"],
         "cs" => ["name" => "Čeština", "dir" => "ltr"],
         "da" => ["name" => "Dansk", "dir" => "ltr"],
