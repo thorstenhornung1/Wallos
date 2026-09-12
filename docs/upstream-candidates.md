@@ -66,6 +66,20 @@ The proposal below is not "adopt our architecture"; it is "you built this for
 OIDC — here is the same thing for the other three integrations, using your
 helpers".
 
+## 2026-09-12: sending started
+
+Thorsten: "Der Plan ist freigegeben", then "Senden wir". That is the explicit
+request and the approval the standing rule asks for, and it is quoted here
+because the rule says approval is a fact rather than an inference.
+
+| sent | upstream PR | branch |
+|---|---|---|
+| 2026-09-12 | [#1214](https://github.com/ellite/Wallos/pull/1214) | `upstream-fix/webhook-json-escape` |
+
+One at a time, and wait — that is the rule this list has followed since #1181,
+and it is why eleven of thirteen landed. The next one goes out when #1214 has
+settled, not before.
+
 ## 2026-09-12, later: the plan is approved, and the first two are built
 
 Thorsten approved the plan. **Approved means built, not sent** — the standing
