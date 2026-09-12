@@ -28,6 +28,27 @@
  *
  * @return string[]
  */
+/**
+ * Whether a path the walk found is one this gate should not read.
+ *
+ * A dot directory is either .git or a checkout somebody has nested inside this
+ * one - a worktree, a vendored copy, a second clone. Reading those reports
+ * findings against paths the tree under review does not have, and reports each
+ * of them once per copy.
+ *
+ * Named rather than inlined so the rule can be asserted without planting files
+ * in the working tree to find out.
+ *
+ * @param string $relative path relative to the repository root
+ * @return bool
+ */
+function scanned_path_is_skipped($relative)
+{
+    return $relative === '' || $relative[0] === '.'
+        || strpos($relative, 'libs/') === 0
+        || strpos($relative, 'tests/') === 0;
+}
+
 function delete_before_replace_files()
 {
     $files = [];
@@ -44,7 +65,7 @@ function delete_before_replace_files()
 
         $relative = ltrim(substr($path, strlen(WALLOS_ROOT)), '/');
 
-        if (strpos($relative, 'libs/') === 0 || strpos($relative, 'tests/') === 0) {
+        if (scanned_path_is_skipped($relative)) {
             continue;
         }
 
@@ -70,6 +91,14 @@ function delete_before_replace_result_is_read($lines, $index)
     // A statement of its own, with nothing done to what it returns.
     if (preg_match('/^\s*\$\w+(?:->\w+)*->execute\s*\(\s*\)\s*;\s*$/', $line) === 1) {
         return false;
+    }
+
+    // Compared on the line it is assigned on - `$ok = $stmt->execute() !== false;`
+    // - is the result being read, whatever happens to $ok afterwards. Without
+    // this the window below decides it, and a flag that gates a commit further
+    // down the file reads as a dropped result.
+    if (preg_match('/->execute\s*\(\s*\)\s*(?:===|!==|==|!=)/', $line) === 1) {
+        return true;
     }
 
     // Assigned to a name: that name has to reach a condition, otherwise the
@@ -171,6 +200,53 @@ function delete_before_replace_pairs($source)
 
     return $pairs;
 }
+
+wallos_test('a nested checkout is not scanned, and the tree itself is', function () {
+    // Both tree-walking gates read every .php file under the repository root.
+    // A worktree, a vendored copy or a second clone parked in a dot directory
+    // is a whole copy of this project, so scanning it reports every finding
+    // once per copy, against paths that do not exist in the tree under review -
+    // and a reviewer cannot act on a path that is not there.
+    foreach ([
+        '.git/modules/x/hooks/thing.php',
+        '.worktrees/feature/endpoints/settings/customcss.php',
+        '.anything/at/all.php',
+        'libs/PHPMailer/PHPMailer.php',
+        'tests/cases/order_by_test.php',
+    ] as $skipped) {
+        assert_true(scanned_path_is_skipped($skipped), $skipped . ' is not scanned');
+    }
+
+    // And the guard that keeps the rule from quietly swallowing the project:
+    // these are the files the gates exist for.
+    foreach ([
+        'endpoints/settings/customcss.php',
+        'api/fixer/set_fixer.php',
+        'includes/stats_calculations.php',
+        'migrations/000016.php',
+        'index.php',
+    ] as $scanned) {
+        assert_true(!scanned_path_is_skipped($scanned), $scanned . ' is scanned');
+    }
+});
+
+wallos_test('a result compared where it is assigned counts as read', function () {
+    // `$ok = $stmt->execute() !== false;` inspects the result on the line it is
+    // assigned on. Reading only the window below it calls that a dropped
+    // result whenever the flag it sets gates something further down the file
+    // than the window reaches - which is the shape of every delete-then-insert
+    // pair that commits at the end rather than returning early.
+    $read = ['$ok = $stmt->execute() !== false;'];
+    $dropped = ['    $stmt->execute();'];
+
+    foreach ($read as $line) {
+        assert_true(delete_before_replace_result_is_read([$line], 0), trim($line) . ' is read');
+    }
+
+    foreach ($dropped as $line) {
+        assert_true(!delete_before_replace_result_is_read([$line], 0), trim($line) . ' is dropped');
+    }
+});
 
 wallos_test('a delete is checked wherever the insert that replaces it is', function () {
     $governed = 0;

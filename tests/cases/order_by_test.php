@@ -25,9 +25,11 @@ wallos_test('no query sorts by a string constant', function () {
     foreach ($directory as $file) {
         $path = str_replace(WALLOS_ROOT . '/', '', $file->getPathname());
 
-        if ($file->getExtension() !== 'php'
-            || strpos($path, 'libs/') === 0
-            || strpos($path, 'tests/') === 0) {
+        // scanned_path_is_skipped() is defined beside the other tree-walking
+        // gate, in tests/cases/delete_before_replace_test.php, because both ask
+        // the same question and a second copy of the answer is how the two
+        // would come to disagree.
+        if ($file->getExtension() !== 'php' || scanned_path_is_skipped($path)) {
             continue;
         }
 
@@ -36,11 +38,24 @@ wallos_test('no query sorts by a string constant', function () {
                 continue;
             }
 
+            // Prose about the defect is not the defect. A comment that exists to
+            // stop somebody writing ORDER BY 'order' again must not be the thing
+            // that fails the gate, or the fix is to delete the explanation.
+            $start = ltrim($line);
+            if (strpos($start, '//') === 0 || strpos($start, '*') === 0
+                || strpos($start, '/*') === 0 || strpos($start, '#') === 0) {
+                continue;
+            }
+
             $checked++;
 
             // A single-quoted token straight after ORDER BY is a constant. An
             // identifier is bare, backticked or double-quoted.
-            if (preg_match("/ORDER\s+BY\s+'/i", $line) === 1) {
+            //
+            // The quote has to open something. `' ORDER BY ' . implode(...)`
+            // builds the clause out of a variable, and the quote it ends with is
+            // the string's own terminator rather than a sorting key.
+            if (preg_match("/ORDER\s+BY\s+'[A-Za-z_]/i", $line) === 1) {
                 $offenders[] = $path . ':' . ($number + 1) . ' - ' . trim($line);
             }
         }
