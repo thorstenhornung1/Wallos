@@ -76,6 +76,32 @@ because the rule says approval is a fact rather than an inference.
 |---|---|---|
 | 2026-09-12 | [#1214](https://github.com/ellite/Wallos/pull/1214) | `upstream-fix/webhook-json-escape` |
 | 2026-09-12 | [#1215](https://github.com/ellite/Wallos/pull/1215) | `upstream-fix/oidc-account-language` |
+| 2026-09-12 | [#1216](https://github.com/ellite/Wallos/pull/1216) | `upstream-fix/localized-default-names` |
+
+### Upstream's CI cannot build a pull request from a fork
+
+Every one of ours is red on `build`, and it is not ours. The job dies at
+
+```
+ERROR: failed to build: failed to solve: failed to parse ref "docker.io/": invalid reference format
+```
+
+`IMAGE_NAME: ${{ vars.DOCKERHUB_TAG }}` resolves to nothing, so
+`${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}` is `docker.io/` and buildx refuses
+it. The identical error hit gwpreston's fork pull request at 07:02 on the same
+day, nine hours before we sent anything — so it predates us and it is not about
+the content. The same branch then built cleanly at 07:40, so it is
+intermittent rather than absolute; what differs between the two runs is
+something about the run context, and we have not established what.
+
+The `test` job — the one that runs the suite our changes are held to — is not
+part of this workflow at all upstream. So a red tick on our pull requests says
+nothing about whether the change works, which is worth knowing before reading
+one as a rejection.
+
+This is the next symptom of what #1202 started: that pull request stopped the
+*login* step from running on a pull request; the image *name* is still empty.
+A candidate for the B track, and small.
 
 One at a time, and wait — that is the rule this list has followed since #1181,
 and it is why eleven of thirteen landed. The next one goes out when #1214 has
