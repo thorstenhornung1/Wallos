@@ -69,8 +69,11 @@ helpers".
 ## Two tracks from here
 
 The small fixes keep going, because they cost nothing and keep the channel warm.
-But they are no longer the plan; they are the background. The plan is one
-substantial proposal at a time, sent while a small fix is still settling.
+But they are no longer the plan; they are the background. The plan is a queue of
+substantial proposals, one at a time, each sent while a small fix is still
+settling — and each carrying the two arguments a self-hoster actually decides on:
+what comparable systems already do, and what it saves the person in the household
+who never asked to run a server.
 
 ### Send first, before either track: a regression in 5.7.0
 
@@ -122,82 +125,251 @@ The fork carries the fix already (`includes/webhook_helper.php`), with
 `tests/cases/notes_markdown_test.php` asserting it and verified by putting
 upstream's `trim()` back and watching six assertions fail.
 
-### Track A — the substantial one
+### Track A — the substantial ones
 
-**A1. Instance-wide configuration for SMTP, currency and AI.**
+Not one proposal. Seven, ranked, and each carries the same two arguments
+because those are the two that decide whether a self-hoster adopts something:
 
-The single most-wanted thing this fork has for a self-hosting audience, and the
-one piece of it that needs no architecture decision:
+**(a) it is what every comparable self-hosted application already does**, so the
+maintainer is being asked to match a convention rather than to invent one; and
+**(b) it removes work from the person in the household who did not choose to run
+a server** — the partner, the parent, the teenager who just wants to see what
+the family pays for.
 
-* It extends a pattern already in his tree, with his own helper names and his
-  own managed-fields concept. `wallos_get_oidc_env_value()` generalises to
-  `wallos_get_env_value()` without changing what it does.
-* **Inert unless used.** No `WALLOS_*` variable set means today's behaviour, to
-  the byte: every user keeps their own SMTP, key and provider. The resolution
-  order only ever *adds* a fallback beneath what the user already has.
-* It answers the complaint every Docker and Kubernetes operator has about this
-  application: credentials belong in the deployment, not typed into a settings
-  page per account, and a secret belongs in a mounted file — which is exactly
-  what `OIDC_CLIENT_SECRET_FILE` already concedes.
-* It carries a test suite in his harness: resolution order, precedence, the
-  `*_FILE` reader, a secret reported as status rather than rendered into the
-  page.
+Wallos is a *household* subscription tracker. Its own feature list says so: a
+household table, per-member payers, shared categories. Every argument below
+follows from that and from nothing else.
 
-Scope it honestly rather than shipping all 1,937 lines: **one integration per
-pull request**, SMTP first. Currency and AI follow the same shape once it lands,
-which is then a review of the diff rather than of the idea.
+> The comparison systems are named from what they document publicly. Re-check
+> the exact variable names against their current documentation before quoting
+> one in a pull request — the pattern is what matters, and it is stable; the
+> spelling of a particular variable is not.
 
-SMTP first for a reason worth stating precisely, because it is smaller than the
-proposal sounds. **Upstream already has an instance SMTP.** `migrations/000020.php`
+---
+
+**A1. Configuration from the environment, secrets from a file.**
+`WALLOS_SMTP_*`, `WALLOS_CURRENCY_*`, `WALLOS_AI_*`, each with a `*_FILE`
+sibling, shown read-only in the admin page with the variable that owns it.
+
+*Home-lab standard, and not narrowly:* the `*_FILE` convention comes from the
+official `postgres` and `mysql` images (`POSTGRES_PASSWORD_FILE`) and is how
+Docker and Kubernetes secrets have been consumed ever since. Vaultwarden takes
+`SMTP_HOST`/`SMTP_FROM` from the environment and nothing else. Gitea takes
+`GITEA__mailer__*` with a `__FILE` suffix on any of them. The official Nextcloud
+image takes `SMTP_HOST` and `NEXTCLOUD_ADMIN_PASSWORD_FILE`. Grafana takes
+`GF_SMTP_HOST` and supports a `__FILE` suffix on every setting it has. Paperless
+takes `PAPERLESS_*`. Authentik — the identity provider a lot of these households
+already run — takes `AUTHENTIK_EMAIL__HOST`. Miniflux is configured by the
+environment and by nothing else at all. **Wallos is the odd one out here, not
+the candidate.**
+
+*For the family:* nobody in the household ever sees an SMTP form. The one person
+who set the server up put the mail credentials in the compose file once; every
+other account simply has working password resets and working reminder mail. And
+the credential is not sitting in a database row that a backup carries around.
+
+*Shape:* one integration per pull request, SMTP first — and smaller than it
+sounds, because **upstream already has an instance SMTP.** `migrations/000020.php`
 puts `smtp_address`, `smtp_port`, `smtp_username`, `smtp_password`, `from_email`,
-`encryption` and `server_url` on the `admin` table; `admin.php` renders them; and
-`passwordreset.php:41` refuses to work at all until `smtp_address` and
-`server_url` are filled in. So the concept is his, the table is his, and the
-screen is his. What is missing is only the layer that lets the *deployment* own
-those fields instead of a person typing them in after every fresh volume — which
-is exactly what `OIDC_CLIENT_SECRET_FILE` already concedes for the one
-integration that has it.
+`encryption` and `server_url` on the `admin` table, `admin.php` renders them, and
+`passwordreset.php:41` refuses to run until two of them are filled in. The
+concept, the table and the screen are his. What is missing is the layer that lets
+the deployment own those fields — which `OIDC_CLIENT_SECRET_FILE` already
+concedes for the one integration that has it. Inert unless a variable is set.
 
-That turns A1 from "adopt our configuration architecture" into "the admin SMTP
-fields can come from `WALLOS_SMTP_*` and `WALLOS_SMTP_PASSWORD_FILE`, shown
-read-only with the variable that owns them, exactly as you already do for
-`OIDC_CLIENT_SECRET`". One concern, his own precedent, and inert unless a
-variable is set.
+---
 
-The one adaptation: `wallos_build_instance_settings()` asks
-`$db->tableExists()`, which is this fork's boundary. Upstream gets the
-`sqlite_master` query it uses everywhere else. One line.
+**A2. The account an identity provider creates is in the household's language.**
 
-**A2. The migration runner, behind migration 000016.**
+`includes/oidc/oidc_create_user.php:10` hardcodes `$language = 'en'` and
+`:13` hardcodes `$main_currency_id = 1`. Every account an IdP creates is
+therefore English, whatever the provider said and whatever the instance is. The
+person never sees the registration form that would have asked.
 
-Small diff, nine-year consequence, and it is not a tidy-up:
+*Home-lab standard:* `locale` is a standard OIDC claim — it is in the core
+specification's standard claim set, and Authentik, Authelia and Keycloak all
+send it. `Accept-Language` has been in HTTP since 1996. Nextcloud, Immich and
+Home Assistant all pick the language up rather than defaulting to English.
+Reading a claim the provider already sends is not a feature; it is the absence
+of a bug.
+
+*For the family:* this is the single most visible thing in the whole list. A
+German household runs Authentik, a family member clicks "Wallos", and lands in
+an English application — with no idea that a language setting exists, because
+they never went through a registration form. One claim, read once, and they land
+in German.
+
+*Shape:* small and self-contained. Read `locale` from the userinfo claims,
+resolve it to a supported language, fall back to an instance default
+(`WALLOS_DEFAULT_LANGUAGE`), fall back to `en`. Needs the tag resolver below,
+which is why A3 travels with it or just ahead of it.
+
+---
+
+**A3. A language tag that is not an exact file name still resolves.**
+
+`includes/i18n/getlang.php` matches the cookie against the keys of `$languages`,
+which are file names: `pt_br`, `zh_cn`, `sr_lat`. Anything else is silently
+English. So `de-DE` from a browser, `pt-BR` from an identity provider and
+`zh-Hans` from anywhere all fall through to English — including every value
+A2 would read.
+
+*Home-lab standard:* BCP-47 is what browsers send in `Accept-Language` and what
+identity providers put in `locale`. Every application that reads either one has
+to normalise `de-DE` to `de` and `zh-Hans` to `zh_cn`. This is ten lines of
+string handling that upstream does not have.
+
+*For the family:* the same as A2 — it is the half of it that makes the claim
+usable. On its own it also fixes the browser case: somebody opening Wallos for
+the first time on a German phone gets German.
+
+*Shape:* the fork's `wallos_resolve_language()`, adapted to upstream's file
+names so that **nothing is renamed** — the full BCP-47 rename stays here. Accept
+the tag, answer the file name. One function, one call site, a test table.
+
+---
+
+**A4. An exchange-rate provider that needs no account.**
+
+Upstream offers exactly two: `fixer.io` and `apilayer.com`
+(`settings.php:1158-1159`). Both require signing up, receiving an API key and
+pasting it into a settings page. A household that tracks a subscription in CHF
+and one in EUR cannot see a correct total until somebody does that.
+
+*Home-lab standard:* the direction of travel in self-hosted software is away
+from "register for an API key to use the thing you already installed".
+Frankfurter serves European Central Bank reference rates over HTTPS with no
+account, no key and no rate limit worth the name. It is the provider self-hosted
+finance tools reach for precisely because it removes the signup.
+
+*For the family:* it is the difference between "converted totals work" and
+"converted totals work once Dad has made an account at a currency API". Nobody
+who is not already running a server will do the second, and until they do, the
+dashboard shows a number that is quietly wrong.
+
+*Shape:* a third entry in the provider select and a third branch where the two
+existing ones fetch — roughly sixty lines across three files against upstream's
+inline style, plus a test. The fork's own `currency_provider.php` is 1,280 lines
+and is **not** what goes; only the provider.
+
+---
+
+**A5. Reminders that arrive on the phone without configuring a service.**
+
+Upstream has ten notification channels — email, Discord, Gotify, Telegram,
+PushPlus, Mattermost, Pushover, ntfy, webhook, ServerChan. Every single one of
+them requires the recipient, or somebody on their behalf, to set up an account,
+a bot, a topic or a server first.
+
+*Home-lab standard:* Web Push is what a progressive web app uses when it wants
+to reach a phone with nothing installed — Home Assistant, Immich, Nextcloud and
+Vikunja all do it. Wallos already ships a service worker and a manifest, and
+5.7.0 just improved both; the remaining piece is VAPID keys and a subscription
+table.
+
+*For the family:* this is the one channel a non-technical household member can
+turn on themselves. Open Wallos on the phone, allow notifications, done — no
+Telegram bot, no ntfy topic, no Pushover licence. The renewal reminder is the
+entire point of the application, and today it reaches exactly the people who
+already run infrastructure.
+
+*Shape:* `includes/webpush.php` is 712 lines here and carries an SSRF check and
+a 410-Gone sweep that upstream would want. Medium size, one concern, and it is a
+feature pull request rather than a fix — which is a kind he has merged from
+others twice in the last two releases (#1191, #1207).
+
+---
+
+**A6. A new account's categories are in the account's language.**
+
+`oidc_create_user.php:51-57`, `registration.php` and `endpoints/admin/adduser.php`
+each seed seventeen English category names — "Food & Beverages", "Charity &
+Donations" — and a list of English payment methods, whatever language was
+chosen. The German-speaking account is German everywhere except in its own data.
+
+*Home-lab standard:* seeding demo content in the user's language is what every
+application that seeds demo content does. The argument is thinner here, and it
+should be made thinner rather than dressed up: this is a polish item, not a
+convention Wallos is breaking.
+
+*For the family:* strong all the same. It is the first screen anybody sees, and
+it is the one place where "the app is in German" visibly stops being true.
+
+*Shape:* the seed lists move behind `translate()`, with the account's language
+resolved at creation. The fork's one-time localizer for *existing* accounts
+(`localize.php`) stays here — that is migration machinery for a decision
+upstream has not taken yet.
+
+---
+
+**A7. The migration runner, behind migration 000016.**
+
+Small diff, nine-year consequence, and not a tidy-up.
 
 `migrations/000016.php` opens `SELECT COUNT(*) FROM notifications` and never
 finalises it, then runs `DROP TABLE IF EXISTS notifications` while that result
 is still open. SQLite refuses with "database table is locked", the `exec()`
 result is not read, and `includes/run_migrations.php` records the migration as
 applied regardless — in **every installation ever made**. The dead table is
-still there. That is demonstrable on his own database in one query, before he
-reads a line of the diff.
+still there. Demonstrable on his own database in one query, before he reads a
+line of the diff.
 
 The runner is the general case: `require_once` discards the migration's return
 value, the `INSERT INTO migrations` is unconditional, "completed successfully"
 is printed unconditionally, and the migrations query is held open across the
-whole loop — the same lock this defect is made of, one layer up. Our version is
-portable except for `$db->tableExists('migrations')`, which goes back to the
-`sqlite_master` query.
+whole loop — the same lock, one layer up. Ours is portable except for
+`$db->tableExists('migrations')`, which goes back to the `sqlite_master` query.
 
-Send 000016 first and the runner second, in that order: the first is the proof
-that the second is needed.
+*No family argument, and it should not be given one.* This is an argument about
+data integrity, addressed to the maintainer, and it is strong enough alone. Send
+000016 first and the runner second: the first is the proof that the second is
+needed.
 
-**A3. The database boundary — the conversation, not yet a patch.**
+---
 
-Still tier 3. What has changed is that there is now a reason to believe an issue
-would be read. What has not changed is that a 500-file diff is unreviewable and
-that PostgreSQL is a maintenance commitment he has never asked for. If it is
-opened at all, open it as *the boundary* — one interface, a SQLite adapter that
-is a pass-through, no second backend in the diff — and say plainly that the
-PostgreSQL adapter exists here and is his to take or leave. Not before A1 lands.
+**A8. The database boundary — still the conversation, not a patch.**
+
+Tier 3, unchanged. What is new is a reason to believe an issue would be read.
+What is not new is that a 500-file diff is unreviewable and that PostgreSQL is a
+maintenance commitment he has never asked for. If it is opened at all, open it
+as *the boundary* — one interface, a SQLite adapter that is a pass-through, no
+second backend in the diff — and say plainly that the PostgreSQL adapter exists
+here and is his to take or leave. Not before A1 lands.
+
+---
+
+### What deliberately carries no family argument
+
+Worth naming, so that nobody reaches for one later and overstates it:
+
+* **The rootless, hardened container.** Genuine home-lab standard — LinuxServer's
+  `PUID`/`PGID`, Paperless's `USERMAP_UID`, Kubernetes' `runAsNonRoot`, rootless
+  Podman by default, TrueNAS SCALE refusing root — and
+  `upstream/main:Dockerfile:34` still does
+  `chown -R www-data:www-data /var/www/html` with no `USER` directive at all, so
+  the whole webroot is writable by the process serving it. But it helps the
+  *operator*, not the family, and the nginx half of our fix depends on the
+  ownership split, which is a wider change upstream than here. It stays where it
+  is until the ownership work can travel with it.
+* **The explicit admin role, OIDC session authority, back-channel logout, cron
+  reporting, the archive work.** All of them help exactly one person per
+  household: the one already running a server.
+
+### Ordering, and why it is not the order of value
+
+1. **A0** — his own two-day-old regression. Nothing to take on trust.
+2. **A3 + A2 together** — the language a family actually lands in. Small, and it
+   is the most visible defect in the list for a non-English household.
+3. **A1 (SMTP)** — the convention argument, against his own precedent.
+4. **A7** (000016, then the runner) — the integrity argument, which wants a
+   reviewer who is already reading.
+5. **A4**, then **A5**, then **A6** — the feature-shaped ones, once three have
+   landed.
+6. **A8** only after A1.
+
+A2/A3 go ahead of A1 despite being smaller, because they cost him almost nothing
+to read and they answer a complaint anybody with a non-English household can
+reproduce in thirty seconds. A1 is the bigger prize and wants the reviewer warm.
 
 ### Track B — the background, one at a time between the big ones
 
@@ -248,14 +420,21 @@ dropped and only the status codes travel.
 
 ### Still not portable
 
-Unchanged from the previous list: container hardening, cron reporting, the
-explicit admin role, OIDC back-channel logout and session authority, BCP-47 and
-the CLDR currency data, the localizer page. The nginx work still waits on the
-Dockerfile ownership split, which is wider upstream, not narrower.
+Container hardening and the nginx work (see "What deliberately carries no family
+argument" above), cron reporting, the explicit admin role, OIDC back-channel
+logout and session authority, the full BCP-47 rename with its migration, the
+CLDR currency dataset, and the one-time localizer page.
 
-One correction to that list: **the instance configuration work is no longer part
-of the #32 conversation.** It was grouped there because it was assumed to need
-the boundary. It does not — see A1.
+Two corrections to how that list used to read, both of them measurements rather
+than changes of mind:
+
+* **Instance configuration is not part of the #32 conversation.** It was grouped
+  there because it was assumed to need the database boundary. It does not — see
+  A1, and upstream's own `OIDC_CLIENT_SECRET_FILE`.
+* **Parts of the i18n work travel without the rest.** The full BCP-47 rename
+  stays here, because it renames thirty files and needs a migration. Resolving a
+  tag to a supported language (A3) and reading the provider's `locale` claim
+  (A2) do not, and they are where the visible benefit is.
 
 ## Nothing goes to the maintainer without Thorsten asking for it
 
