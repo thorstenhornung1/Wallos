@@ -4,6 +4,16 @@
 
 ### Fixed
 
+* **notifications:** every web push is now the same size on the wire. The
+  encrypted body was the message length plus a constant, so anyone who could
+  watch the connection to the push service learned how long each notification
+  was without decrypting anything — and notification texts are predictable while
+  the set of subscriptions an account holds is small. Measured before the fix:
+  110, 155, 911 and 103 bytes for four different messages; after it, 2922 for
+  all of them. RFC 8188 §2 provides the padding and it costs a nightly job
+  nothing. Found by building the same feature against `minishlink/web-push` as a
+  comparison and noticing it pads where we did not.
+
 * **currency:** one currency Frankfurter does not carry no longer costs the
   account its whole refresh. A code it does not price was believed to be
   "simply absent from the answer" — measured 2026-09-04 and written into the

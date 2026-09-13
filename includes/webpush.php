@@ -31,6 +31,18 @@ require_once __DIR__ . '/config_helper.php';
 require_once __DIR__ . '/integration_config.php';
 require_once __DIR__ . '/ssrf_helper.php';
 
+/**
+ * The size every record is padded to, delimiter included.
+ *
+ * RFC 8291 §4 requires a push service to accept a payload of at least 4096
+ * octets, and the aes128gcm header (86 bytes here) and the GCM tag (16) come
+ * out of that budget. 2820 leaves room for both with margin, and it is the
+ * figure the established PHP and JavaScript implementations settled on, which
+ * matters: a size nobody else uses would identify this application as surely as
+ * the length it was hiding.
+ */
+const WALLOS_WEBPUSH_PADDED_RECORD = 2820;
+
 /* -------------------------------------------------------------------------
    base64url
    ------------------------------------------------------------------------- */
@@ -471,7 +483,7 @@ function wallos_webpush_vapid_jwt($endpoint, $subject, $publicKeyB64, $privateKe
  * @param string|null $salt        16-byte record salt, or null to generate
  * @return string|null the encrypted body, or null on failure
  */
-function wallos_webpush_encrypt($plaintext, $uaPublic, $authSecret, $asPrivate = null, $asPublic = null, $salt = null)
+function wallos_webpush_encrypt($plaintext, $uaPublic, $authSecret, $asPrivate = null, $asPublic = null, $salt = null, $padTo = WALLOS_WEBPUSH_PADDED_RECORD)
 {
     if (strlen($uaPublic) !== 65 || strlen($authSecret) !== 16) {
         return null;
@@ -516,8 +528,28 @@ function wallos_webpush_encrypt($plaintext, $uaPublic, $authSecret, $asPrivate =
     $nonce = hash_hkdf('sha256', $ikm, 12, "Content-Encoding: nonce\x00", $salt);
 
     // A single record covering the whole payload: 0x02 is the last-record
-    // padding delimiter (RFC 8188 §2).
-    $padded = $plaintext . "\x02";
+    // padding delimiter (RFC 8188 §2), followed by the zero bytes that make
+    // every push the same size on the wire.
+    //
+    // Without the zeros the body length is the message length plus a constant,
+    // so anyone who can watch the connection to the push service learns how
+    // long each notification was without decrypting anything — and these are
+    // predictable: "Netflix renews in 3 days" is a different length from
+    // "Versicherung wird in 7 Tagen verlängert", and the set of subscriptions
+    // an account holds is small. Measured before this: 132 bytes for a short
+    // notification, 184 for a typical one. RFC 8188 §2 exists for exactly this
+    // and the padding costs nothing a nightly job would notice.
+    //
+    // A payload longer than the target keeps the delimiter alone rather than
+    // being refused: it still encrypts, it is still correct, and it is only as
+    // revealing as every push was before. Nothing here produces one.
+    $record = $plaintext . "\x02";
+
+    if ($padTo > 0 && strlen($record) < $padTo) {
+        $record = str_pad($record, $padTo, "\x00");
+    }
+
+    $padded = $record;
 
     $tag = '';
     $ciphertext = openssl_encrypt($padded, 'aes-128-gcm', $cek, OPENSSL_RAW_DATA, $nonce, $tag, '', 16);

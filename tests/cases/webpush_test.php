@@ -63,12 +63,64 @@ wallos_test('aes128gcm encryption reproduces the RFC 8291 test vector byte for b
         wallos_webpush_b64u_decode(WALLOS_WEBPUSH_RFC_AUTH),
         wallos_webpush_b64u_decode(WALLOS_WEBPUSH_RFC_AS_PRIVATE),
         wallos_webpush_b64u_decode(WALLOS_WEBPUSH_RFC_AS_PUBLIC),
-        wallos_webpush_b64u_decode(WALLOS_WEBPUSH_RFC_SALT)
+        wallos_webpush_b64u_decode(WALLOS_WEBPUSH_RFC_SALT),
+        // The worked example in the RFC has no padding, so the vector is asked
+        // for without it. The production path pads; the case below is that one.
+        0
     );
 
     assert_true($body !== null, 'the encryption produced a body');
     assert_same(WALLOS_WEBPUSH_RFC_EXPECTED, wallos_webpush_b64u_encode($body),
         'the aes128gcm body equals the RFC 8291 §5 expected result');
+});
+
+wallos_test('every push is the same size on the wire, whatever it says', function () {
+    // Without padding the body length is the message length plus a constant, so
+    // somebody watching the connection to the push service learns how long each
+    // notification was without decrypting anything. The messages are
+    // predictable and the set of subscriptions an account holds is small, so a
+    // length is worth something to a watcher.
+    $lengths = [];
+
+    foreach ([
+        'short' => 'Netflix',
+        'typical' => json_encode(['title' => 'Wallos', 'body' => 'Netflix renews in 3 days']),
+        'long' => json_encode(['title' => 'Wallos', 'body' => str_repeat('Versicherung ', 60)]),
+        'empty' => '',
+    ] as $label => $payload) {
+        $body = wallos_webpush_encrypt(
+            $payload,
+            wallos_webpush_b64u_decode(WALLOS_WEBPUSH_RFC_UA_PUBLIC),
+            wallos_webpush_b64u_decode(WALLOS_WEBPUSH_RFC_AUTH)
+        );
+
+        assert_true($body !== null, $label . ' encrypts');
+        $lengths[$label] = strlen($body);
+    }
+
+    assert_same(1, count(array_unique($lengths)),
+        'all four are the same length on the wire: ' . json_encode($lengths));
+
+    // And the size is the one the other implementations use, so the padding
+    // does not identify this application by being unusual. 2820 record + 16
+    // GCM tag + 86 header.
+    assert_same(2922, $lengths['short'], 'the wire body is the agreed size');
+});
+
+wallos_test('a payload too long to pad is still sent, not refused', function () {
+    // Nothing here produces one, but silently failing to notify would be worse
+    // than a body whose length says something — which is all every push said
+    // before this.
+    $oversized = str_repeat('x', WALLOS_WEBPUSH_PADDED_RECORD + 100);
+
+    $body = wallos_webpush_encrypt(
+        $oversized,
+        wallos_webpush_b64u_decode(WALLOS_WEBPUSH_RFC_UA_PUBLIC),
+        wallos_webpush_b64u_decode(WALLOS_WEBPUSH_RFC_AUTH)
+    );
+
+    assert_true($body !== null, 'it still encrypts');
+    assert_true(strlen($body) > 2922, 'and is simply longer than the padded size');
 });
 
 wallos_test('encryption refuses malformed client key material', function () {
