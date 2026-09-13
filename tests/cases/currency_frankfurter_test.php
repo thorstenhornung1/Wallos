@@ -677,3 +677,118 @@ wallos_test('choosing a keyless provider does not throw the stored key away', fu
             . 'and a row saying "use Frankfurter" under instance mode is stored and then ignored');
     }
 });
+
+/*
+  2026-09-13, correcting the transcript above.
+
+  The 2026-09-04 line "a well-formed code it does not price is dropped in
+  silence" holds for BTC and for nothing else. Re-measured:
+
+    base=CHF&quotes=EUR,USD,BTC      200  EUR and USD, BTC absent
+    base=CHF&quotes=EUR,USD,ETH      422  invalid currency: ETH
+    base=CHF&quotes=EUR,ETH,XYZ      422  invalid currency: ETH,XYZ
+    base=CHF&quotes=EUR,ETH,XYZ,QQQ  422  invalid currency: ETH,XYZ,QQQ
+
+  So BTC is the exception: any other code the catalogue does not carry refuses
+  the request for every currency in it. An account holding one got no refresh
+  at all — not a partial one — every night until somebody removed it.
+
+  The refusal names every offending code at once, which is what makes the
+  recovery a single retry rather than a search.
+*/
+
+wallos_test('a code the provider refuses is dropped, and the rest still refresh', function () {
+    $db = wallos_test_open_database();
+    wallos_test_create_user($db, 1, 'alice');
+    frankfurter_configure_instance($db);
+    frankfurter_add_currency($db, 1, 9001, 'ETH');
+
+    $run = frankfurter_run_php(
+        '$GLOBALS["calls"] = 0;' . "\n"
+        . 'function wallos_provider_http_get($url, $context) {' . "\n"
+        . '    $GLOBALS["calls"]++;' . "\n"
+        . '    $query = [];' . "\n"
+        . '    parse_str((string) parse_url($url, PHP_URL_QUERY), $query);' . "\n"
+        . '    $quotes = array_filter(explode(",", strtoupper((string) ($query["quotes"] ?? ""))));' . "\n"
+        . '    $refused = array_values(array_intersect($quotes, ["ETH"]));' . "\n"
+        . '    if ($refused !== []) {' . "\n"
+        . '        return ["body" => json_encode(["status" => 422,' . "\n"
+        . '                    "message" => "invalid currency: " . implode(",", $refused)]),' . "\n"
+        . '                "headers" => ["HTTP/1.1 422 Unprocessable Entity"]];' . "\n"
+        . '    }' . "\n"
+        . '    $records = [];' . "\n"
+        . '    foreach ($quotes as $quote) {' . "\n"
+        . '        $records[] = ["date" => "2026-09-13", "base" => "EUR", "quote" => $quote,' . "\n"
+        . '                      "rate" => $quote === "USD" ? 1.1612 : 1.0];' . "\n"
+        . '    }' . "\n"
+        . '    return ["body" => json_encode($records), "headers" => ["HTTP/1.1 200 OK"]];' . "\n"
+        . '}' . "\n"
+        . 'require ' . var_export(WALLOS_ROOT . '/endpoints/cronjobs/updateexchange.php', true) . ';' . "\n"
+        . 'echo "\ncalls=" . $GLOBALS["calls"] . "\n";'
+    );
+
+    assert_contains('calls=2', $run['output'],
+        'the refusal cost exactly one retry, never a search (got: ' . $run['output'] . ')');
+    assert_true(abs(frankfurter_rate($db, 1, 'USD') - 1.1612) < 0.000001,
+        'the currencies the provider does price were stored anyway');
+    assert_contains('ETH', $run['output'],
+        'and the run names the currency that kept its old rate');
+
+    $db->close();
+});
+
+wallos_test('a refusal that names nothing is left standing', function () {
+    // The degradation path, and the reason this is safe to add: if the message
+    // ever stops carrying codes, nothing is dropped, nothing is retried, and
+    // the refusal is reported exactly as it was before any of this existed.
+    $db = wallos_test_open_database();
+    wallos_test_create_user($db, 1, 'alice');
+    frankfurter_configure_instance($db);
+
+    $run = frankfurter_run_php(
+        '$GLOBALS["calls"] = 0;' . "\n"
+        . 'function wallos_provider_http_get($url, $context) {' . "\n"
+        . '    $GLOBALS["calls"]++;' . "\n"
+        . '    return ["body" => json_encode(["status" => 422, "message" => "something else entirely"]),' . "\n"
+        . '            "headers" => ["HTTP/1.1 422 Unprocessable Entity"]];' . "\n"
+        . '}' . "\n"
+        . 'require ' . var_export(WALLOS_ROOT . '/endpoints/cronjobs/updateexchange.php', true) . ';' . "\n"
+        . 'echo "\ncalls=" . $GLOBALS["calls"] . "\n";'
+    );
+
+    assert_contains('calls=1', $run['output'],
+        'nothing was retried (got: ' . $run['output'] . ')');
+    assert_contains('failed', strtolower($run['output']),
+        'and the run reports the refusal');
+
+    $db->close();
+});
+
+wallos_test('the refused codes are read out of the provider\'s own message', function () {
+    require_once WALLOS_ROOT . '/includes/currency_provider.php';
+
+    assert_same(['ETH'], wallos_frankfurter_refused_codes(
+        ['status' => 422, 'message' => 'invalid currency: ETH']), 'one code');
+    assert_same(['ETH', 'XYZ', 'QQQ'], wallos_frankfurter_refused_codes(
+        ['status' => 422, 'message' => 'invalid currency: ETH,XYZ,QQQ']), 'three, as measured');
+    assert_same(['ETH', 'XYZ'], wallos_frankfurter_refused_codes(
+        ['status' => 422, 'message' => 'invalid currency: eth, xyz']), 'case and spacing do not matter');
+
+    // Nothing is assumed about the wording beyond the part that matters.
+    foreach ([
+        ['status' => 422, 'message' => 'something else entirely'],
+        ['status' => 422, 'message' => 'invalid currency: '],
+        ['status' => 422],
+        ['message' => 12],
+        [],
+        null,
+        'not an array',
+    ] as $unusable) {
+        assert_same([], wallos_frankfurter_refused_codes($unusable),
+            'an answer naming no code drops nothing: ' . var_export($unusable, true));
+    }
+
+    // A message naming something that is not a code must not cost a currency.
+    assert_same([], wallos_frankfurter_refused_codes(
+        ['message' => 'invalid currency: Lunarium']), 'only three-letter codes are acted on');
+});

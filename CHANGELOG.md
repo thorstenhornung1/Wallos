@@ -1,5 +1,22 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+* **currency:** one currency Frankfurter does not carry no longer costs the
+  account its whole refresh. A code it does not price was believed to be
+  "simply absent from the answer" — measured 2026-09-04 and written into the
+  comment. Re-measured 2026-09-13, that holds for BTC and for nothing else:
+  `quotes=EUR,USD,ETH` answers **422 `invalid currency: ETH`** and takes EUR and
+  USD down with it. So an account holding ETH, or a code somebody typed by hand,
+  got no rates at all rather than partial ones — every night, until it was
+  removed. The refusal names every offending code at once, so the recovery is a
+  single retry: drop exactly what the provider named, ask once more, and report
+  the dropped codes as the ones that kept their old rate. Nothing is retried
+  when the message names no code, which leaves the refusal reported exactly as
+  before — the recovery can improve the outcome and cannot worsen it.
+
 ## [5.17.0](https://github.com/thorstenhornung1/Wallos/releases/tag/v5.17.0) (2026-09-12)
 
 **Upstream 5.7.1 is merged** — the third merge since the fork left 5.4.4, and

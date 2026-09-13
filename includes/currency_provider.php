@@ -154,14 +154,66 @@ function wallos_frankfurter_detail($decoded)
  * held back and named, rather than being allowed to refuse the request for
  * everybody.
  *
- * A well-formed code the provider does not price — BTC, ETH; there is no
- * cryptocurrency in either scope of /v2/currencies — is a different matter and
- * is not filtered here: it is simply absent from the answer, and the caller
- * reports it by comparing what it asked for with what came back.
+ * A well-formed code the provider does not price is a different matter and is
+ * not filtered here, because it cannot be told from a good one without asking.
+ * What happens to it is not what this comment said until 2026-09-13, and the
+ * correction is the reason wallos_frankfurter_refused_codes() exists:
+ *
+ *   BTC   answers 200 and is simply absent from the rates.
+ *   ETH   answers 422 — "invalid currency: ETH" — and takes the whole request
+ *         with it, EUR and USD included.
+ *
+ * So BTC is the exception and not the rule: any well-formed code the catalogue
+ * does not carry refuses the request for every other currency in it. The
+ * refusal names every offending code at once, which is what makes recovering
+ * from it a single retry rather than a search.
  *
  * @param string[] $codes
  * @return array{0: string[], 1: string[]} Accepted codes, then rejected ones.
  */
+/**
+ * The codes a 422 named, read out of Frankfurter's own answer.
+ *
+ * Its refusal is {"status":422,"message":"invalid currency: ETH,XYZ"} and it
+ * names every offending code at once, comma separated (measured 2026-09-13
+ * with two and with three). That is what makes the recovery one retry instead
+ * of a search: ask, and if it refuses, drop exactly what it named and ask once
+ * more.
+ *
+ * Nothing is assumed about the wording beyond the part that matters. If the
+ * message ever stops carrying codes this finds none, the caller drops nothing,
+ * and the refusal is reported exactly as it was before this existed — the
+ * recovery can improve the outcome and cannot worsen it.
+ *
+ * @param mixed $decoded json_decode(..., true) of the response body.
+ * @return string[] upper-cased codes, empty when none could be read.
+ */
+function wallos_frankfurter_refused_codes($decoded)
+{
+    if (!is_array($decoded) || !isset($decoded['message']) || !is_string($decoded['message'])) {
+        return [];
+    }
+
+    if (preg_match('/invalid currency:\s*(.+)$/i', $decoded['message'], $match) !== 1) {
+        return [];
+    }
+
+    $refused = [];
+
+    foreach (explode(',', $match[1]) as $code) {
+        $code = strtoupper(trim($code));
+
+        // Only something that could have been in the request. A message naming
+        // anything else is not a code list, and acting on it would drop a
+        // currency the provider never complained about.
+        if (preg_match('/^[A-Z]{3}$/', $code) === 1) {
+            $refused[] = $code;
+        }
+    }
+
+    return array_values(array_unique($refused));
+}
+
 function wallos_frankfurter_partition_codes($codes)
 {
     $accepted = [];
@@ -289,8 +341,6 @@ function wallos_fetch_exchange_rates($config, $codes, $base = null)
         // this repo still use.
         list($askFor, $malformed) = wallos_frankfurter_partition_codes($requested);
 
-        $apiUrl = 'https://api.frankfurter.dev/v2/rates?base=' . rawurlencode($base)
-            . '&quotes=' . rawurlencode(implode(',', $askFor));
         $context = stream_context_create([
             'http' => [
                 'method' => 'GET',
@@ -300,8 +350,38 @@ function wallos_fetch_exchange_rates($config, $codes, $base = null)
                 'ignore_errors' => true,
             ],
         ]);
+
+        $frankfurterUrl = function ($quotes) use ($base) {
+            return 'https://api.frankfurter.dev/v2/rates?base=' . rawurlencode($base)
+                . '&quotes=' . rawurlencode(implode(',', $quotes));
+        };
+
+        $apiUrl = $frankfurterUrl($askFor);
         $http = wallos_provider_http_get($apiUrl, $context);
         $response = $http['body'];
+
+        // One retry, and only one, because the refusal names every offending
+        // code at once. A single currency the catalogue does not carry — ETH,
+        // or a code somebody typed by hand — otherwise refuses the request for
+        // every other currency in it, so an account holding one got no refresh
+        // at all rather than a partial one, every night, until it was removed.
+        //
+        // Dropping only what the provider itself named: the codes come out of
+        // its own message, they are added to the held-back list so the run says
+        // which currencies kept their old rate, and if nothing can be read from
+        // the message nothing is dropped and the refusal stands as before.
+        if (wallos_http_status_code($http['headers']) === 422) {
+            $refused = wallos_frankfurter_refused_codes(json_decode((string) $response, true));
+            $retryWith = array_values(array_diff($askFor, $refused));
+
+            if ($refused !== [] && $retryWith !== []) {
+                $malformed = array_values(array_unique(array_merge($malformed, $refused)));
+                $askFor = $retryWith;
+                $apiUrl = $frankfurterUrl($askFor);
+                $http = wallos_provider_http_get($apiUrl, $context);
+                $response = $http['body'];
+            }
+        }
     } elseif ($provider === 1) {
         $apiUrl = "https://api.apilayer.com/fixer/latest?base=EUR&symbols=" . $codes;
         $context = stream_context_create([
