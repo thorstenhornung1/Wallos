@@ -133,3 +133,42 @@ escaped as text and link and image URLs are filtered against a scheme allowlist.
 
 The license text as distributed with it is kept verbatim beside the library, in
 `libs/Parsedown-LICENSE.txt`.
+
+---
+
+## Composer dependencies (`vendor/`)
+
+*Introduced on the `webpush_external` branch, which replaces the self-implemented
+Web Push cryptography with a library. This section describes that branch.*
+
+`vendor/` is a committed Composer install. The repository is the deployable
+artifact — upstream's README tells baremetal users to clone it into the webroot
+— so there is no build step in which `composer install` could run, and the tree
+ships as source like `libs/` does.
+
+One direct dependency and one transport:
+
+- **`minishlink/web-push` v11.0.0** — https://github.com/web-push-libs/web-push-php
+  — VAPID keypairs and ES256 tokens (RFC 8292), aes128gcm payload encryption
+  (RFC 8291), and the push POST.
+- **`guzzlehttp/guzzle` 7.15.5** — https://github.com/guzzle/guzzle — the PSR-18
+  client web-push discovers. Wallos builds it per send so the endpoint's
+  SSRF-approved address can be pinned with `CURLOPT_RESOLVE`.
+
+Their transitive closure is eighteen further packages, pinned in
+`composer.lock`: `brick/math`, `guzzlehttp/promises`, `guzzlehttp/psr7`,
+`php-http/discovery`, `php-http/httplug`, `php-http/promise`, `psr/clock`,
+`psr/http-client`, `psr/http-factory`, `psr/http-message`, `psr/log`,
+`ralouphie/getallheaders`, `spomky-labs/base64url`, `spomky-labs/pki-framework`,
+`symfony/deprecation-contracts`, `symfony/polyfill-php80`,
+`symfony/polyfill-php83` and `web-token/jwt-library`.
+
+- **License:** every one of the twenty packages is MIT —
+  `SPDX-License-Identifier: MIT` — which GPL-3.0 can carry. The licence recorded
+  for each package in `composer.lock` is what
+  `tests/cases/vendored_licenses_test.php` checks, so a dependency added or
+  bumped into a non-permitted licence fails the suite rather than shipping.
+
+Each package keeps its own `LICENSE` file inside `vendor/<vendor>/<package>/`,
+as MIT requires; the text is the same MIT licence reproduced above under
+ApexCharts.

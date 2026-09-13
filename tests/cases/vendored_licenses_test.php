@@ -38,3 +38,60 @@ wallos_test('the vendored library is documented where licences are collected', f
     assert_contains('The MIT License (MIT)', $licenses,
         'the licence text itself is shipped, as MIT requires');
 });
+
+wallos_test('every Composer package Wallos ships is under a licence GPL-3.0 can carry', function () {
+    // vendor/ is committed on the webpush_external branch, so twenty packages
+    // now ship inside the image that nobody reviewed one file at a time. The
+    // licence is the part that cannot be noticed by testing behaviour: a
+    // dependency bumped to an AGPL or a "source available" release works
+    // perfectly and is a licence violation. composer.lock records the licence
+    // each package declares, so the gate reads that rather than a list somebody
+    // has to remember to update.
+    $lock = json_decode(file_get_contents(WALLOS_ROOT . '/composer.lock'), true);
+    assert_true(is_array($lock['packages'] ?? null), 'composer.lock lists the installed packages');
+
+    // Permissive licences a GPL-3.0 work may include. Deliberately short: a
+    // licence that is not on it is a decision, not an oversight.
+    $permitted = ['MIT', 'BSD-2-Clause', 'BSD-3-Clause', 'Apache-2.0', 'ISC'];
+
+    $offenders = [];
+    foreach ($lock['packages'] as $package) {
+        foreach ((array) ($package['license'] ?? []) as $license) {
+            if (!in_array($license, $permitted, true)) {
+                $offenders[] = $package['name'] . ' is ' . $license;
+            }
+        }
+
+        if (($package['license'] ?? []) === []) {
+            $offenders[] = $package['name'] . ' declares no licence';
+        }
+    }
+
+    assert_same([], $offenders, 'no package carries a licence GPL-3.0 cannot include');
+
+    // And the tree on disk is the tree the lock describes, so the check is not
+    // reading a file that has nothing to do with what ships.
+    foreach ($lock['packages'] as $package) {
+        assert_true(is_dir(WALLOS_ROOT . '/vendor/' . $package['name']),
+            $package['name'] . ' is installed, not only locked');
+    }
+});
+
+wallos_test('the Composer tree is documented where licences are collected', function () {
+    $licenses = file_get_contents(WALLOS_ROOT . '/THIRD_PARTY_LICENSES.md');
+    $lock = json_decode(file_get_contents(WALLOS_ROOT . '/composer.lock'), true);
+
+    assert_contains('## Composer dependencies', $licenses, 'the vendored tree has an entry');
+    assert_contains('minishlink/web-push', $licenses, 'the direct dependency is named');
+
+    // Every package by name, so a new transitive dependency cannot arrive
+    // undocumented — the thing that actually happens when a lock file is bumped.
+    $missing = [];
+    foreach ($lock['packages'] as $package) {
+        if (strpos($licenses, $package['name']) === false) {
+            $missing[] = $package['name'];
+        }
+    }
+
+    assert_same([], $missing, 'every installed package is named in the document');
+});

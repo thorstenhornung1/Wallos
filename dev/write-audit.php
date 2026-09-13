@@ -62,7 +62,8 @@
 /**
  * Directories the audit does not look at.
  *
- * libs is vendored code Wallos does not own. includes/database is the adapter
+ * libs and vendor are third-party code Wallos does not own — libs is vendored
+ * by hand, vendor is installed by Composer. includes/database is the adapter
  * itself, where a raw execute() is the implementation rather than a call site.
  * tests holds fixtures that write deliberately unchecked rows. .claude holds
  * agent worktrees — whole checkouts nested in the repository, which would count
@@ -72,7 +73,7 @@
  */
 function write_audit_excluded()
 {
-    return ['libs', 'includes/database', 'tests', 'dev', '.git', '.claude'];
+    return ['libs', 'vendor', 'includes/database', 'tests', 'dev', '.git', '.claude'];
 }
 
 /**

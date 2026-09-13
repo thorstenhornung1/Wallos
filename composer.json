@@ -1,0 +1,21 @@
+{
+    "name": "wallos/wallos",
+    "description": "Wallos — self-hosted subscription tracker. Composer is used only for the Web Push dependency; vendor/ is committed because the repository is the deployable artifact.",
+    "type": "project",
+    "license": "GPL-3.0-or-later",
+    "require": {
+        "php": ">=8.3",
+        "minishlink/web-push": "^11.0",
+        "guzzlehttp/guzzle": "^7.0"
+    },
+    "config": {
+        "platform": {
+            "php": "8.3.0"
+        },
+        "optimize-autoloader": true,
+        "sort-packages": true,
+        "allow-plugins": {
+            "php-http/discovery": false
+        }
+    }
+}

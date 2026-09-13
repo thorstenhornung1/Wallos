@@ -7,116 +7,67 @@
   personal destinations, one per device). A fired notification is encrypted per
   RFC 8291 and delivered to every one of the user's subscriptions.
 
-  ## The crypto/dependency decision
+  ## The crypto/dependency decision — EXPERIMENT (branch webpush_external)
 
-  Wallos ships a deliberately lean image and does not carry a Composer
-  dependency tree, so this is a minimal self-contained implementation on the
-  OpenSSL extension rather than a vendored web-push library. Everything a push
-  needs is already in the base image:
+  This branch answers one question and nothing else: what does Web Push look
+  like when a library does the cryptography instead of our own code? The
+  cryptography and the send transport are minishlink/web-push v11 here; every
+  other part of the channel — the endpoints, the service worker, the settings
+  UI, migration 000083, the send loop in the cron — is untouched.
 
-    * VAPID keypair    EC P-256, openssl_pkey_new()
-    * VAPID JWT (ES256) openssl_sign() + a DER->raw signature conversion
-    * RFC 8291 payload  openssl_pkey_derive() (ECDH P-256), hash_hkdf() (HKDF),
-                        openssl_encrypt() (AES-128-GCM)
+  What the library owns now:
 
-  The two hard parts — the ES256 JWT and the aes128gcm content encoding — are
-  covered by known-answer tests against the RFC 8291 test vector, so the
-  self-implementation is held to the standard rather than trusted.
+    * VAPID keypair    VAPID::createVapidKeys()
+    * VAPID JWT (ES256) VAPID::getVapidHeaders(), via web-token/jwt-library
+    * RFC 8291 payload  Encryption::encrypt(), aes128gcm content coding
+    * the HTTP POST     a PSR-18 client (Guzzle), via WebPush::flush()
+
+  What stays ours, because the library has no notion of any of it:
+
+    * per-user scoping   a subscription belongs to the session user, and a
+                         notification goes only to that user's devices
+    * the SSRF check     the endpoint is whatever a client posted to the
+                         subscribe endpoint, and the cron makes the server POST
+                         to it every night; is_url_safe_for_ssrf() runs before
+                         the library is handed anything, and the approved IP is
+                         pinned into the curl handle so DNS cannot move under it
+    * the 410 sweep      the library reports it, we delete the row
+    * key resolution     WALLOS_VAPID_PRIVATE_KEY / _PUBLIC_KEY (or _FILE) over
+                         a database-stored pair; only the generation moved
+
+  Wallos otherwise ships a lean image with no Composer dependency tree, and the
+  repository is the deployable artifact — upstream's README tells baremetal
+  users to clone it into the webroot — so vendor/ is committed. That is the
+  price of this branch, and nginx.conf now refuses /vendor/ over HTTP because a
+  Composer tree inside the webroot is otherwise a directory of executable PHP.
 
   All values on the wire are base64url without padding, the encoding VAPID and
-  the Push API use throughout.
+  the Push API use throughout; the library takes and returns the same encoding,
+  so the stored p256dh/auth strings are handed over untouched.
 */
 
 require_once __DIR__ . '/config_helper.php';
 require_once __DIR__ . '/integration_config.php';
 require_once __DIR__ . '/ssrf_helper.php';
+require_once __DIR__ . '/../vendor/autoload.php';
 
-/* -------------------------------------------------------------------------
-   base64url
-   ------------------------------------------------------------------------- */
-
-/**
- * @param string $binary
- * @return string
- */
-function wallos_webpush_b64u_encode($binary)
-{
-    return rtrim(strtr(base64_encode($binary), '+/', '-_'), '=');
-}
+use Minishlink\WebPush\Subscription;
+use Minishlink\WebPush\VAPID;
+use Minishlink\WebPush\WebPush;
 
 /**
- * @param string $text
- * @return string binary, or '' when the input is not valid base64url
+ * The content coding every current browser accepts and the only one RFC 8291
+ * defines. The library still defaults to the legacy "aesgcm" draft encoding
+ * when the argument is omitted, so it is passed explicitly at every call site
+ * and asserted on the outgoing request in the tests.
  */
-function wallos_webpush_b64u_decode($text)
-{
-    $text = strtr((string) $text, '-_', '+/');
-    $padded = $text . str_repeat('=', (4 - strlen($text) % 4) % 4);
-    $decoded = base64_decode($padded, true);
-
-    return $decoded === false ? '' : $decoded;
-}
-
-/* -------------------------------------------------------------------------
-   Reconstructing OpenSSL key handles from raw EC material
-
-   VAPID and the Push API exchange raw EC points and scalars, not PEM. These
-   rebuild the PEM the OpenSSL functions expect from that raw material, using
-   the fixed ASN.1 template for the prime256v1 (P-256) curve.
-   ------------------------------------------------------------------------- */
+const WALLOS_WEBPUSH_CONTENT_ENCODING = 'aes128gcm';
 
 /**
- * A P-256 private key PEM (SEC1) from the raw private scalar and public point.
- *
- * @param string $d     32-byte private scalar
- * @param string $point 65-byte uncompressed public point (0x04 || X || Y)
- * @return string PEM
+ * How long the push service should hold an undelivered message. Unchanged from
+ * the self-implemented version: four weeks.
  */
-function wallos_webpush_ec_private_pem($d, $point)
-{
-    // SEQUENCE { version(1), privateKey OCTET STRING(d), [0] namedCurve OID,
-    //            [1] BIT STRING(publicPoint) }. Lengths are fixed for P-256.
-    $der = "\x02\x01\x01"
-        . "\x04\x20" . $d
-        . "\xA0\x0A\x06\x08\x2A\x86\x48\xCE\x3D\x03\x01\x07"
-        . "\xA1\x44\x03\x42\x00" . $point;
-    $der = "\x30" . chr(strlen($der)) . $der;
-
-    return "-----BEGIN EC PRIVATE KEY-----\n"
-        . chunk_split(base64_encode($der), 64, "\n")
-        . "-----END EC PRIVATE KEY-----\n";
-}
-
-/**
- * A P-256 public key PEM (SubjectPublicKeyInfo) from a raw uncompressed point.
- *
- * @param string $point 65-byte uncompressed public point (0x04 || X || Y)
- * @return string PEM
- */
-function wallos_webpush_ec_public_pem($point)
-{
-    // The fixed 26-byte SPKI prefix for an ecPublicKey on prime256v1, then the
-    // 65-byte point inside the trailing BIT STRING.
-    $der = hex2bin('3059301306072a8648ce3d020106082a8648ce3d030107034200') . $point;
-
-    return "-----BEGIN PUBLIC KEY-----\n"
-        . chunk_split(base64_encode($der), 64, "\n")
-        . "-----END PUBLIC KEY-----\n";
-}
-
-/**
- * Left-pads a big-endian integer to a fixed width, the width the raw EC
- * encodings require. OpenSSL may hand back a coordinate with a leading zero
- * byte trimmed.
- *
- * @param string $value
- * @param int    $length
- * @return string
- */
-function wallos_webpush_pad($value, $length)
-{
-    return str_pad($value, $length, "\x00", STR_PAD_LEFT);
-}
+const WALLOS_WEBPUSH_TTL = 2419200;
 
 /* -------------------------------------------------------------------------
    One VAPID keypair for the instance, not one per user
@@ -132,10 +83,10 @@ function wallos_webpush_pad($value, $length)
    notification private is RFC 8291 — the browser generates its own P-256 key
    pair and a sixteen-octet auth secret for each subscription (§3.1, §3.2),
    keeps the private half, and we encrypt to it with a throwaway key per
-   message. wallos_webpush_encrypt() below takes only p256dh and auth and makes
-   its own ephemeral pair; the VAPID key is not one of its arguments. So the
-   secret that protects the content is already per user, in fact per device, and
-   it is not ours to hold.
+   message. The library's Encryption::encrypt() takes only p256dh and auth and
+   makes its own ephemeral pair; the VAPID key is not one of its arguments. So
+   the secret that protects the content is already per user, in fact per device,
+   and it is not ours to hold.
 
    A per-user keypair would therefore protect no content. It would only split
    the right to *send*, and that right cannot be split here: one cron run sends
@@ -175,30 +126,27 @@ function wallos_webpush_pad($value, $length)
  * browser subscribes with and the `k` value in the Authorization header; the
  * private key never leaves the server.
  *
- * @return array{public: string, private: string}|null null when OpenSSL fails
+ * Thin adapter over VAPID::createVapidKeys(), which returns the same two raw
+ * base64url values under different array keys and throws where this returns
+ * null — the shape the callers and the stored settings already expect.
+ *
+ * @return array{public: string, private: string}|null null when generation fails
  */
 function wallos_webpush_generate_vapid_keys()
 {
-    $resource = openssl_pkey_new([
-        'private_key_type' => OPENSSL_KEYTYPE_EC,
-        'curve_name' => 'prime256v1',
-    ]);
-
-    if ($resource === false) {
+    try {
+        $keys = VAPID::createVapidKeys();
+    } catch (\Throwable $error) {
         return null;
     }
 
-    $details = openssl_pkey_get_details($resource);
-    if ($details === false || !isset($details['ec']['d'], $details['ec']['x'], $details['ec']['y'])) {
+    if (!isset($keys['publicKey'], $keys['privateKey'])) {
         return null;
     }
-
-    $d = wallos_webpush_pad($details['ec']['d'], 32);
-    $point = "\x04" . wallos_webpush_pad($details['ec']['x'], 32) . wallos_webpush_pad($details['ec']['y'], 32);
 
     return [
-        'public' => wallos_webpush_b64u_encode($point),
-        'private' => wallos_webpush_b64u_encode($d),
+        'public' => (string) $keys['publicKey'],
+        'private' => (string) $keys['privateKey'],
     ];
 }
 
@@ -323,254 +271,67 @@ function wallos_webpush_public_payload($config)
 }
 
 /* -------------------------------------------------------------------------
-   VAPID JWT (RFC 8292, ES256)
-   ------------------------------------------------------------------------- */
-
-/**
- * Converts an ECDSA signature from OpenSSL's DER encoding to the fixed 64-byte
- * r||s concatenation JWS ES256 requires.
- *
- * @param string $der
- * @return string|null 64 bytes, or null when the DER is malformed
- */
-function wallos_webpush_der_to_raw_signature($der)
-{
-    $offset = 0;
-    $length = strlen($der);
-
-    if ($length < 8 || ord($der[$offset++]) !== 0x30) {
-        return null;
-    }
-
-    // Sequence length (short form is all a P-256 signature ever uses).
-    $seqLen = ord($der[$offset++]);
-    if ($seqLen & 0x80) {
-        $offset += $seqLen & 0x7F;
-    }
-
-    if ($offset >= $length || ord($der[$offset++]) !== 0x02) {
-        return null;
-    }
-    $rLen = ord($der[$offset++]);
-    $r = substr($der, $offset, $rLen);
-    $offset += $rLen;
-
-    if ($offset >= $length || ord($der[$offset++]) !== 0x02) {
-        return null;
-    }
-    $sLen = ord($der[$offset++]);
-    $s = substr($der, $offset, $sLen);
-
-    // Strip the sign-byte DER adds when the high bit is set, then fix each half
-    // to the 32-byte width ES256 wants.
-    $r = wallos_webpush_pad(ltrim($r, "\x00"), 32);
-    $s = wallos_webpush_pad(ltrim($s, "\x00"), 32);
-
-    if (strlen($r) !== 32 || strlen($s) !== 32) {
-        return null;
-    }
-
-    return $r . $s;
-}
-
-/**
- * The audience of a VAPID JWT: the origin (scheme://host[:port]) of the push
- * endpoint, without its path.
- *
- * @param string $endpoint
- * @return string|null
- */
-function wallos_webpush_endpoint_origin($endpoint)
-{
-    $parts = parse_url($endpoint);
-    if ($parts === false || empty($parts['scheme']) || empty($parts['host'])) {
-        return null;
-    }
-
-    $origin = strtolower($parts['scheme']) . '://' . $parts['host'];
-
-    if (isset($parts['port'])) {
-        $scheme = strtolower($parts['scheme']);
-        $isDefault = ($scheme === 'https' && (int) $parts['port'] === 443)
-            || ($scheme === 'http' && (int) $parts['port'] === 80);
-        if (!$isDefault) {
-            $origin .= ':' . (int) $parts['port'];
-        }
-    }
-
-    return $origin;
-}
-
-/**
- * Signs a VAPID JWT for one push endpoint.
- *
- * @param string $endpoint     the push endpoint the token is for
- * @param string $subject      the `sub` contact URI
- * @param string $publicKeyB64 base64url VAPID public key (65-byte point)
- * @param string $privateKeyB64 base64url VAPID private scalar (32 bytes)
- * @param int    $ttl          seconds the token is valid (RFC 8292 caps at 24h)
- * @return string|null the compact JWS, or null on failure
- */
-function wallos_webpush_vapid_jwt($endpoint, $subject, $publicKeyB64, $privateKeyB64, $ttl = 43200)
-{
-    $audience = wallos_webpush_endpoint_origin($endpoint);
-    if ($audience === null) {
-        return null;
-    }
-
-    $point = wallos_webpush_b64u_decode($publicKeyB64);
-    $d = wallos_webpush_b64u_decode($privateKeyB64);
-    if (strlen($point) !== 65 || strlen($d) !== 32) {
-        return null;
-    }
-
-    $header = ['typ' => 'JWT', 'alg' => 'ES256'];
-    $claims = [
-        'aud' => $audience,
-        'exp' => time() + min((int) $ttl, 86400),
-        'sub' => $subject,
-    ];
-
-    $signingInput = wallos_webpush_b64u_encode(json_encode($header))
-        . '.' . wallos_webpush_b64u_encode(json_encode($claims));
-
-    $privateKey = openssl_pkey_get_private(wallos_webpush_ec_private_pem($d, $point));
-    if ($privateKey === false) {
-        return null;
-    }
-
-    $der = '';
-    if (openssl_sign($signingInput, $der, $privateKey, OPENSSL_ALGO_SHA256) === false) {
-        return null;
-    }
-
-    $raw = wallos_webpush_der_to_raw_signature($der);
-    if ($raw === null) {
-        return null;
-    }
-
-    return $signingInput . '.' . wallos_webpush_b64u_encode($raw);
-}
-
-/* -------------------------------------------------------------------------
-   RFC 8291 payload encryption (aes128gcm content encoding, RFC 8188)
-   ------------------------------------------------------------------------- */
-
-/**
- * Encrypts a push payload for one subscription, producing the aes128gcm body.
- *
- * The server keypair and the record salt are parameters so a known-answer test
- * can pin them to the RFC 8291 vector; in production both are freshly random,
- * which is what makes each message's encryption independent.
- *
- * @param string      $plaintext   the message to deliver
- * @param string      $uaPublic    65-byte client public key (subscription p256dh)
- * @param string      $authSecret  16-byte client auth secret (subscription auth)
- * @param string|null $asPrivate   32-byte server private scalar, or null to generate
- * @param string|null $asPublic    65-byte server public point (required with $asPrivate)
- * @param string|null $salt        16-byte record salt, or null to generate
- * @return string|null the encrypted body, or null on failure
- */
-function wallos_webpush_encrypt($plaintext, $uaPublic, $authSecret, $asPrivate = null, $asPublic = null, $salt = null)
-{
-    if (strlen($uaPublic) !== 65 || strlen($authSecret) !== 16) {
-        return null;
-    }
-
-    if ($asPrivate === null || $asPublic === null) {
-        $generated = wallos_webpush_generate_vapid_keys();
-        if ($generated === null) {
-            return null;
-        }
-        $asPrivate = wallos_webpush_b64u_decode($generated['private']);
-        $asPublic = wallos_webpush_b64u_decode($generated['public']);
-    }
-
-    if (strlen($asPrivate) !== 32 || strlen($asPublic) !== 65) {
-        return null;
-    }
-
-    if ($salt === null) {
-        $salt = random_bytes(16);
-    }
-
-    $serverKey = openssl_pkey_get_private(wallos_webpush_ec_private_pem($asPrivate, $asPublic));
-    $clientKey = openssl_pkey_get_public(wallos_webpush_ec_public_pem($uaPublic));
-    if ($serverKey === false || $clientKey === false) {
-        return null;
-    }
-
-    $sharedSecret = openssl_pkey_derive($clientKey, $serverKey, 32);
-    if ($sharedSecret === false) {
-        return null;
-    }
-
-    // RFC 8291 §3.4: the ECDH secret and the auth secret produce the input
-    // keying material, bound to both parties' public keys.
-    $keyInfo = "WebPush: info\x00" . $uaPublic . $asPublic;
-    $ikm = hash_hkdf('sha256', $sharedSecret, 32, $keyInfo, $authSecret);
-
-    // RFC 8188 §2.2: the content-encryption key and nonce, keyed by the record
-    // salt that travels in the header.
-    $cek = hash_hkdf('sha256', $ikm, 16, "Content-Encoding: aes128gcm\x00", $salt);
-    $nonce = hash_hkdf('sha256', $ikm, 12, "Content-Encoding: nonce\x00", $salt);
-
-    // A single record covering the whole payload: 0x02 is the last-record
-    // padding delimiter (RFC 8188 §2).
-    $padded = $plaintext . "\x02";
-
-    $tag = '';
-    $ciphertext = openssl_encrypt($padded, 'aes-128-gcm', $cek, OPENSSL_RAW_DATA, $nonce, $tag, '', 16);
-    if ($ciphertext === false) {
-        return null;
-    }
-
-    // RFC 8188 §2.1 header: salt(16) | record_size(4, big-endian) | idlen(1) |
-    // keyid — the keyid being the server's ephemeral public key.
-    $header = $salt . pack('N', 4096) . chr(strlen($asPublic)) . $asPublic;
-
-    return $header . $ciphertext . $tag;
-}
-
-/* -------------------------------------------------------------------------
    Sending
 
-   The one network touch is factored out behind a function_exists guard so a
-   test can stand in for the push service and drive the 404/410 stale-cleanup
-   without a socket — the arrangement wallos_oidc_discovery_http_get() uses.
+   Two seams the library does not provide, and both are load-bearing:
+
+   * wallos_webpush_http_client() is the one network touch, behind a
+     function_exists guard so a test can stand in for the push service and drive
+     404/410 without a socket — the arrangement wallos_oidc_discovery_http_get()
+     uses. The library takes a PSR-18 client, so the seam is an object here
+     rather than a function call.
+
+   * the client is built per send, not once, because it carries the CURLOPT_RESOLVE
+     entry pinning this endpoint's host to the IP the SSRF check already
+     approved. Resolving once and connecting again is a window; the library has
+     no opinion about it and would simply hand the URL to curl.
    ------------------------------------------------------------------------- */
 
-if (!function_exists('wallos_webpush_http_post')) {
+/**
+ * A PSR-3 logger for the library, which otherwise reaches for trigger_error().
+ *
+ * Its warnings are real diagnostics — a missing extension, an OpenSSL without
+ * P-256 — and belong in the error log. Its notices are advice about optional
+ * speedups (bcmath/gmp) that would otherwise print on every cron run.
+ */
+class WallosWebPushLogger extends \Psr\Log\AbstractLogger
+{
     /**
-     * POSTs an encrypted push to its endpoint.
-     *
-     * @param string   $url     the push endpoint
-     * @param string   $body    the aes128gcm-encoded payload
-     * @param string[] $headers request headers
-     * @param string   $resolve a curl RESOLVE entry pinning the host to the IP
-     *                          the SSRF check already approved
-     * @return array{response: string|false, status: int, error: string}
+     * @param mixed             $level
+     * @param string|\Stringable $message
+     * @param array             $context
+     * @return void
      */
-    function wallos_webpush_http_post($url, $body, array $headers, $resolve)
+    public function log($level, $message, array $context = []): void
     {
-        $ch = curl_init();
-        curl_setopt($ch, CURLOPT_URL, $url);
-        curl_setopt($ch, CURLOPT_POST, 1);
-        curl_setopt($ch, CURLOPT_POSTFIELDS, $body);
-        curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
-        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-        curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 5);
-        curl_setopt($ch, CURLOPT_TIMEOUT, 15);
-        if ($resolve !== '') {
-            curl_setopt($ch, CURLOPT_RESOLVE, [$resolve]);
+        if (in_array((string) $level, ['emergency', 'alert', 'critical', 'error', 'warning'], true)) {
+            error_log('[Wallos Web Push] ' . $message);
         }
+    }
+}
 
-        $response = curl_exec($ch);
-        $status = (int) curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
-        $error = curl_error($ch);
-        curl_close($ch);
-
-        return ['response' => $response, 'status' => $status, 'error' => $error];
+if (!function_exists('wallos_webpush_http_client')) {
+    /**
+     * The PSR-18 client the library POSTs through, pinned to one approved host.
+     *
+     * @param array{host: string, ip: string, port: int|string} $safe the
+     *        is_url_safe_for_ssrf() verdict for this endpoint
+     * @return \Psr\Http\Client\ClientInterface
+     */
+    function wallos_webpush_http_client($safe)
+    {
+        return new \GuzzleHttp\Client([
+            'connect_timeout' => 5,
+            'timeout' => 15,
+            // Guzzle's PSR-18 sendRequest() sets both of these itself; repeated
+            // here so the intent survives a change of entry point. A redirect
+            // would leave the address the SSRF check approved.
+            'allow_redirects' => false,
+            'http_errors' => false,
+            'curl' => [
+                CURLOPT_RESOLVE => [$safe['host'] . ':' . $safe['port'] . ':' . $safe['ip']],
+            ],
+        ]);
     }
 }
 
@@ -579,7 +340,9 @@ if (!function_exists('wallos_webpush_http_post')) {
  *
  * The client-supplied endpoint is an outbound request to a target Wallos does
  * not control, so it goes through the SSRF allowlist exactly as the logo and
- * webhook fetches do — a private or reserved address is refused, not fetched.
+ * webhook fetches do — a private or reserved address is refused, not fetched,
+ * and the library is never handed the endpoint at all. The library sends
+ * wherever it is told.
  *
  * @param WallosDatabase $db
  * @param array          $subscription endpoint, p256dh, auth (base64url)
@@ -608,54 +371,65 @@ function wallos_webpush_deliver($db, $subscription, $payload, $userId)
         return $fail('the push endpoint failed the SSRF check');
     }
 
-    $encrypted = wallos_webpush_encrypt(
-        $payload,
-        wallos_webpush_b64u_decode((string) ($subscription['p256dh'] ?? '')),
-        wallos_webpush_b64u_decode((string) ($subscription['auth'] ?? ''))
-    );
-    if ($encrypted === null) {
-        return $fail('the push payload could not be encrypted');
+    try {
+        $webPush = new WebPush(
+            [
+                'VAPID' => [
+                    'subject' => (string) $config['values']['subject'],
+                    'publicKey' => (string) $config['values']['public_key'],
+                    'privateKey' => (string) $config['values']['private_key'],
+                ],
+            ],
+            ['TTL' => WALLOS_WEBPUSH_TTL],
+            wallos_webpush_http_client($safe),
+            null,
+            null,
+            null,
+            new WallosWebPushLogger()
+        );
+
+        $report = $webPush->sendOneNotification(
+            new Subscription(
+                $endpoint,
+                (string) ($subscription['p256dh'] ?? ''),
+                (string) ($subscription['auth'] ?? ''),
+                WALLOS_WEBPUSH_CONTENT_ENCODING
+            ),
+            (string) $payload
+        );
+    } catch (\Throwable $error) {
+        // A malformed keypair, a p256dh that is not a point, an oversized
+        // payload: the library signals all of these by throwing, where the
+        // self-implemented version returned null. The caller's contract is a
+        // result array either way.
+        return $fail('the push could not be prepared: ' . $error->getMessage());
     }
 
-    $jwt = wallos_webpush_vapid_jwt(
-        $endpoint,
-        (string) $config['values']['subject'],
-        (string) $config['values']['public_key'],
-        (string) $config['values']['private_key']
-    );
-    if ($jwt === null) {
-        return $fail('the VAPID token could not be signed');
-    }
-
-    $headers = [
-        'Content-Encoding: aes128gcm',
-        'Content-Type: application/octet-stream',
-        'TTL: 2419200',
-        'Authorization: vapid t=' . $jwt . ', k=' . (string) $config['values']['public_key'],
-    ];
-
-    $result = wallos_webpush_http_post(
-        $endpoint,
-        $encrypted,
-        $headers,
-        $safe['host'] . ':' . $safe['port'] . ':' . $safe['ip']
-    );
+    $response = $report->getResponse();
+    $status = $response !== null ? (int) $response->getStatusCode() : 0;
 
     // 404 Not Found / 410 Gone: the browser dropped this subscription, and the
-    // standard response is to delete it so it is never tried again.
-    if ($result['status'] === 404 || $result['status'] === 410) {
-        return $fail('the subscription is gone', $result['status'], true);
+    // standard response is to delete it so it is never tried again. The library
+    // classifies it; the deletion is the caller's.
+    if ($report->isSubscriptionExpired()) {
+        return $fail('the subscription is gone', $status, true);
     }
 
-    if ($result['response'] === false) {
-        return $fail($result['error'] !== '' ? $result['error'] : 'no response from the push service', $result['status']);
+    // isSuccess() is "not 4xx or 5xx", which would count a 3xx as delivered.
+    // Redirects are off, so a 3xx here is a push service doing something we did
+    // not follow — the self-implemented version called that a failure too.
+    if ($report->isSuccess() && $status >= 200 && $status < 300) {
+        return ['sent' => true, 'expired' => false, 'status' => $status, 'error' => ''];
     }
 
-    if ($result['status'] >= 200 && $result['status'] < 300) {
-        return ['sent' => true, 'expired' => false, 'status' => $result['status'], 'error' => ''];
+    $reason = $report->getReason();
+    if ($reason === '' || $reason === 'OK') {
+        $reason = $status > 0
+            ? 'the push service answered HTTP ' . $status
+            : 'no response from the push service';
     }
 
-    return $fail('the push service answered HTTP ' . $result['status'], $result['status']);
+    return $fail($reason, $status);
 }
 
 /* -------------------------------------------------------------------------
@@ -666,6 +440,10 @@ function wallos_webpush_deliver($db, $subscription, $payload, $userId)
    device re-subscribing replaces its own row rather than accumulating stale
    copies. Ownership is always the server-side session user, never a value from
    the client.
+
+   None of this is in the library, which has no concept of a user: its
+   Subscription is a data class holding an endpoint and two keys, created fresh
+   for each send and owned by nobody.
    ------------------------------------------------------------------------- */
 
 /**
