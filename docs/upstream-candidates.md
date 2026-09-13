@@ -78,6 +78,16 @@ because the rule says approval is a fact rather than an inference.
 | 2026-09-12 | [#1215](https://github.com/ellite/Wallos/pull/1215) | `upstream-fix/oidc-account-language` |
 | 2026-09-12 | [#1216](https://github.com/ellite/Wallos/pull/1216) | `upstream-fix/localized-default-names` |
 | 2026-09-12 | [#1217](https://github.com/ellite/Wallos/pull/1217) | `upstream-feat/instance-smtp` |
+| 2026-09-13 | [#1219](https://github.com/ellite/Wallos/pull/1219) | `upstream-feat/frankfurter-provider` |
+
+**The rule that changed this one before it went.** The branch was first built
+against Frankfurter **v1**, because that costs upstream about 25 fewer lines —
+this fork runs **v2**. Thorsten's rule: *upstream gets the code we run here, not
+a second implementation nobody operates.* Rebuilt on v2 by porting this tree's
+own functions, and then the port found a defect in **our** comment: a
+well-formed code the catalogue does not carry was documented as "simply absent
+from the answer", which holds for BTC and for nothing else. Fixed here first
+(`f1d8840`), then ported, which is the order the rule prescribes.
 
 ### Upstream's CI cannot build a pull request from a fork
 
