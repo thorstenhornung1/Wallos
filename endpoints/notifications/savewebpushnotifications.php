@@ -4,8 +4,12 @@ require_once '../../includes/connect_endpoint.php';
 require_once '../../includes/validate_endpoint.php';
 require_once '../../includes/webpush.php';
 
-// The owner is always the session user, never a value from the request body, so
-// one account can never store or remove another's subscription.
+// The owner is always the session user, never a value from the request body.
+// Removing another account's subscription is impossible for the same reason —
+// the delete is scoped by user_id. Storing one is refused a layer down, in
+// wallos_webpush_store_subscription(), which lets an endpoint change hands only
+// when the request can show that subscription's own p256dh: the shared family
+// browser can, somebody who merely learned the endpoint string cannot.
 $userId = (int) $userId;
 
 $postData = file_get_contents("php://input");
@@ -47,16 +51,10 @@ if ($endpoint === '' || $p256dh === '' || $auth === '') {
     exit;
 }
 
-// A push endpoint is always an absolute https (or http) URL. Reserved/private
-// addresses are not refused here — the outbound send routes every endpoint
-// through the SSRF allowlist — but a value that is not even a URL is rejected.
-$parsedUrl = parse_url($endpoint);
-if (
-    !is_array($parsedUrl) ||
-    !isset($parsedUrl['scheme']) ||
-    !in_array(strtolower($parsedUrl['scheme']), ['http', 'https'], true) ||
-    !filter_var($endpoint, FILTER_VALIDATE_URL)
-) {
+// The URL, the key and the auth secret have a shape RFC 8291 fixes, and a row
+// that does not have it is a subscription no notification can ever reach. The
+// check lives in webpush.php so a test can hold it.
+if (!wallos_webpush_subscription_is_wellformed($endpoint, $p256dh, $auth)) {
     http_response_code(400);
     echo json_encode(["success" => false, "message" => translate("error", $i18n)]);
     exit;
@@ -65,6 +63,10 @@ if (
 if (wallos_webpush_store_subscription($db, $userId, $endpoint, $p256dh, $auth)) {
     echo json_encode(["success" => true, "message" => translate('notifications_settings_saved', $i18n)]);
 } else {
+    // Either the write failed or the endpoint belongs to another account and
+    // this request could not show its key. Both are reported the same way: the
+    // device is not subscribed, and saying otherwise would leave somebody
+    // waiting for notifications that are going elsewhere.
     http_response_code(500);
     echo json_encode(["success" => false, "message" => translate('error_saving_notifications', $i18n)]);
 }

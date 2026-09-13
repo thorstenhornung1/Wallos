@@ -43,6 +43,24 @@ require_once __DIR__ . '/ssrf_helper.php';
  */
 const WALLOS_WEBPUSH_PADDED_RECORD = 2820;
 
+/**
+ * The longest plaintext that fits in the record the header promises.
+ *
+ * RFC 8291 §4 does the arithmetic and states the result: a push service need
+ * not accept more than 4096 octets of body, and "absent header (86 octets),
+ * padding (minimum 1 octet), and expansion for AEAD_AES_128_GCM (16 octets),
+ * this equates to, at most, 3993 octets of plaintext."
+ *
+ * The number is a real boundary, not a style choice. The header declares a
+ * record size of 4096; RFC 8188 §2 has the last record at most that size. A
+ * longer payload produces a record that overruns the size its own header
+ * announced, and a receiver reading at the declared granularity finds a
+ * plaintext octet where the padding delimiter should be — "values other than
+ * 0x02 MUST cause the message to be discarded". Such a body is not a push that
+ * reveals its length; it is a push that silently arrives nowhere.
+ */
+const WALLOS_WEBPUSH_MAX_PLAINTEXT = 3993;
+
 /* -------------------------------------------------------------------------
    base64url
    ------------------------------------------------------------------------- */
@@ -489,6 +507,15 @@ function wallos_webpush_encrypt($plaintext, $uaPublic, $authSecret, $asPrivate =
         return null;
     }
 
+    // Past the ceiling the record no longer fits the size the header declares,
+    // and the receiver discards it. Refusing here reaches the caller as "the
+    // push payload could not be encrypted" and lands in the notification log;
+    // the alternative is a 201 from the push service for something nobody will
+    // ever see.
+    if (strlen($plaintext) > WALLOS_WEBPUSH_MAX_PLAINTEXT) {
+        return null;
+    }
+
     if ($asPrivate === null || $asPublic === null) {
         $generated = wallos_webpush_generate_vapid_keys();
         if ($generated === null) {
@@ -540,9 +567,9 @@ function wallos_webpush_encrypt($plaintext, $uaPublic, $authSecret, $asPrivate =
     // notification, 184 for a typical one. RFC 8188 §2 exists for exactly this
     // and the padding costs nothing a nightly job would notice.
     //
-    // A payload longer than the target keeps the delimiter alone rather than
-    // being refused: it still encrypts, it is still correct, and it is only as
-    // revealing as every push was before. Nothing here produces one.
+    // A payload between the target and the ceiling keeps the delimiter alone
+    // rather than being refused: it still encrypts, it is still correct, and it
+    // is only as revealing as every push was before. Nothing here produces one.
     $record = $plaintext . "\x02";
 
     if ($padTo > 0 && strlen($record) < $padTo) {
@@ -701,6 +728,55 @@ function wallos_webpush_deliver($db, $subscription, $payload, $userId)
    ------------------------------------------------------------------------- */
 
 /**
+ * Whether a PushSubscription has the shape RFC 8291 fixes for it.
+ *
+ * The two keys are not free-form: §3.1 has the user agent generate a P-256 key
+ * pair, whose public half travels in the uncompressed point form §4 spells out
+ * — "a 65-octet sequence that starts with a 0x04 octet" — and §3.2 has the auth
+ * secret at exactly sixteen octets. Anything else cannot be encrypted to, so a
+ * row holding it is a subscription that will never receive a notification.
+ *
+ * Checked at the door rather than only inside the encryption, for two reasons.
+ * A malformed subscription discovered at the next notification run is a silent
+ * per-row failure at nine in the morning; discovered here it is a 400 the
+ * browser can act on while somebody is still looking at the settings page. And
+ * these three values were stored as whatever arrived — one authenticated
+ * request could put two megabytes in the table and come back with a fresh
+ * endpoint for the next one. An endpoint is a URL a push service issued; two
+ * kilobytes is generous for one.
+ *
+ * @param string $endpoint
+ * @param string $p256dh base64url client public key
+ * @param string $auth   base64url client auth secret
+ * @return bool
+ */
+function wallos_webpush_subscription_is_wellformed($endpoint, $p256dh, $auth)
+{
+    if ($endpoint === '' || strlen($endpoint) > 2048) {
+        return false;
+    }
+
+    // A push endpoint is an absolute http(s) URL. Reserved and private
+    // addresses are not judged here — the outbound send routes every endpoint
+    // through the SSRF allowlist, which is where that decision belongs and
+    // where it can still be made when a name resolves differently later.
+    $parsed = parse_url($endpoint);
+    if (
+        !is_array($parsed) ||
+        !isset($parsed['scheme']) ||
+        !in_array(strtolower($parsed['scheme']), ['http', 'https'], true) ||
+        !filter_var($endpoint, FILTER_VALIDATE_URL)
+    ) {
+        return false;
+    }
+
+    $key = wallos_webpush_b64u_decode($p256dh);
+    $secret = wallos_webpush_b64u_decode($auth);
+
+    return strlen($key) === 65 && $key[0] === "\x04" && strlen($secret) === 16;
+}
+
+/**
  * Stores (or replaces, on the same endpoint) one browser subscription.
  *
  * @param WallosDatabase $db
@@ -714,13 +790,35 @@ function wallos_webpush_store_subscription($db, $userId, $endpoint, $p256dh, $au
 {
     // ON CONFLICT with excluded.* so no named parameter is bound twice — the
     // upsert idiom that runs on both backends (see the OIDC discovery cache).
+    //
+    // The WHERE is what stops one account taking another's device. An endpoint
+    // is unique, so the row can only be claimed by whoever already owns it, or
+    // by somebody who can show the same p256dh — and that is the honest
+    // discriminator between the two ways this collision happens:
+    //
+    //   On a shared family browser there is one registration and therefore one
+    //   subscription. The second person to press "enable" gets the *existing*
+    //   PushSubscription back from getSubscription(), keys and all, so their
+    //   request carries the same p256dh and the device moves to them. That is
+    //   the only answer a browser can honestly give, and it stays allowed.
+    //
+    //   Somebody who merely learned an endpoint string cannot produce its
+    //   p256dh: the browser generated that key pair for that subscription and
+    //   never handed out the private half. Their write now changes nothing.
+    //
+    // Before this, either one moved the row, so any account could silently take
+    // over another's device by posting its endpoint — and the loser saw no sign
+    // of it, because the settings page reads the browser's subscription rather
+    // than the stored row.
     $stmt = $db->prepare('INSERT INTO push_subscriptions (user_id, endpoint, p256dh, auth, created_at)
                           VALUES (:userId, :endpoint, :p256dh, :auth, :createdAt)
                           ON CONFLICT(endpoint) DO UPDATE SET
                               user_id = excluded.user_id,
                               p256dh = excluded.p256dh,
                               auth = excluded.auth,
-                              created_at = excluded.created_at');
+                              created_at = excluded.created_at
+                          WHERE push_subscriptions.user_id = excluded.user_id
+                             OR push_subscriptions.p256dh = excluded.p256dh');
     if ($stmt === false) {
         return false;
     }
@@ -731,7 +829,15 @@ function wallos_webpush_store_subscription($db, $userId, $endpoint, $p256dh, $au
     $stmt->bindValue(':auth', (string) $auth);
     $stmt->bindValue(':createdAt', time());
 
-    return $stmt->execute() !== false;
+    if ($stmt->execute() === false) {
+        return false;
+    }
+
+    // Nothing written means the WHERE above refused it: the endpoint belongs to
+    // another account and the request could not show its key. Reported as a
+    // failure rather than passing for a save, because the caller would
+    // otherwise tell somebody their device is subscribed when it is not.
+    return (int) $db->changes() > 0;
 }
 
 /**

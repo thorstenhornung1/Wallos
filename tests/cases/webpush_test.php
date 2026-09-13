@@ -107,20 +107,83 @@ wallos_test('every push is the same size on the wire, whatever it says', functio
     assert_same(2922, $lengths['short'], 'the wire body is the agreed size');
 });
 
-wallos_test('a payload too long to pad is still sent, not refused', function () {
-    // Nothing here produces one, but silently failing to notify would be worse
-    // than a body whose length says something — which is all every push said
-    // before this.
-    $oversized = str_repeat('x', WALLOS_WEBPUSH_PADDED_RECORD + 100);
+wallos_test('a payload between the padding and the ceiling is sent as it is', function () {
+    // Longer than the padding target, so it says its own length — that is all
+    // every push said before the padding, and it beats not notifying at all.
+    $long = str_repeat('x', WALLOS_WEBPUSH_PADDED_RECORD + 100);
+    assert_true(strlen($long) <= WALLOS_WEBPUSH_MAX_PLAINTEXT, 'the case stays below the ceiling');
 
     $body = wallos_webpush_encrypt(
-        $oversized,
+        $long,
         wallos_webpush_b64u_decode(WALLOS_WEBPUSH_RFC_UA_PUBLIC),
         wallos_webpush_b64u_decode(WALLOS_WEBPUSH_RFC_AUTH)
     );
 
     assert_true($body !== null, 'it still encrypts');
-    assert_true(strlen($body) > 2922, 'and is simply longer than the padded size');
+    assert_same(86 + strlen($long) + 1 + 16, strlen($body), 'header, plaintext, delimiter, tag — no padding left to add');
+});
+
+wallos_test('a payload past the RFC ceiling is refused, not silently unreadable', function () {
+    // The header announces a record size of 4096. A record larger than that
+    // overruns what it declared, and RFC 8291 §4 gives the boundary in plain
+    // words: at most 3993 octets of plaintext. Past it the receiver reads a
+    // plaintext octet where the 0x02 delimiter should be and MUST discard the
+    // message — so "sending" it notifies nobody while the push service answers
+    // 201 and the log says the notification went out.
+    $ok = str_repeat('x', WALLOS_WEBPUSH_MAX_PLAINTEXT);
+    $tooLong = str_repeat('x', WALLOS_WEBPUSH_MAX_PLAINTEXT + 1);
+
+    $atCeiling = wallos_webpush_encrypt(
+        $ok,
+        wallos_webpush_b64u_decode(WALLOS_WEBPUSH_RFC_UA_PUBLIC),
+        wallos_webpush_b64u_decode(WALLOS_WEBPUSH_RFC_AUTH)
+    );
+
+    assert_true($atCeiling !== null, 'the longest permitted payload still encrypts');
+    assert_true(strlen($atCeiling) - 86 <= 4096,
+        'and its record fits the size the header declares: ' . (strlen($atCeiling) - 86));
+
+    assert_same(null, wallos_webpush_encrypt(
+        $tooLong,
+        wallos_webpush_b64u_decode(WALLOS_WEBPUSH_RFC_UA_PUBLIC),
+        wallos_webpush_b64u_decode(WALLOS_WEBPUSH_RFC_AUTH)
+    ), 'one octet past the ceiling is refused');
+});
+
+wallos_test('a subscription that could never be encrypted to is refused at the door', function () {
+    $endpoint = 'https://fcm.googleapis.com/fcm/send/abc123';
+    $key = wallos_webpush_test_p256dh();
+    $auth = wallos_webpush_test_auth();
+
+    assert_true(wallos_webpush_subscription_is_wellformed($endpoint, $key, $auth),
+        'what a browser actually produces is accepted');
+
+    // The p256dh is an uncompressed P-256 point: 65 octets, leading 0x04.
+    $compressed = wallos_webpush_b64u_encode("\x02" . substr(wallos_webpush_b64u_decode($key), 1, 32));
+    assert_true(!wallos_webpush_subscription_is_wellformed($endpoint, $compressed, $auth),
+        'a compressed point is not the form RFC 8291 §4 fixes');
+    assert_true(!wallos_webpush_subscription_is_wellformed($endpoint, wallos_webpush_b64u_encode("\x05" . str_repeat('a', 64)), $auth),
+        '65 octets with the wrong leading byte is still not a point');
+    assert_true(!wallos_webpush_subscription_is_wellformed($endpoint, 'not base64url at all !!!', $auth),
+        'a key that does not even decode is refused');
+
+    // The auth secret is exactly sixteen octets.
+    assert_true(!wallos_webpush_subscription_is_wellformed($endpoint, $key, wallos_webpush_b64u_encode(str_repeat('a', 15))),
+        'fifteen octets of auth is refused');
+    assert_true(!wallos_webpush_subscription_is_wellformed($endpoint, $key, wallos_webpush_b64u_encode(str_repeat('a', 17))),
+        'seventeen too');
+
+    // And the endpoint is a bounded http(s) URL, not whatever arrived.
+    assert_true(!wallos_webpush_subscription_is_wellformed('https://push.example/' . str_repeat('a', 2048), $key, $auth),
+        'two kilobytes is the limit for a URL a push service issued');
+    assert_true(!wallos_webpush_subscription_is_wellformed('javascript:alert(1)', $key, $auth), 'a non-http scheme is refused');
+    assert_true(!wallos_webpush_subscription_is_wellformed('/relative/path', $key, $auth), 'so is a relative path');
+    assert_true(!wallos_webpush_subscription_is_wellformed('', $key, $auth), 'and an empty endpoint');
+
+    // The check must not be encryptable-in-principle only: the material it
+    // accepts has to survive the actual encryption.
+    assert_true(wallos_webpush_encrypt('x', wallos_webpush_b64u_decode($key), wallos_webpush_b64u_decode($auth)) !== null,
+        'what the check accepts, the encryption accepts');
 });
 
 wallos_test('encryption refuses malformed client key material', function () {
@@ -272,6 +335,44 @@ wallos_test('a subscription is stored and read back for its owner only', functio
     $db->close();
 });
 
+wallos_test('an endpoint cannot be taken over by an account that only knows its address', function () {
+    // The endpoint is unique across the table, so a second account storing the
+    // same string used to move the row: alice's phone stopped being notified
+    // and every notification for that device went to the other account. The
+    // endpoint is not a secret — it travels to the push service on every send,
+    // it is in the browser's own storage, and it is in a database backup.
+    //
+    // What is not shared is the p256dh: the browser generated that key pair for
+    // this subscription and hands it out through getSubscription(). So the row
+    // changes hands only for a request that can show it — which the shared
+    // family browser can, and somebody who merely learned the address cannot.
+    $db = wallos_test_open_database();
+    wallos_test_create_user($db, 1, 'alice');
+    wallos_test_create_user($db, 2, 'mallory');
+
+    $endpoint = 'https://push.example/alice-phone';
+    $aliceKey = wallos_webpush_test_p256dh();
+    $auth = wallos_webpush_test_auth();
+
+    assert_true(wallos_webpush_store_subscription($db, 1, $endpoint, $aliceKey, $auth), 'alice subscribes her phone');
+
+    // A different key means the request never held this subscription.
+    $otherKey = wallos_webpush_b64u_encode("\x04" . str_repeat("\x07", 64));
+    assert_true(!wallos_webpush_store_subscription($db, 2, $endpoint, $otherKey, $auth),
+        'the takeover is refused, and refused out loud rather than reported as a save');
+    assert_same(1, count(wallos_webpush_user_subscriptions($db, 1)), 'alice still has her phone');
+    assert_same(0, count(wallos_webpush_user_subscriptions($db, 2)), 'mallory got nothing');
+
+    // The shared browser: the same device, the same getSubscription() object,
+    // a second household account signing in. That one is a real move.
+    assert_true(wallos_webpush_store_subscription($db, 2, $endpoint, $aliceKey, $auth),
+        'the same subscription presented with its own key does move');
+    assert_same(0, count(wallos_webpush_user_subscriptions($db, 1)), 'the device left alice');
+    assert_same(1, count(wallos_webpush_user_subscriptions($db, 2)), 'and arrived at the account now using it');
+
+    $db->close();
+});
+
 wallos_test('re-subscribing the same endpoint replaces the row rather than duplicating it', function () {
     $db = wallos_test_open_database();
     wallos_test_create_user($db, 1, 'alice');
@@ -392,6 +493,61 @@ wallos_test('a push to a private endpoint is refused by the SSRF check before an
 
     $GLOBALS['wallos_webpush_test_http'] = null;
     $db->close();
+});
+
+wallos_test('the send goes to the address the SSRF check approved, not to a second lookup', function () {
+    // Checking a name and then connecting by name is two lookups, and a name
+    // the sender controls can answer differently the second time: public for
+    // the check, 169.254.169.254 for the connection. Every endpoint here comes
+    // from a client, so the gap is reachable — the fix is to connect to the
+    // address that was checked, which is what the pin handed to curl does.
+    //
+    // A literal address is used so the case decides nothing on DNS: it makes
+    // the wiring the subject, which is the part this tree owns.
+    $db = wallos_test_open_database();
+    wallos_test_create_user($db, 1, 'alice');
+    $endpoint = 'https://93.184.216.34/push/device';
+    wallos_webpush_store_subscription($db, 1, $endpoint, wallos_webpush_test_p256dh(), wallos_webpush_test_auth());
+    $subscription = wallos_webpush_user_subscriptions($db, 1)[0];
+
+    $seen = null;
+    $GLOBALS['wallos_webpush_test_http'] = function ($url, $body, $headers, $resolve) use (&$seen) {
+        $seen = $resolve;
+        return ['response' => '', 'status' => 201, 'error' => ''];
+    };
+
+    $result = wallos_webpush_deliver($db, $subscription, json_encode(['title' => 't']), 1);
+    assert_true($result['sent'], 'a public endpoint is delivered to');
+
+    $approved = is_url_safe_for_ssrf($endpoint, $db, 1);
+    assert_true(is_array($approved), 'the check approved it');
+    assert_same($approved['host'] . ':' . $approved['port'] . ':' . $approved['ip'], $seen,
+        'the transport is pinned to exactly the host, port and address the check returned');
+
+    $GLOBALS['wallos_webpush_test_http'] = null;
+    $db->close();
+});
+
+wallos_test('the transport applies the pin it is handed', function () {
+    // The case above holds that deliver() computes the pin and passes it on.
+    // Whether curl is actually told to use it cannot be reached from here: the
+    // transport is the one function this suite replaces, so that the delivery
+    // and 410-cleanup cases can run without a socket. The stub would answer for
+    // a wallos_webpush_http_post() that had dropped the option entirely.
+    //
+    // So this half is read off the source instead of run. It is a weaker test
+    // and it is stated as one — it catches the line being deleted, which is the
+    // realistic way this protection would be lost, and not a subtler mistake.
+    $source = file_get_contents(WALLOS_ROOT . '/includes/webpush.php');
+    $transport = substr($source, (int) strpos($source, 'function wallos_webpush_http_post'));
+    $transport = substr($transport, 0, (int) strpos($transport, "\n    }\n}"));
+
+    assert_true(strpos($transport, 'CURLOPT_RESOLVE') !== false,
+        'the transport sets CURLOPT_RESOLVE');
+    assert_true(preg_match('/curl_setopt\(\$ch,\s*CURLOPT_RESOLVE,\s*\[\$resolve\]\)/', $transport) === 1,
+        'and sets it to the pin it was given, not to something it worked out itself');
+    assert_true(strpos($transport, 'CURLOPT_FOLLOWLOCATION') === false,
+        'and does not follow redirects, which would leave the pinned address behind');
 });
 
 /* -------------------------------------------------------------------------
