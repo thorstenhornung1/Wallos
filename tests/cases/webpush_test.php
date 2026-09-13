@@ -528,6 +528,315 @@ wallos_test('the send goes to the address the SSRF check approved, not to a seco
     $db->close();
 });
 
+wallos_test('a clicked notification cannot send the browser off-origin', function () {
+    // Defence in depth, and stated as that: nothing reachable today puts a
+    // foreign URL in a push payload. The cron hard-codes 'url' => './', and the
+    // payload is encrypted per RFC 8291 so the push service carrying it cannot
+    // substitute one either. This is about the edit that makes it reachable — a
+    // deep link to one subscription is the obvious next use of this field, and
+    // that is the change after which an unchecked url navigates a signed-in
+    // Wallos window to a page that can look exactly like Wallos.
+    //
+    // Read off the source rather than run: the suite is PHP and the check is a
+    // service worker function, which needs a browser or node. Its behaviour was
+    // verified separately against thirteen cases, including a sub-path install.
+    // This case catches the line being removed, which is the realistic way the
+    // protection would be lost.
+    $source = file_get_contents(WALLOS_ROOT . '/service-worker.js');
+
+    assert_true(strpos($source, 'function wallosSafeNotificationUrl') !== false,
+        'the worker has a url check');
+    assert_true(preg_match('/const target = wallosSafeNotificationUrl\(/', $source) === 1,
+        'and notificationclick routes the payload url through it rather than using it raw');
+    assert_true(strpos($source, 'resolved.origin === self.location.origin') !== false,
+        'the check compares origins');
+
+    // Resolved against the worker location, not the bare origin: an instance
+    // served under /wallos/ has its worker at /wallos/service-worker.js, and
+    // resolving './' against the origin would send the click to / — a page that
+    // is not Wallos. Measured: with the origin as base, './' yields
+    // https://host/ instead of https://host/wallos/.
+    assert_true(strpos($source, 'new URL(value, self.location.href)') !== false,
+        'and resolves relative urls against the worker, so a sub-path install keeps its own root');
+});
+
+/* -------------------------------------------------------------------------
+   The instance keypair is claimed once, not written over
+   ------------------------------------------------------------------------- */
+
+wallos_test('a second generator adopts the stored keypair instead of replacing it', function () {
+    // The pair is generated on first use, and first use is whichever request
+    // arrives first — an admin opening settings, or the notification cron. Two
+    // at once both find it missing and both generate. Whoever wrote second used
+    // to win, and a browser already subscribed to the first public key is then
+    // bound to a key the instance no longer holds: the push service answers 403
+    // for every send, forever, and 403 is not 404/410 so the row is never
+    // cleaned up either.
+    $db = wallos_test_open_database();
+
+    $first = wallos_webpush_generate_vapid_keys();
+    $second = wallos_webpush_generate_vapid_keys();
+    assert_true($first !== null && $second !== null, 'two distinct keypairs were generated');
+    assert_true($first['public'] !== $second['public'], 'and they really are distinct');
+
+    $claimedFirst = wallos_claim_instance_settings($db, 'webpush', [
+        'vapid_public_key' => $first['public'],
+        'vapid_private_key' => $first['private'],
+    ], ['vapid_private_key']);
+
+    $claimedSecond = wallos_claim_instance_settings($db, 'webpush', [
+        'vapid_public_key' => $second['public'],
+        'vapid_private_key' => $second['private'],
+    ], ['vapid_private_key']);
+
+    assert_same($first['public'], $claimedFirst['vapid_public_key'], 'the first caller claims its own pair');
+    assert_same($first['public'], $claimedSecond['vapid_public_key'], 'the second is handed the stored one');
+    assert_same($first['private'], $claimedSecond['vapid_private_key'], 'both halves of it, not a mixture');
+
+    // What this case does *not* hold: the ON CONFLICT DO NOTHING inside the
+    // claim. Two sequential callers never reach it, because the "is any member
+    // already stored" check above them decides first — measured by swapping it
+    // for DO UPDATE, which changes nothing here. It is the fallback for two
+    // callers genuinely interleaved, where both read an empty group before
+    // either commits, and that is not reproducible in this suite: SQLite
+    // serialises write transactions outright, so the interleaving cannot be
+    // built. Stated rather than asserted, so nobody reads this case as covering
+    // it.
+
+    $db->close();
+});
+
+wallos_test('a half-written keypair is left alone rather than completed with a foreign half', function () {
+    // The other way the pair comes apart, and the one a transaction alone does
+    // not catch: a row left behind by an older version, where inserting "only
+    // what is missing" pairs a stored public key with a freshly generated
+    // private one. Nothing then decrypts, and the mismatch is invisible.
+    $db = wallos_test_open_database();
+
+    $old = wallos_webpush_generate_vapid_keys();
+    $fresh = wallos_webpush_generate_vapid_keys();
+    wallos_set_instance_setting($db, 'webpush', 'vapid_public_key', $old['public']);
+
+    $claimed = wallos_claim_instance_settings($db, 'webpush', [
+        'vapid_public_key' => $fresh['public'],
+        'vapid_private_key' => $fresh['private'],
+    ], ['vapid_private_key']);
+
+    assert_same($old['public'], $claimed['vapid_public_key'], 'the stored half is not replaced');
+    assert_same('', $claimed['vapid_private_key'], 'and the missing half is not filled in from another pair');
+
+    // An incomplete pair must read as unconfigured, not as usable.
+    $config = wallos_get_instance_webpush_config($db);
+    assert_true(!$config['values']['deliverable'], 'the channel reports itself as not deliverable');
+
+    $db->close();
+});
+
+wallos_test('the keypair the configuration hands out is a matching pair', function () {
+    $db = wallos_test_open_database();
+    $config = wallos_get_instance_webpush_config($db);
+
+    $public = wallos_webpush_b64u_decode((string) $config['values']['public_key']);
+    $private = wallos_webpush_b64u_decode((string) $config['values']['private_key']);
+    assert_same(65, strlen($public), 'the public key is a P-256 point');
+    assert_same(32, strlen($private), 'the private key is a P-256 scalar');
+
+    // The real question is not the lengths but whether they belong together.
+    // OpenSSL derives the point from the scalar, so the stored public key must
+    // equal what the stored private key produces.
+    $pem = wallos_webpush_ec_private_pem($private, $public);
+    $key = openssl_pkey_get_private($pem);
+    assert_true($key !== false, 'the pair loads as a key');
+
+    $details = openssl_pkey_get_details($key);
+    $derived = "\x04"
+        . wallos_webpush_pad($details['ec']['x'], 32)
+        . wallos_webpush_pad($details['ec']['y'], 32);
+    assert_same($public, $derived, 'the stored public key is the one this private key derives');
+
+    $db->close();
+});
+
+/* -------------------------------------------------------------------------
+   How long a reminder is worth keeping
+   ------------------------------------------------------------------------- */
+
+wallos_test('a reminder is kept until two days past the renewal it names', function () {
+    // The fixed four weeks this used to send was the ceiling every push service
+    // shares — "hold it as long as you possibly can" — applied to a message
+    // that stops being true after a few days. A phone switched on after a
+    // holiday produced a pile of notices about renewals long past.
+    assert_same(172800, wallos_webpush_ttl_for_renewals([]),
+        'a message naming nothing is kept for the grace period alone');
+    assert_same(172800, wallos_webpush_ttl_for_renewals([['days' => 0]]),
+        'a renewal today is worth two more days');
+    assert_same(86400 + 172800, wallos_webpush_ttl_for_renewals([['days' => 1]]),
+        'tomorrow is that plus a day');
+    assert_same(7 * 86400 + 172800, wallos_webpush_ttl_for_renewals([['days' => 7]]),
+        'a week ahead is a week plus the grace');
+
+    // One message can name several subscriptions, so it stays useful until the
+    // last of them.
+    assert_same(9 * 86400 + 172800, wallos_webpush_ttl_for_renewals([['days' => 2], ['days' => 9], ['days' => 5]]),
+        'the furthest renewal in the message decides');
+
+    // And never past what a push service will honour.
+    assert_same(WALLOS_WEBPUSH_TTL_MAX, wallos_webpush_ttl_for_renewals([['days' => 365]]),
+        'a yearly subscription is capped at the four weeks every service shares');
+    assert_true(WALLOS_WEBPUSH_TTL_MAX === 2419200, 'which is 2419200 seconds');
+});
+
+wallos_test('the TTL the caller asks for is the TTL on the wire', function () {
+    $db = wallos_test_open_database();
+    wallos_test_create_user($db, 1, 'alice');
+    wallos_webpush_store_subscription($db, 1, 'https://93.184.216.34/push/d', wallos_webpush_test_p256dh(), wallos_webpush_test_auth());
+    $subscription = wallos_webpush_user_subscriptions($db, 1)[0];
+
+    $seen = [];
+    $GLOBALS['wallos_webpush_test_http'] = function ($url, $body, $headers) use (&$seen) {
+        foreach ($headers as $header) {
+            if (stripos($header, 'TTL:') === 0) {
+                $seen[] = trim(substr($header, 4));
+            }
+        }
+        return ['response' => '', 'status' => 201, 'error' => ''];
+    };
+
+    wallos_webpush_deliver($db, $subscription, json_encode(['title' => 't']), 1, 3 * 86400 + 172800);
+    assert_same(['432000'], $seen, 'the computed TTL reaches the request header');
+
+    // RFC 8030 §5.2 makes the header mandatory and a push service answers 400
+    // without it, so it is never omitted however odd the number asked for.
+    $seen = [];
+    wallos_webpush_deliver($db, $subscription, json_encode(['title' => 't']), 1, -5);
+    assert_same(['0'], $seen, 'a negative TTL becomes zero rather than a missing header');
+
+    $seen = [];
+    wallos_webpush_deliver($db, $subscription, json_encode(['title' => 't']), 1, 99999999);
+    assert_same([(string) WALLOS_WEBPUSH_TTL_MAX], $seen, 'and one past the ceiling is clamped to it');
+
+    $GLOBALS['wallos_webpush_test_http'] = null;
+    $db->close();
+});
+
+/* -------------------------------------------------------------------------
+   The devices an account has subscribed
+   ------------------------------------------------------------------------- */
+
+wallos_test('an account can see its devices without the page learning their endpoints', function () {
+    $db = wallos_test_open_database();
+    wallos_test_create_user($db, 1, 'alice');
+    wallos_test_create_user($db, 2, 'bob');
+
+    wallos_webpush_store_subscription($db, 1, 'https://push.example/alice-phone',
+        wallos_webpush_test_p256dh(), wallos_webpush_test_auth(),
+        'Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 Chrome/120.0 Mobile Safari/537.36');
+    wallos_webpush_store_subscription($db, 2, 'https://push.example/bob-laptop',
+        wallos_webpush_test_p256dh(), wallos_webpush_test_auth(),
+        'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) Gecko/20100101 Firefox/121.0');
+
+    $devices = wallos_webpush_user_devices($db, 1);
+    assert_same(1, count($devices), 'alice sees her own device');
+    assert_same('Chrome', $devices[0]['browser'], 'named by browser');
+    assert_same('Android', $devices[0]['platform'], 'and platform');
+
+    // The endpoint and the key material are what the sender needs, not what a
+    // page needs. Neither may appear in what the settings page is handed.
+    $serialised = json_encode($devices);
+    assert_true(strpos($serialised, 'push.example') === false, 'the endpoint is not in the payload');
+    assert_true(strpos($serialised, wallos_webpush_test_p256dh()) === false, 'nor is the client key');
+    assert_true(strpos($serialised, wallos_webpush_test_auth()) === false, 'nor the auth secret');
+
+    assert_same(1, count(wallos_webpush_user_devices($db, 2)), "bob sees only his own");
+
+    $db->close();
+});
+
+wallos_test('a device is removed by its handle, and only by its owner', function () {
+    $db = wallos_test_open_database();
+    wallos_test_create_user($db, 1, 'alice');
+    wallos_test_create_user($db, 2, 'mallory');
+
+    wallos_webpush_store_subscription($db, 1, 'https://push.example/alice-old', wallos_webpush_test_p256dh(), wallos_webpush_test_auth(), 'Firefox/121.0 Windows');
+    wallos_webpush_store_subscription($db, 1, 'https://push.example/alice-new', wallos_webpush_test_p256dh(), wallos_webpush_test_auth(), 'Chrome/120.0 Android');
+
+    $devices = wallos_webpush_user_devices($db, 1);
+    assert_same(2, count($devices), 'alice has two');
+    $handle = $devices[0]['handle'];
+
+    // Mallory knows the handle — it is in alice's page, not a secret — but it
+    // resolves against her own rows only.
+    assert_true(!wallos_webpush_delete_by_handle($db, 2, $handle), "another account's removal finds nothing");
+    assert_same(2, count(wallos_webpush_user_devices($db, 1)), 'and removes nothing');
+
+    assert_true(wallos_webpush_delete_by_handle($db, 1, $handle), 'the owner removes her own');
+    assert_same(1, count(wallos_webpush_user_devices($db, 1)), 'one is left');
+    assert_true(!wallos_webpush_delete_by_handle($db, 1, 'not-a-handle'), 'an unknown handle is refused');
+
+    $db->close();
+});
+
+wallos_test('a crafted user agent cannot put its own text on the settings page', function () {
+    // The label is chosen from a fixed list rather than echoed, so the stored
+    // string never reaches the page at all.
+    $db = wallos_test_open_database();
+    wallos_test_create_user($db, 1, 'alice');
+
+    $hostile = '<script>alert(1)</script> Chrome/120 Android';
+    wallos_webpush_store_subscription($db, 1, 'https://push.example/x',
+        wallos_webpush_test_p256dh(), wallos_webpush_test_auth(), $hostile);
+
+    $devices = wallos_webpush_user_devices($db, 1);
+    assert_same('Chrome', $devices[0]['browser'], 'the recognised name is still found');
+    assert_true(strpos(json_encode($devices), 'script') === false, 'and nothing of the supplied string survives');
+
+    // An agent nothing matches yields empty strings, not the raw value.
+    wallos_webpush_store_subscription($db, 1, 'https://push.example/y',
+        wallos_webpush_test_p256dh(), wallos_webpush_test_auth(), 'curl/8.4.0');
+    $unknown = wallos_webpush_device_label('curl/8.4.0');
+    assert_same('', $unknown['browser'], 'an unknown browser is empty');
+    assert_same('', $unknown['platform'], 'an unknown platform too');
+
+    // Edge and Opera both carry "Chrome", and Chrome on iOS carries "Safari" —
+    // the order of the list is what makes these right.
+    assert_same('Edge', wallos_webpush_device_label('Mozilla/5.0 Chrome/120 Safari/537 Edg/120')['browser'], 'Edge before Chrome');
+    assert_same('Opera', wallos_webpush_device_label('Mozilla/5.0 Chrome/120 Safari/537 OPR/106')['browser'], 'Opera before Chrome');
+    assert_same('Chrome', wallos_webpush_device_label('Mozilla/5.0 Chrome/120 Safari/537')['browser'], 'Chrome before Safari');
+    assert_same('Safari', wallos_webpush_device_label('Mozilla/5.0 Version/17 Safari/605')['browser'], 'and Safari alone is Safari');
+
+    $db->close();
+});
+
+wallos_test('an account cannot grow its subscriptions without bound', function () {
+    // Every row is one HTTP request per message in the nightly run, each with a
+    // five second connect and fifteen second read timeout. Unbounded rows means
+    // an unbounded run — and it is the same run that sends the email, Telegram
+    // and webhook notifications for the rest of the household.
+    $db = wallos_test_open_database();
+    wallos_test_create_user($db, 1, 'alice');
+
+    for ($i = 0; $i < WALLOS_WEBPUSH_MAX_DEVICES + 15; $i++) {
+        // Ascending created_at, so the first ones stored are the oldest.
+        assert_true(wallos_webpush_store_subscription($db, 1, 'https://push.example/d' . $i,
+            wallos_webpush_test_p256dh(), wallos_webpush_test_auth(), 'Chrome/120 Android'),
+            'device ' . $i . ' is stored');
+    }
+
+    $kept = wallos_webpush_user_subscriptions($db, 1);
+    assert_same(WALLOS_WEBPUSH_MAX_DEVICES, count($kept),
+        'the account settles at the limit rather than growing: ' . count($kept));
+
+    // A new device is never the one turned away — the oldest is dropped, so
+    // somebody's new phone does not fail to subscribe because of four they
+    // threw out.
+    $endpoints = array_column($kept, 'endpoint');
+    assert_true(in_array('https://push.example/d' . (WALLOS_WEBPUSH_MAX_DEVICES + 14), $endpoints, true),
+        'the newest device is kept');
+    assert_true(!in_array('https://push.example/d0', $endpoints, true), 'the oldest is gone');
+
+    $db->close();
+});
+
 wallos_test('the transport applies the pin it is handed', function () {
     // The case above holds that deliver() computes the pin and passes it on.
     // Whether curl is actually told to use it cannot be reached from here: the

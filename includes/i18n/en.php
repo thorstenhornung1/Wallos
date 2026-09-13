@@ -691,6 +691,10 @@ $i18n = [
     "web_push_not_configured" => "Web Push is not configured on the server.",
     "web_push_enabled" => "Web Push enabled on this device.",
     "web_push_disabled" => "Web Push disabled on this device.",
+    "web_push_devices" => "Subscribed devices",
+    "web_push_no_devices" => "No devices are subscribed.",
+    "web_push_this_device" => "This device",
+    "web_push_unknown_device" => "Unknown device",
 ];
 
 

@@ -653,6 +653,10 @@ $i18n = [
     "web_push_not_configured" => "Web Push ist auf dem Server nicht konfiguriert.",
     "web_push_enabled" => "Web Push auf diesem Gerät aktiviert.",
     "web_push_disabled" => "Web Push auf diesem Gerät deaktiviert.",
+    "web_push_devices" => "Angemeldete Geräte",
+    "web_push_no_devices" => "Es ist kein Gerät angemeldet.",
+    "web_push_this_device" => "Dieses Gerät",
+    "web_push_unknown_device" => "Unbekanntes Gerät",
 
     // #160 Phase 2 (nur Deutsch): Schlüssel, die en.php definiert, de.php aber
     // noch fehlten — jetzt übersetzt. Andere Sprachen greifen bewusst weiterhin

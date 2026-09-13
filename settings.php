@@ -1076,6 +1076,8 @@ $upcomingPaymentsLimit = normalize_upcoming_payments_limit($settings['upcoming_p
                             style="display:none" value="<?= translate('web_push_disable_device', $i18n) ?>"
                             onClick="disableWebPush()" />
                     </div>
+                    <h4 class="webpush-devices-title"><?= translate('web_push_devices', $i18n) ?></h4>
+                    <div id="webPushDevices" class="webpush-devices"></div>
                 </div>
             </section>
 

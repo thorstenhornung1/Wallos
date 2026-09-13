@@ -61,6 +61,61 @@ const WALLOS_WEBPUSH_PADDED_RECORD = 2820;
  */
 const WALLOS_WEBPUSH_MAX_PLAINTEXT = 3993;
 
+/**
+ * How long a renewal reminder stays worth delivering, past the renewal itself.
+ *
+ * The push service holds a message for an offline device and delivers it when
+ * the device comes back (RFC 8030 §5.2). The question is how long that should
+ * be, and it is a question about *this* message: "Netflix renews in 3 days" is
+ * useful up to the renewal and for a short while after — long enough that a
+ * phone switched off over a weekend still gets a reminder worth having, and not
+ * so long that switching it on after a holiday produces a pile of notices about
+ * renewals that happened three weeks ago.
+ *
+ * Two days past the renewal is that line.
+ */
+const WALLOS_WEBPUSH_TTL_GRACE = 172800;
+
+/**
+ * The ceiling every push service shares: four weeks.
+ *
+ * RFC 8030 §5.2 sets no maximum — it makes TTL mandatory, and lets a service
+ * keep a message for less than asked as long as it says so by returning a TTL
+ * header in its response. In practice the large services all stop at 2419200
+ * seconds, so nothing above that buys anything.
+ *
+ * This is also where the previous fixed value came from: it was the ceiling,
+ * i.e. "keep this as long as you possibly can", applied to a message that stops
+ * being true after a few days.
+ */
+const WALLOS_WEBPUSH_TTL_MAX = 2419200;
+
+/**
+ * The TTL for a reminder covering these subscriptions.
+ *
+ * One message can name several subscriptions, so it stays worth delivering
+ * until the last of them has renewed, plus the grace period. A message with no
+ * subscriptions in it — a period summary on its own — gets the grace period.
+ *
+ * @param array $perUser  the subscriptions in this message, each with a 'days'
+ *                        count until renewal
+ * @param int   $grace    seconds to keep it past the last renewal
+ * @return int seconds, never above what a push service will honour
+ */
+function wallos_webpush_ttl_for_renewals(array $perUser, $grace = WALLOS_WEBPUSH_TTL_GRACE)
+{
+    $furthest = 0;
+
+    foreach ($perUser as $subscription) {
+        $days = (int) ($subscription['days'] ?? 0);
+        if ($days > $furthest) {
+            $furthest = $days;
+        }
+    }
+
+    return min($furthest * 86400 + $grace, WALLOS_WEBPUSH_TTL_MAX);
+}
+
 /* -------------------------------------------------------------------------
    base64url
    ------------------------------------------------------------------------- */
@@ -302,12 +357,35 @@ function wallos_build_instance_webpush_config($db)
         if ($public === '' || $private === '') {
             $generated = wallos_webpush_generate_vapid_keys();
             if ($generated !== null) {
-                // wallos_set_instance_setting() persists each half and clears
-                // the memoized instance settings, so a later read sees the pair.
-                wallos_set_instance_setting($db, 'webpush', 'vapid_public_key', $generated['public']);
-                wallos_set_instance_setting($db, 'webpush', 'vapid_private_key', $generated['private'], true);
-                $public = $generated['public'];
-                $private = $generated['private'];
+                // Claimed, not written: the keypair is generated on first use,
+                // and first use is whatever request happens to arrive first —
+                // an admin opening the settings page, or the notification cron.
+                // Two of them at once both find the rows empty and both
+                // generate, and a plain write would let one overwrite the other
+                // between its two halves.
+                //
+                // The damage is not a broken page. A browser that already
+                // subscribed is bound to the applicationServerKey it saw, so
+                // once the stored pair changes the push service rejects every
+                // send for it with 403 — and 403 is not 404/410, so the
+                // subscription is never cleaned up either. It fails every night
+                // from then on, and nothing on any screen says why the
+                // notifications stopped.
+                //
+                // wallos_claim_instance_settings() inserts both halves in one
+                // transaction with DO NOTHING and reads back what holds, so the
+                // loser adopts the winner's pair instead of replacing it.
+                $claimed = wallos_claim_instance_settings($db, 'webpush', [
+                    'vapid_public_key' => $generated['public'],
+                    'vapid_private_key' => $generated['private'],
+                ], ['vapid_private_key']);
+
+                if ($claimed === null) {
+                    wallos_config_add_note($config, 'Could not store the generated VAPID keypair.');
+                } else {
+                    $public = $claimed['vapid_public_key'];
+                    $private = $claimed['vapid_private_key'];
+                }
             } else {
                 wallos_config_add_note($config, 'Could not generate a VAPID keypair (OpenSSL EC support missing?).');
             }
@@ -644,9 +722,11 @@ if (!function_exists('wallos_webpush_http_post')) {
  * @param array          $subscription endpoint, p256dh, auth (base64url)
  * @param string         $payload      the message body to encrypt
  * @param int            $userId       the owner, for the SSRF role decision
+ * @param int            $ttl          seconds the push service should hold it
+ *                                     for a device that is offline
  * @return array{sent: bool, expired: bool, status: int, error: string}
  */
-function wallos_webpush_deliver($db, $subscription, $payload, $userId)
+function wallos_webpush_deliver($db, $subscription, $payload, $userId, $ttl = WALLOS_WEBPUSH_TTL_MAX)
 {
     $fail = function ($error, $status = 0, $expired = false) {
         return ['sent' => false, 'expired' => $expired, 'status' => $status, 'error' => $error];
@@ -689,7 +769,7 @@ function wallos_webpush_deliver($db, $subscription, $payload, $userId)
     $headers = [
         'Content-Encoding: aes128gcm',
         'Content-Type: application/octet-stream',
-        'TTL: 2419200',
+        'TTL: ' . max(0, min((int) $ttl, WALLOS_WEBPUSH_TTL_MAX)),
         'Authorization: vapid t=' . $jwt . ', k=' . (string) $config['values']['public_key'],
     ];
 
@@ -726,6 +806,101 @@ function wallos_webpush_deliver($db, $subscription, $payload, $userId)
    copies. Ownership is always the server-side session user, never a value from
    the client.
    ------------------------------------------------------------------------- */
+
+/**
+ * How many devices one account may keep subscribed.
+ *
+ * Not a guess at what is reasonable but at what is possible: a household member
+ * has a phone, a tablet, a work laptop, maybe a desktop. Twenty is several
+ * times that.
+ *
+ * It is a bound rather than a refusal because of what each row costs at send
+ * time. The notification cron makes one HTTP request per subscription per
+ * message, each with a five-second connect timeout and a fifteen-second read
+ * timeout. A thousand rows is a thousand requests in the nightly run, and if
+ * they point somewhere that does not answer, the run stops being nightly — and
+ * it is the same run that sends the email, Telegram and webhook notifications
+ * for every other member of the household.
+ *
+ * Nothing here needs an attacker: it needs one signed-in account and a script.
+ * But a hard refusal at the limit would mean somebody's new phone silently
+ * failing to subscribe because of four devices they threw away, so the oldest
+ * is dropped instead.
+ */
+const WALLOS_WEBPUSH_MAX_DEVICES = 20;
+
+/**
+ * A stable, non-reversible handle for one subscription.
+ *
+ * The settings page has to name a device to remove without putting the endpoint
+ * itself into the page and into every request that follows. The endpoint is not
+ * a secret, but it is the address that receives this account's notifications,
+ * and there is no reason for it to travel further than it must.
+ *
+ * @param string $endpoint
+ * @return string 16 hex characters
+ */
+function wallos_webpush_device_handle($endpoint)
+{
+    return substr(hash('sha256', (string) $endpoint), 0, 16);
+}
+
+/**
+ * A human label for the device that subscribed, from its user agent.
+ *
+ * "Chrome on Android" is what a person recognises; the endpoint is not. The
+ * string is client-supplied, so this never passes it through — it matches
+ * against a fixed list and returns words chosen here, which means a crafted
+ * user agent cannot put text of its own on the settings page.
+ *
+ * Order matters: Edge and Opera both carry "Chrome" in their user agent, and
+ * every Chrome on iOS carries "Safari".
+ *
+ * @param string $userAgent
+ * @return array{browser: string, platform: string} empty strings when unknown
+ */
+function wallos_webpush_device_label($userAgent)
+{
+    $agent = (string) $userAgent;
+
+    $browsers = [
+        'Edg' => 'Edge',
+        'OPR' => 'Opera',
+        'SamsungBrowser' => 'Samsung Internet',
+        'Firefox' => 'Firefox',
+        'Chrome' => 'Chrome',
+        'Safari' => 'Safari',
+    ];
+
+    $platforms = [
+        'Android' => 'Android',
+        'iPhone' => 'iPhone',
+        'iPad' => 'iPad',
+        'Windows' => 'Windows',
+        'Mac OS X' => 'macOS',
+        'Macintosh' => 'macOS',
+        'CrOS' => 'ChromeOS',
+        'Linux' => 'Linux',
+    ];
+
+    $browser = '';
+    foreach ($browsers as $needle => $name) {
+        if (strpos($agent, $needle) !== false) {
+            $browser = $name;
+            break;
+        }
+    }
+
+    $platform = '';
+    foreach ($platforms as $needle => $name) {
+        if (strpos($agent, $needle) !== false) {
+            $platform = $name;
+            break;
+        }
+    }
+
+    return ['browser' => $browser, 'platform' => $platform];
+}
 
 /**
  * Whether a PushSubscription has the shape RFC 8291 fixes for it.
@@ -786,7 +961,7 @@ function wallos_webpush_subscription_is_wellformed($endpoint, $p256dh, $auth)
  * @param string         $auth     base64url client auth secret
  * @return bool
  */
-function wallos_webpush_store_subscription($db, $userId, $endpoint, $p256dh, $auth)
+function wallos_webpush_store_subscription($db, $userId, $endpoint, $p256dh, $auth, $userAgent = '')
 {
     // ON CONFLICT with excluded.* so no named parameter is bound twice — the
     // upsert idiom that runs on both backends (see the OIDC discovery cache).
@@ -810,13 +985,14 @@ function wallos_webpush_store_subscription($db, $userId, $endpoint, $p256dh, $au
     // over another's device by posting its endpoint — and the loser saw no sign
     // of it, because the settings page reads the browser's subscription rather
     // than the stored row.
-    $stmt = $db->prepare('INSERT INTO push_subscriptions (user_id, endpoint, p256dh, auth, created_at)
-                          VALUES (:userId, :endpoint, :p256dh, :auth, :createdAt)
+    $stmt = $db->prepare('INSERT INTO push_subscriptions (user_id, endpoint, p256dh, auth, created_at, user_agent)
+                          VALUES (:userId, :endpoint, :p256dh, :auth, :createdAt, :userAgent)
                           ON CONFLICT(endpoint) DO UPDATE SET
                               user_id = excluded.user_id,
                               p256dh = excluded.p256dh,
                               auth = excluded.auth,
-                              created_at = excluded.created_at
+                              created_at = excluded.created_at,
+                              user_agent = excluded.user_agent
                           WHERE push_subscriptions.user_id = excluded.user_id
                              OR push_subscriptions.p256dh = excluded.p256dh');
     if ($stmt === false) {
@@ -828,6 +1004,10 @@ function wallos_webpush_store_subscription($db, $userId, $endpoint, $p256dh, $au
     $stmt->bindValue(':p256dh', (string) $p256dh);
     $stmt->bindValue(':auth', (string) $auth);
     $stmt->bindValue(':createdAt', time());
+    // Truncated, never trusted: it is a label, and a label does not need to be
+    // longer than this. Rendered escaped, and only ever to the account that
+    // stored it.
+    $stmt->bindValue(':userAgent', substr((string) $userAgent, 0, 512));
 
     if ($stmt->execute() === false) {
         return false;
@@ -837,7 +1017,137 @@ function wallos_webpush_store_subscription($db, $userId, $endpoint, $p256dh, $au
     // another account and the request could not show its key. Reported as a
     // failure rather than passing for a save, because the caller would
     // otherwise tell somebody their device is subscribed when it is not.
-    return (int) $db->changes() > 0;
+    if ((int) $db->changes() <= 0) {
+        return false;
+    }
+
+    wallos_webpush_trim_devices($db, $userId);
+
+    return true;
+}
+
+/**
+ * Drops the oldest subscriptions of one account past the device limit.
+ *
+ * Run after every successful store rather than checked before it, so a device
+ * that is merely re-subscribing is never turned away, and so a table that is
+ * already over the limit heals on the next save instead of staying over it.
+ *
+ * @param WallosDatabase $db
+ * @param int            $userId
+ * @param int            $limit
+ * @return int how many rows were dropped
+ */
+function wallos_webpush_trim_devices($db, $userId, $limit = WALLOS_WEBPUSH_MAX_DEVICES)
+{
+    $limit = max(1, (int) $limit);
+
+    // Read the survivors, then delete by endpoint. A DELETE with a subselect
+    // over its own table and a LIMIT is not portable across the two backends,
+    // and the row count here is bounded by the limit this function enforces.
+    $stmt = $db->prepare('SELECT endpoint FROM push_subscriptions
+                          WHERE user_id = :userId
+                          ORDER BY created_at DESC, endpoint DESC');
+    if ($stmt === false) {
+        return 0;
+    }
+
+    $stmt->bindValue(':userId', (int) $userId);
+    $result = $stmt->execute();
+    if ($result === false) {
+        return 0;
+    }
+
+    $endpoints = [];
+    while ($row = $result->fetchArray()) {
+        $endpoints[] = (string) $row['endpoint'];
+    }
+
+    $surplus = array_slice($endpoints, $limit);
+    $dropped = 0;
+
+    foreach ($surplus as $endpoint) {
+        if (wallos_webpush_delete_by_endpoint($db, $userId, $endpoint)) {
+            $dropped++;
+        }
+    }
+
+    return $dropped;
+}
+
+/**
+ * The account's subscribed devices, as the settings page shows them.
+ *
+ * Deliberately not wallos_webpush_user_subscriptions(): that one carries the
+ * key material the sender needs, and none of it belongs in a page. This returns
+ * a handle, a label and a date — enough to recognise a device and remove it.
+ *
+ * @param WallosDatabase $db
+ * @param int            $userId
+ * @return array<int, array{handle: string, browser: string, platform: string, created_at: int}>
+ */
+function wallos_webpush_user_devices($db, $userId)
+{
+    $stmt = $db->prepare('SELECT endpoint, created_at, user_agent FROM push_subscriptions
+                          WHERE user_id = :userId
+                          ORDER BY created_at DESC, endpoint DESC');
+    if ($stmt === false) {
+        return [];
+    }
+
+    $stmt->bindValue(':userId', (int) $userId);
+    $result = $stmt->execute();
+    if ($result === false) {
+        return [];
+    }
+
+    $devices = [];
+    while ($row = $result->fetchArray()) {
+        $label = wallos_webpush_device_label((string) ($row['user_agent'] ?? ''));
+        $devices[] = [
+            'handle' => wallos_webpush_device_handle((string) $row['endpoint']),
+            'browser' => $label['browser'],
+            'platform' => $label['platform'],
+            'created_at' => (int) $row['created_at'],
+        ];
+    }
+
+    return $devices;
+}
+
+/**
+ * Removes one of the account's own devices, named by its handle.
+ *
+ * The handle is resolved against this account's rows only, so a handle
+ * belonging to somebody else's subscription matches nothing here — the scoping
+ * is the same as the delete-by-endpoint path, done one step earlier.
+ *
+ * @param WallosDatabase $db
+ * @param int            $userId
+ * @param string         $handle
+ * @return bool false when the account has no such device
+ */
+function wallos_webpush_delete_by_handle($db, $userId, $handle)
+{
+    $stmt = $db->prepare('SELECT endpoint FROM push_subscriptions WHERE user_id = :userId');
+    if ($stmt === false) {
+        return false;
+    }
+
+    $stmt->bindValue(':userId', (int) $userId);
+    $result = $stmt->execute();
+    if ($result === false) {
+        return false;
+    }
+
+    while ($row = $result->fetchArray()) {
+        $endpoint = (string) $row['endpoint'];
+        if (hash_equals(wallos_webpush_device_handle($endpoint), (string) $handle)) {
+            return wallos_webpush_delete_by_endpoint($db, $userId, $endpoint);
+        }
+    }
+
+    return false;
 }
 
 /**

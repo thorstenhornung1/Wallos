@@ -4464,3 +4464,41 @@ body.details-open {
 .api-usage-fill.danger {
   background-color: var(--error-color);
 }
+
+/* Web Push: the account's subscribed devices (issue #162). One row per device,
+   wrapping to its own line on a phone rather than squeezing the name. */
+.webpush-devices-title {
+    margin: 1rem 0 0.5rem 0;
+    font-size: 0.95rem;
+}
+
+.webpush-device {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    padding: 0.5rem 0;
+    border-bottom: 1px solid var(--box-border-color);
+}
+
+.webpush-device-name {
+    flex: 1 1 12rem;
+}
+
+.webpush-device-current,
+.webpush-device-added {
+    font-size: 0.85rem;
+    opacity: 0.75;
+}
+
+.webpush-device-remove {
+    background: none;
+    border: none;
+    color: var(--accent-color);
+    cursor: pointer;
+    padding: 0.25rem 0.5rem;
+}
+
+.webpush-device-empty {
+    opacity: 0.75;
+}

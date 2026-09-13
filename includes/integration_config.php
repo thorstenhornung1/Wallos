@@ -90,6 +90,100 @@ function wallos_set_instance_setting($db, $integration, $key, $value, $isSecret 
 }
 
 /**
+ * Claims a set of instance values that must be generated exactly once, and
+ * returns whichever set actually holds.
+ *
+ * The difference from calling wallos_set_instance_setting() per key is that
+ * "generate if absent, then store" is a read followed by a write, and two
+ * requests can both pass the read. Both then generate, and both write — so one
+ * caller's halves can be overwritten by another's between its own two writes,
+ * leaving a public key that does not belong to the stored private one.
+ *
+ * Instead the group is claimed whole, inside one transaction: if any member is
+ * already stored nothing is written at all, and otherwise every member is
+ * inserted with DO NOTHING. The stored values are then read back. The loser of
+ * the race writes nothing and is handed the winner's set, so every caller
+ * leaves with the same coherent group.
+ *
+ * Both halves of that are load-bearing. DO NOTHING alone settles a race between
+ * two callers that both find the group empty. The "any member already stored"
+ * check settles the other case: a group left half-written by an older version,
+ * where DO NOTHING would skip the stored half and write the missing one — a
+ * public key belonging to one pair beside a private key from another. A group
+ * that comes back incomplete is left incomplete, for the caller to report as
+ * unconfigured rather than to use.
+ *
+ * @param WallosDatabase        $db
+ * @param string                $integration
+ * @param array<string, string> $values      candidate values, keyed by setting name
+ * @param string[]              $secretKeys  which of them are secrets
+ * @return array<string, string>|null the values that hold, or null on failure
+ */
+function wallos_claim_instance_settings($db, $integration, array $values, array $secretKeys = [])
+{
+    if ($values === []) {
+        return [];
+    }
+
+    wallos_reset_config_cache($db);
+
+    if (!$db->beginTransaction()) {
+        return null;
+    }
+
+    $existing = wallos_build_instance_settings($db, $integration);
+    $anyPresent = false;
+    foreach (array_keys($values) as $key) {
+        if (($existing[$key] ?? '') !== '') {
+            $anyPresent = true;
+            break;
+        }
+    }
+
+    if (!$anyPresent) {
+        foreach ($values as $key => $value) {
+            $stmt = $db->prepare('INSERT INTO integration_settings (integration, setting_key, setting_value, is_secret)
+                                  VALUES (:integration, :key, :value, :isSecret)
+                                  ON CONFLICT(integration, setting_key) DO NOTHING');
+            if ($stmt === false) {
+                $db->rollBack();
+
+                return null;
+            }
+
+            $stmt->bindValue(':integration', (string) $integration);
+            $stmt->bindValue(':key', (string) $key);
+            $stmt->bindValue(':value', (string) $value);
+            $stmt->bindValue(':isSecret', in_array($key, $secretKeys, true) ? 1 : 0);
+
+            if ($stmt->execute() === false) {
+                $db->rollBack();
+
+                return null;
+            }
+        }
+    }
+
+    if (!$db->commit()) {
+        $db->rollBack();
+
+        return null;
+    }
+
+    // Read back inside no transaction: what is stored now is what every caller
+    // must use, whether this one wrote it or lost the race.
+    wallos_reset_config_cache($db);
+    $stored = wallos_build_instance_settings($db, $integration);
+
+    $claimed = [];
+    foreach (array_keys($values) as $key) {
+        $claimed[$key] = (string) ($stored[$key] ?? '');
+    }
+
+    return $claimed;
+}
+
+/**
  * Normalises the stored override mode. Anything unknown — including NULL from a
  * freshly added column — means "inherit the instance configuration".
  *

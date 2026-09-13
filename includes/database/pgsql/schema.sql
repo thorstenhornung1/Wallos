@@ -20,7 +20,7 @@
 --   * Every identifier is quoted, because "user" and "order" are reserved words
 --     and a keyword list kept in the generator would be wrong eventually.
 
--- 45 tables, 87 migrations recorded as applied.
+-- 45 tables, 88 migrations recorded as applied.
 
 CREATE TABLE "admin" (
     "id" SERIAL PRIMARY KEY,
@@ -328,6 +328,7 @@ CREATE TABLE "push_subscriptions" (
     "p256dh" TEXT NOT NULL,
     "auth" TEXT NOT NULL,
     "created_at" INTEGER DEFAULT 0 NOT NULL,
+    "user_agent" TEXT DEFAULT '',
     PRIMARY KEY ("endpoint")
 );
 
@@ -707,7 +708,8 @@ INSERT INTO "migrations" ("id", "migration") VALUES
     (84, 'migrations/000085.php'),
     (85, 'migrations/000086.php'),
     (86, 'migrations/000087.php'),
-    (87, 'migrations/000088.php');
+    (87, 'migrations/000088.php'),
+    (88, 'migrations/000089.php');
 
 INSERT INTO "payment_methods" ("id", "name", "icon", "enabled", "order", "user_id") VALUES
     (1, 'PayPal', 'images/uploads/icons/paypal.png', 1, 1, 1),

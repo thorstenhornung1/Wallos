@@ -912,11 +912,18 @@ while ($userToNotify = $usersToNotify->fetchArray(SQLITE3_ASSOC)) {
                         'url' => './',
                     ]);
 
+                    // How long the push service should hold this for a phone
+                    // that is switched off: until the last renewal it names,
+                    // plus two days. The fixed four weeks it used to send was
+                    // the ceiling — a reminder about a renewal three weeks past
+                    // is not one worth waking somebody for.
+                    $webPushTtl = wallos_webpush_ttl_for_renewals($perUser);
+
                     // One message per subscribed device. The endpoint is
                     // client-supplied, so wallos_webpush_deliver() routes it
                     // through the SSRF allowlist before sending.
                     foreach ($webPush['subscriptions'] as $webPushSubscription) {
-                        $delivery = wallos_webpush_deliver($db, $webPushSubscription, $webPushPayload, $webPushUserId);
+                        $delivery = wallos_webpush_deliver($db, $webPushSubscription, $webPushPayload, $webPushUserId, $webPushTtl);
 
                         if ($delivery['sent']) {
                             wallos_cron_count('sent');

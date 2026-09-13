@@ -322,10 +322,42 @@ self.addEventListener('push', function (event) {
     event.waitUntil(self.registration.showNotification(payload.title || 'Wallos', options));
 });
 
+// Where a clicked notification is allowed to send the browser.
+//
+// Nothing reachable today puts a foreign URL here: the cron hard-codes
+// 'url' => './' (endpoints/cronjobs/sendnotifications.php), and the payload is
+// encrypted per RFC 8291, so the push service carrying it cannot substitute one
+// either. This is defence in depth against the change that makes it reachable —
+// a deep link to a specific subscription is the obvious next step for this
+// payload, and that is the edit after which an unchecked url navigates a
+// signed-in Wallos window to a page that can look exactly like Wallos.
+//
+// Same-origin only, and anything else falls back to the app root rather than
+// being dropped: the notification was real, so the click should still open
+// Wallos.
+//
+// Resolved against self.location.href — where this worker is served — and not
+// against the origin. An instance behind a reverse proxy at /wallos/ has its
+// worker at /wallos/service-worker.js, so a relative './' means /wallos/ there;
+// resolving it against the bare origin would send the click to / instead, which
+// is a page that is not Wallos. The origin is still what the comparison uses.
+function wallosSafeNotificationUrl(value) {
+    if (typeof value !== 'string' || value === '') {
+        return './';
+    }
+
+    try {
+        const resolved = new URL(value, self.location.href);
+        return resolved.origin === self.location.origin ? resolved.href : './';
+    } catch (e) {
+        return './';
+    }
+}
+
 // Focus an existing Wallos window (or open one) when the notification is clicked.
 self.addEventListener('notificationclick', function (event) {
     event.notification.close();
-    const target = (event.notification.data && event.notification.data.url) || './';
+    const target = wallosSafeNotificationUrl(event.notification.data && event.notification.data.url);
 
     event.waitUntil(
         self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(function (clientList) {
