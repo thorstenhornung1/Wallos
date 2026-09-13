@@ -305,8 +305,12 @@ wallos_test('the provider explains which currency it objected to, and that is wh
     assert_same('', frankfurter_detail(json_decode('[]', true)),
         'and an empty list says nothing, so nothing is invented for it');
 
+    // Asked with XYZ alone, so the refusal is the whole answer. With another
+    // code beside it the named one is dropped and the request is made again -
+    // that path is its own case below; this one is about the wording surviving
+    // when there is nothing left to ask for.
     frankfurter_expect('{"status":422,"message":"invalid currency: XYZ"}', 422);
-    $answer = frankfurter_latest_rates('CHF', 'EUR,XYZ');
+    $answer = frankfurter_latest_rates('CHF', 'XYZ');
 
     assert_true(!isset($answer['rates']), 'a 422 is not a set of rates');
     assert_contains('invalid currency: XYZ', $answer['message'] ?? '',
@@ -628,4 +632,115 @@ wallos_test('the keyless provider is offered and named', function () {
     // provider name should be.
     assert_contains('2 => "Frankfurter"', frankfurter_source('api/fixer/get_fixer.php'),
         'the read API can name the provider it may now be asked about');
+});
+
+/**
+ * Queues several answers in order, for the paths that ask more than once.
+ *
+ * @param array<int, array{0: string|false, 1: int|null}> $answers body, status
+ */
+function frankfurter_expect_sequence($answers)
+{
+    $GLOBALS['frankfurter_test_urls'] = [];
+    $GLOBALS['frankfurter_test_answers'] = [];
+
+    foreach ($answers as $answer) {
+        list($body, $status) = $answer;
+        $GLOBALS['frankfurter_test_answers'][] = [
+            'body' => $body,
+            'headers' => $status === null ? null : ['HTTP/1.1 ' . $status . ' Something'],
+        ];
+    }
+}
+
+wallos_test('a code the provider refuses is dropped, and the rest still refresh', function () {
+    // Measured 2026-09-13: a well-formed code the catalogue does not carry is
+    // not always dropped in silence. quotes=EUR,USD,BTC answers 200 without
+    // BTC, but quotes=EUR,USD,ETH answers 422 and takes EUR and USD with it.
+    // So an account holding one such currency got no rates at all rather than
+    // the ones the provider was perfectly willing to price.
+    frankfurter_expect_sequence([
+        ['{"status":422,"message":"invalid currency: ETH"}', 422],
+        ['[{"date":"2026-09-13","base":"CHF","quote":"EUR","rate":1.0593}]', 200],
+    ]);
+
+    $answer = frankfurter_latest_rates('CHF', 'EUR,ETH');
+
+    assert_same(2, count($GLOBALS['frankfurter_test_urls']),
+        'the refusal cost exactly one retry, never a search');
+    assert_true(isset($answer['rates']['EUR']), 'the currency it does price came back');
+    assert_same(['ETH'], $answer['held'] ?? [],
+        'and the answer names the one that kept the rate it had');
+
+    // The retry asks for what is left, and for nothing else.
+    assert_contains('quotes=EUR', $GLOBALS['frankfurter_test_urls'][1], 'the retry asks for EUR');
+    assert_true(strpos($GLOBALS['frankfurter_test_urls'][1], 'ETH') === false,
+        'and does not ask again for the code that was refused');
+});
+
+wallos_test('every code refused means there is nothing left to retry with', function () {
+    frankfurter_expect_sequence([
+        ['{"status":422,"message":"invalid currency: ETH,XYZ"}', 422],
+    ]);
+
+    $answer = frankfurter_latest_rates('CHF', 'ETH,XYZ');
+
+    assert_same(1, count($GLOBALS['frankfurter_test_urls']), 'nothing was retried');
+    assert_true(!isset($answer['rates']), 'and the refusal is the answer');
+    assert_contains('ETH,XYZ', $answer['message'] ?? '', 'which still names the codes');
+});
+
+wallos_test('a refusal that names nothing is left standing', function () {
+    // The degradation path, and the reason the retry is safe to have: if the
+    // message ever stops carrying codes, nothing is dropped, nothing is asked
+    // again, and the refusal is reported exactly as it would have been.
+    frankfurter_expect_sequence([
+        ['{"status":422,"message":"something else entirely"}', 422],
+    ]);
+
+    $answer = frankfurter_latest_rates('CHF', 'EUR,USD');
+
+    assert_same(1, count($GLOBALS['frankfurter_test_urls']), 'nothing was retried');
+    assert_true(!isset($answer['rates']), 'and the refusal stands');
+});
+
+wallos_test('the refused codes are read out of the provider\'s own message', function () {
+    assert_same(['ETH'], frankfurter_refused_codes(
+        ['status' => 422, 'message' => 'invalid currency: ETH']), 'one code');
+    assert_same(['ETH', 'XYZ', 'QQQ'], frankfurter_refused_codes(
+        ['status' => 422, 'message' => 'invalid currency: ETH,XYZ,QQQ']), 'three, as measured');
+    assert_same(['ETH', 'XYZ'], frankfurter_refused_codes(
+        ['status' => 422, 'message' => 'invalid currency: eth, xyz']), 'case and spacing do not matter');
+
+    foreach ([
+        ['status' => 422, 'message' => 'something else entirely'],
+        ['status' => 422, 'message' => 'invalid currency: '],
+        ['status' => 422],
+        ['message' => 12],
+        [],
+        null,
+        'not an array',
+    ] as $unusable) {
+        assert_same([], frankfurter_refused_codes($unusable),
+            'an answer naming no code drops nothing: ' . var_export($unusable, true));
+    }
+
+    // A currency in Wallos is three free-text fields, so a message naming
+    // something that is not a code must not cost somebody a currency.
+    assert_same([], frankfurter_refused_codes(
+        ['message' => 'invalid currency: Lunarium']), 'only three-letter codes are acted on');
+});
+
+wallos_test('both endpoints that report a refresh name what was not priced', function () {
+    foreach ([
+        'endpoints/currency/update_exchange.php',
+        'endpoints/cronjobs/updateexchange.php',
+    ] as $path) {
+        $source = frankfurter_source($path);
+
+        assert_contains("\$apiData['held']", $source,
+            $path . ' reads the codes the provider would not price');
+        assert_contains('left unchanged', $source,
+            $path . ' says what happened to them');
+    }
 });

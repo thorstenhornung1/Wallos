@@ -129,6 +129,49 @@ function frankfurter_detail($decoded)
 }
 
 /**
+ * The codes a 422 named, read out of the provider's own answer.
+ *
+ * Its refusal is {"status":422,"message":"invalid currency: ETH,XYZ"} and it
+ * names every offending code at once, comma separated (measured 2026-09-13 with
+ * one, two and three). That is what makes recovering from it a single retry
+ * rather than a search: ask, and if it refuses, drop exactly what it named and
+ * ask once more.
+ *
+ * Nothing is assumed about the wording beyond the part that matters. If the
+ * message ever stops carrying codes this finds none, nothing is dropped, and
+ * the refusal is reported exactly as it would have been without this - the
+ * recovery can improve the outcome and cannot worsen it.
+ *
+ * @param mixed $decoded json_decode(..., true) of the response body.
+ * @return string[] upper-cased codes, empty when none could be read.
+ */
+function frankfurter_refused_codes($decoded)
+{
+    if (!is_array($decoded) || !isset($decoded['message']) || !is_string($decoded['message'])) {
+        return [];
+    }
+
+    if (preg_match('/invalid currency:\s*(.+)$/i', $decoded['message'], $match) !== 1) {
+        return [];
+    }
+
+    $refused = [];
+
+    foreach (explode(',', $match[1]) as $code) {
+        $code = strtoupper(trim($code));
+
+        // Only something that could have been in the request. A message naming
+        // anything else is not a code list, and acting on it would drop a
+        // currency the provider never objected to.
+        if (preg_match('/^[A-Z]{3}$/', $code) === 1) {
+            $refused[] = $code;
+        }
+    }
+
+    return array_values(array_unique($refused));
+}
+
+/**
  * The currency codes safe to put in a request, and the ones left behind.
  *
  * Measured 2026-09-13: a single malformed code answers 422 and takes the whole
@@ -233,8 +276,6 @@ function frankfurter_latest_rates($base, $codes)
         ];
     }
 
-    $apiUrl = 'https://api.frankfurter.dev/v2/rates?base=' . rawurlencode($base)
-        . '&quotes=' . rawurlencode(implode(',', $askFor));
     $context = stream_context_create([
         'http' => [
             'method' => 'GET',
@@ -245,13 +286,40 @@ function frankfurter_latest_rates($base, $codes)
         ]
     ]);
 
-    $http = frankfurter_http_get($apiUrl, $context);
+    $url = function ($quotes) use ($base) {
+        return 'https://api.frankfurter.dev/v2/rates?base=' . rawurlencode($base)
+            . '&quotes=' . rawurlencode(implode(',', $quotes));
+    };
+
+    $http = frankfurter_http_get($url($askFor), $context);
     $decoded = json_decode((string) $http['body'], true);
+
+    // One retry, and only one, because the refusal names every offending code
+    // at once. A single currency the catalogue does not carry otherwise refuses
+    // the request for every other currency in the account, so somebody holding
+    // one gets no rates at all rather than the ones that are fine.
+    //
+    // Only codes the provider itself named are dropped, and they join the list
+    // this function reports, so the answer still says which currencies kept the
+    // rate they had. If nothing can be read from the message, nothing is
+    // dropped and the refusal stands.
+    if (frankfurter_status_code($http['headers']) === 422) {
+        $refused = frankfurter_refused_codes($decoded);
+        $retryWith = array_values(array_diff($askFor, $refused));
+
+        if ($refused !== [] && $retryWith !== []) {
+            $rejected = array_values(array_unique(array_merge($rejected, $refused)));
+            $askFor = $retryWith;
+            $http = frankfurter_http_get($url($askFor), $context);
+            $decoded = json_decode((string) $http['body'], true);
+        }
+    }
+
     $rates = frankfurter_rates($decoded);
 
     if ($rates === null) {
         return ['message' => frankfurter_failure_message(frankfurter_status_code($http['headers']), $decoded, $base)];
     }
 
-    return ['rates' => $rates];
+    return ['rates' => $rates, 'held' => $rejected];
 }

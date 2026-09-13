@@ -156,7 +156,13 @@ if ($result) {
                 $db->exec('COMMIT');
 
                 $db->close();
-                echo "Rates updated successfully!";
+                // A currency the provider would not price keeps the rate it had, and
+                // saying which one is the difference between a total somebody can
+                // trust and one they cannot. Only the Frankfurter path fills this.
+                $held = isset($apiData['held']) && is_array($apiData['held']) ? $apiData['held'] : [];
+                echo "Rates updated successfully!" . ($held === []
+                    ? ""
+                    : " Not priced, so left unchanged: " . htmlspecialchars(implode(', ', $held)) . ".") . "";
             }
         } else {
             // A refresh that stored nothing must not pass for one that worked.
