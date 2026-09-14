@@ -400,7 +400,7 @@ while ($userToNotify = $usersToNotify->fetchArray(SQLITE3_ASSOC)) {
                 $defaultEmail = $defaultUser['email'];
                 $defaultName = $defaultUser['username'];
 
-                foreach ($notify as $userId => $perUser) {
+                foreach ($notify as $payerUserId => $perUser) {
                     $message = buildNotificationMessage("", $perUser, $periodSummaryLine, $sendPeriodStartSummaryOnly, $userI18n);
                     if ($message === "") {
                         continue;
@@ -416,7 +416,7 @@ while ($userToNotify = $usersToNotify->fetchArray(SQLITE3_ASSOC)) {
                         // to Discord and the rest, so this is a channel failing
                         // rather than the job failing. It is still the case that
                         // a payment reminder somebody asked for was not sent.
-                        wallos_cron_problem('the mail transport of user ' . $userId
+                        wallos_cron_problem('the mail transport of user ' . $payerUserId
                             . ' is unusable, so no email notification was sent: '
                             . $transport['message']);
                         echo "Email notifications not sent: " . $transport['message'] . "<br />";
@@ -426,7 +426,7 @@ while ($userToNotify = $usersToNotify->fetchArray(SQLITE3_ASSOC)) {
                     $mail = $transport['mailer'];
 
                     // $notify is keyed by household member; they are already loaded.
-                    $user = $household[$userId] ?? [];
+                    $user = $household[$payerUserId] ?? [];
 
                     $emailaddress = !empty($user['email']) ? $user['email'] : $defaultEmail;
                     $name = !empty($user['name']) ? $user['name'] : $defaultName;
@@ -480,10 +480,10 @@ while ($userToNotify = $usersToNotify->fetchArray(SQLITE3_ASSOC)) {
                         . 'so the whole Discord channel was skipped');
                     echo "SSRF attempt detected for Discord webhook URL. Notifications not sent.<br />";
                 } else {
-                    foreach ($notify as $userId => $perUser) {
+                    foreach ($notify as $payerUserId => $perUser) {
                         // Get name of user from household table
                         // $notify is keyed by household member; they are already loaded.
-                        $user = $household[$userId] ?? [];
+                        $user = $household[$payerUserId] ?? [];
 
                         $title = translate('wallos_notification', $userI18n);
 
@@ -542,10 +542,10 @@ while ($userToNotify = $usersToNotify->fetchArray(SQLITE3_ASSOC)) {
                         . 'so the whole Gotify channel was skipped');
                     echo "SSRF attempt detected for Gotify server URL. Notifications not sent.<br />";
                 } else {
-                    foreach ($notify as $userId => $perUser) {
+                    foreach ($notify as $payerUserId => $perUser) {
                         // Get name of user from household table
                         // $notify is keyed by household member; they are already loaded.
-                        $user = $household[$userId] ?? [];
+                        $user = $household[$payerUserId] ?? [];
 
                         $name = $user['name'] ?? "";
                         $message = buildNotificationMessage($name, $perUser, $periodSummaryLine, $sendPeriodStartSummaryOnly, $userI18n);
@@ -598,10 +598,10 @@ while ($userToNotify = $usersToNotify->fetchArray(SQLITE3_ASSOC)) {
 
             // Telegram notifications if enabled
             if ($telegramNotificationsEnabled) {
-                foreach ($notify as $userId => $perUser) {
+                foreach ($notify as $payerUserId => $perUser) {
                     // Get name of user from household table
                     // $notify is keyed by household member; they are already loaded.
-                    $user = $household[$userId] ?? [];
+                    $user = $household[$payerUserId] ?? [];
 
                     if ($user['name']) {
                         $name = $user['name'];
@@ -652,10 +652,10 @@ while ($userToNotify = $usersToNotify->fetchArray(SQLITE3_ASSOC)) {
 
             // PushPlus notifications if enabled
             if ($pushplusNotificationsEnabled) {
-                foreach ($notify as $userId => $perUser) {
+                foreach ($notify as $payerUserId => $perUser) {
                     // Get name of user from household table
                     // $notify is keyed by household member; they are already loaded.
-                    $user = $household[$userId] ?? [];
+                    $user = $household[$payerUserId] ?? [];
 
                     // Build Message Content
                     $name = $user['name'] ?? "";
@@ -719,10 +719,10 @@ while ($userToNotify = $usersToNotify->fetchArray(SQLITE3_ASSOC)) {
                         . 'so the whole Mattermost channel was skipped');
                     echo "SSRF attempt detected for Mattermost webhook URL. Notifications not sent.<br />";
                 } else {
-                    foreach ($notify as $userId => $perUser) {
+                    foreach ($notify as $payerUserId => $perUser) {
                         // Get name of user from household table
                         // $notify is keyed by household member; they are already loaded.
-                        $user = $household[$userId] ?? [];
+                        $user = $household[$payerUserId] ?? [];
 
                         // Build Message Content
                         $name = $user['name'] ?? "";
@@ -787,10 +787,10 @@ while ($userToNotify = $usersToNotify->fetchArray(SQLITE3_ASSOC)) {
 
             // Pushover notifications if enabled
             if ($pushoverNotificationsEnabled) {
-                foreach ($notify as $userId => $perUser) {
+                foreach ($notify as $payerUserId => $perUser) {
                     // Get name of user from household table
                     // $notify is keyed by household member; they are already loaded.
-                    $user = $household[$userId] ?? [];
+                    $user = $household[$payerUserId] ?? [];
 
                     if ($user['name']) {
                         $name = $user['name'];
@@ -837,10 +837,10 @@ while ($userToNotify = $usersToNotify->fetchArray(SQLITE3_ASSOC)) {
                         . 'so the whole Ntfy channel was skipped');
                     echo "SSRF attempt detected for Ntfy host URL. Notifications not sent.<br />";
                 } else {
-                    foreach ($notify as $userId => $perUser) {
+                    foreach ($notify as $payerUserId => $perUser) {
                         // Get name of user from household table
                         // $notify is keyed by household member; they are already loaded.
-                        $user = $household[$userId] ?? [];
+                        $user = $household[$payerUserId] ?? [];
 
                         $name = $user['name'] ?? "";
                         $message = buildNotificationMessage($name, $perUser, $periodSummaryLine, $sendPeriodStartSummaryOnly, $userI18n);
@@ -951,10 +951,10 @@ while ($userToNotify = $usersToNotify->fetchArray(SQLITE3_ASSOC)) {
                         . 'so the whole webhook channel was skipped');
                     echo "SSRF attempt detected for webhook URL. Notifications not sent.<br />";
                 } else {
-                    foreach ($notify as $userId => $perUser) {
+                    foreach ($notify as $payerUserId => $perUser) {
                         // Get name of user from household table
                         // $notify is keyed by household member; they are already loaded.
-                        $user = $household[$userId] ?? [];
+                        $user = $household[$payerUserId] ?? [];
 
                         // Reset per member (#128 bycatch): carried over, a
                         // member without a name inherited the previous
@@ -1029,10 +1029,10 @@ while ($userToNotify = $usersToNotify->fetchArray(SQLITE3_ASSOC)) {
 
             // Serverchan notifications if enabled
             if ($serverchanNotificationsEnabled) {
-                foreach ($notify as $userId => $perUser) {
+                foreach ($notify as $payerUserId => $perUser) {
                     // Get name of user from household table
                     // $notify is keyed by household member; they are already loaded.
-                    $user = $household[$userId] ?? [];
+                    $user = $household[$payerUserId] ?? [];
 
                     $title = translate('wallos_notification', $userI18n);
                     $name = $user['name'] ?? "";

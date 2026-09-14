@@ -1,5 +1,35 @@
 # Changelog
 
+## Unreleased
+
+### Security
+
+* **notifications:** the SSRF check in the cron is asked about the account
+  again, not about whichever household member the previous channel happened to
+  end on. The account being notified is held in `$userId`, set once per user —
+  and every channel then iterates its subscriptions by payer, written `foreach
+  ($notify as $userId => $perUser)`, which overwrites it and leaves it
+  overwritten for everything that follows. What follows is
+  `is_url_safe_for_ssrf($url, $db, $userId)` in the Discord, Gotify,
+  Mattermost, ntfy and webhook blocks, whose third argument decides exactly one
+  question: is this an administrator, who may reach a private address. Asked
+  with a household member id, it is a question about somebody who need not be
+  an account at all.
+
+  Measured on a real cron run against a local receiver, one condition changed
+  between the two runs: with Discord enabled, whose loop runs first, the
+  webhook to a permitted private address was refused — "SSRF attempt detected
+  for webhook URL", nothing sent; with Discord disabled and everything else
+  identical, "Webhook Notification sent" and the POST arrived. Same owner, an
+  admin; same allowlist; same target. Whether a webhook reached a permitted
+  address depended on which other channel had run before it.
+
+  The first check is already affected, so no channel saw the right number: the
+  email loop runs at line 403 and the Discord check is at 477. The eleven
+  per-payer loops now bind `$payerUserId`, which is the name the web push block
+  already used — the reason to read this as an oversight rather than a
+  decision.
+
 ## [5.18.0](https://github.com/thorstenhornung1/Wallos/releases/tag/v5.18.0) (2026-09-13)
 
 ### Added
