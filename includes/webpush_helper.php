@@ -423,14 +423,31 @@ function webpush_get_vapid_keys($db)
         return false;
     }
 
-    // Only into empty columns, and read back afterwards.
-    //
-    // Two first uses at once - the settings page of one household member and
-    // the notification cron, say - each generated a pair and each wrote it,
-    // and the second write won. Every device that had already subscribed with
-    // the first key was then answered 403 by its push service for good: 403 is
-    // not 404/410, so nothing prunes the row, nothing appears in the settings
-    // page, and the notifications simply stop.
+    return webpush_store_vapid_keys($db, $keys);
+}
+
+/**
+ * Persists a freshly generated keypair, unless the installation has one by
+ * now, and answers with whichever pair is stored afterwards.
+ *
+ * The write has to be conditional, and the row has to be read back, because a
+ * push subscription is bound to the applicationServerKey the browser saw when
+ * it subscribed. Two first uses at once - the settings page of one household
+ * member and the notification cron, say - each find the columns empty, each
+ * generate a pair, and with an unconditional UPDATE the second write wins.
+ * Every device that had already subscribed with the first key is then answered
+ * 403 by its push service from that moment on, and 403 is not 404/410, so the
+ * cron prunes nothing, the settings page still lists the device, and the
+ * notifications simply stop with nothing anywhere to say why.
+ *
+ * Sent upstream as #1229, in this shape, so the two trees keep the same one.
+ *
+ * @param WallosDatabase|SQLite3 $db
+ * @param array{public: string, private_pem: string} $keys
+ * @return array{public: string, private_pem: string}|false
+ */
+function webpush_store_vapid_keys($db, $keys)
+{
     $stmt = $db->prepare("UPDATE admin SET vapid_public_key = :public, vapid_private_key = :private
                           WHERE vapid_public_key IS NULL OR vapid_public_key = ''
                              OR vapid_private_key IS NULL OR vapid_private_key = ''");
@@ -445,10 +462,12 @@ function webpush_get_vapid_keys($db)
         return false;
     }
 
-    $stored = $db->querySingle('SELECT vapid_public_key, vapid_private_key FROM admin LIMIT 1', true);
+    // Read back rather than returning what was generated: when the UPDATE
+    // matched nothing, the pair that matters is the one already in the row.
+    $row = $db->querySingle('SELECT vapid_public_key, vapid_private_key FROM admin LIMIT 1', true);
 
-    if ($stored !== false && !empty($stored['vapid_public_key']) && !empty($stored['vapid_private_key'])) {
-        return ['public' => $stored['vapid_public_key'], 'private_pem' => $stored['vapid_private_key']];
+    if ($row !== false && !empty($row['vapid_public_key']) && !empty($row['vapid_private_key'])) {
+        return ['public' => $row['vapid_public_key'], 'private_pem' => $row['vapid_private_key']];
     }
 
     return $keys;

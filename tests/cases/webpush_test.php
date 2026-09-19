@@ -741,3 +741,36 @@ wallos_test('the keypair a second caller sees is the one already stored', functi
 
     $db->close();
 });
+
+wallos_test('a second first-use does not replace the keypair the browsers already know', function () {
+    if (wallos_test_skip_unless_sqlite('writes the admin row')) {
+        return;
+    }
+
+    // The race this guards against, without a second process: whichever pair
+    // is written first is the one a browser may already have subscribed with,
+    // and a subscription is bound to the applicationServerKey it saw. Sent
+    // upstream as #1229.
+    $db = wallos_test_open_database();
+
+    $first = webpush_generate_vapid_keypair();
+    $second = webpush_generate_vapid_keypair();
+
+    assert_true($first !== false && $second !== false, 'two keypairs were generated');
+    assert_true($first['public'] !== $second['public'], 'and they really are different');
+
+    $stored = webpush_store_vapid_keys($db, $first);
+    assert_same($first['public'], $stored['public'], 'the first write is stored');
+
+    $answered = webpush_store_vapid_keys($db, $second);
+
+    assert_same($first['public'], $answered['public'],
+        'the second caller is answered with the stored pair, not its own');
+    assert_same($first['private_pem'], $answered['private_pem'],
+        'including the private half, so what it signs with matches what it sends');
+
+    $row = $db->querySingle('SELECT vapid_public_key FROM admin LIMIT 1', true);
+    assert_same($first['public'], $row['vapid_public_key'], 'and the row still holds the first pair');
+
+    $db->close();
+});
