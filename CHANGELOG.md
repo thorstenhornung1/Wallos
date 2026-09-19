@@ -2,6 +2,74 @@
 
 ## Unreleased
 
+## [5.19.0](https://github.com/thorstenhornung1/Wallos/releases/tag/v5.19.0) (2026-09-19)
+
+Upstream 5.8.0 and 5.8.1 came home, and with them the six pull requests this
+fork had open there: the webhook JSON escape, the language an identity provider
+creates an account in, the localized default names, instance SMTP and the
+server URL, frankfurter.dev as a keyless currency provider, and the SSRF check
+that asks about the account rather than the last payer.
+
+Upstream also built Web Push independently while those were in flight. Two
+implementations of one channel is a divergence that only grows, so **this
+release puts upstream's implementation underneath and keeps this fork's audit
+work on top of it**. Nobody has to register a browser again: the devices and
+the instance keypair are carried over by migration 000090.
+
+### Added
+
+* **notifications:** a test button for web push, and a switch per account. A
+  device that stays registered while the switch is off is somebody who muted
+  the channel rather than somebody who left, and the notification run now asks
+  for both before it sends.
+* **notifications:** a browser whose PHP build cannot locate its own
+  `openssl.cnf` is no longer left without the channel. Such a build fails every
+  key operation, and since a key is generated per message it was not the
+  keypair that broke there but every single send.
+* **dashboard:** clearer update notices with release links, from upstream.
+
+### Changed
+
+* **notifications:** web push is stored the way upstream stores it — a
+  surrogate id per row with the account and endpoint unique together, the
+  registration date as a string, and the instance VAPID keypair on the admin
+  row in PEM. Everything this fork added sits on that: every push padded to the
+  same size, a message that lives until the last renewal it names plus two days
+  rather than four weeks for everything, the subscription shape checked at the
+  door, a device list the page can show without ever learning an endpoint, at
+  most twenty devices per account, and an endpoint that changes hands only for
+  a request that can show its client key.
+
+  What this buys beyond the tidiness: each of those is now a difference against
+  the code upstream runs, so it can be offered there one at a time instead of
+  as a second implementation of the channel.
+
+* **notifications:** `WALLOS_VAPID_PUBLIC_KEY` and
+  `WALLOS_VAPID_PRIVATE_KEY`(`_FILE`) still win over the database, and an
+  unreadable secret file is now reported rather than quietly falling back to
+  the stored pair. Falling back would sign with a key no browser subscribed to,
+  which every push service answers 403 to — and 403 prunes nothing and shows
+  nothing.
+
+### Fixed
+
+* **categories:** the placeholder category is recognised in the account's
+  language rather than by the English words "No category". Since this fork
+  seeds those names translated, every display site comparing against the
+  English literal showed the seeded name where the translated label belonged.
+  Upstream found this in its own copy of the seeding; the fix reads the same
+  translation table the seeding reads, so the two cannot drift apart.
+* **notifications:** the instance keypair is written only into empty columns
+  and read back afterwards. Two first uses at once — a settings page and the
+  notification run, say — each generated a pair and the second write won, which
+  left every already-subscribed browser bound to a key the instance no longer
+  held.
+* **database:** a push subscription that never recorded a registration date no
+  longer claims 1970 on PostgreSQL. The migration has a branch per backend and
+  only the SQLite one had ever run, because fresh PostgreSQL installations
+  apply the schema file rather than the chain; running the same five migration
+  cases on both backends found it at once.
+
 ### Security
 
 * **notifications:** the SSRF check in the cron is asked about the account
@@ -29,6 +97,13 @@
   per-payer loops now bind `$payerUserId`, which is the name the web push block
   already used — the reason to read this as an oversight rather than a
   decision.
+
+### Internal
+
+* 986 tests, 22964 assertions on SQLite and 22998 on PostgreSQL. The web push
+  suite is upstream's nine cases plus seventeen of this fork's, all against the
+  shared implementation, with the RFC 8291 vector asking for no padding through
+  the parameter a padding change would reach upstream by.
 
 ## [5.18.0](https://github.com/thorstenhornung1/Wallos/releases/tag/v5.18.0) (2026-09-13)
 
