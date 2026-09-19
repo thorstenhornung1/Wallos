@@ -19,6 +19,8 @@
  */
 function push_migration_old_shape($db, array $rows)
 {
+    // Both backends: the shape migration 000083 left behind, which is what an
+    // installation upgrading from this fork's own releases actually holds.
     $db->exec('DROP TABLE IF EXISTS push_subscriptions');
     $db->exec('DROP TABLE IF EXISTS push_notifications');
     $db->exec('CREATE TABLE push_subscriptions (
@@ -72,10 +74,6 @@ function push_migration_raw_keypair()
 }
 
 wallos_test('a device registered before the change keeps its subscription', function () {
-    if (wallos_test_skip_unless_sqlite('replays a SQLite migration')) {
-        return;
-    }
-
     $db = wallos_test_open_database();
     wallos_test_create_user($db, 1, 'one');
     wallos_test_create_user($db, 2, 'two');
@@ -111,10 +109,6 @@ wallos_test('a device registered before the change keeps its subscription', func
 });
 
 wallos_test('an account with a device is not switched off by the upgrade', function () {
-    if (wallos_test_skip_unless_sqlite('replays a SQLite migration')) {
-        return;
-    }
-
     $db = wallos_test_open_database();
     wallos_test_create_user($db, 1, 'one');
     wallos_test_create_user($db, 2, 'two');
@@ -140,10 +134,6 @@ wallos_test('an account with a device is not switched off by the upgrade', funct
 });
 
 wallos_test('the keypair the browsers already know is carried over, not replaced', function () {
-    if (wallos_test_skip_unless_sqlite('replays a SQLite migration')) {
-        return;
-    }
-
     $db = wallos_test_open_database();
     $keypair = push_migration_raw_keypair();
 
@@ -180,10 +170,6 @@ wallos_test('the keypair the browsers already know is carried over, not replaced
 });
 
 wallos_test('a keypair that cannot be converted stops the migration instead of half writing it', function () {
-    if (wallos_test_skip_unless_sqlite('replays a SQLite migration')) {
-        return;
-    }
-
     $db = wallos_test_open_database();
     push_migration_old_shape($db, []);
 
@@ -211,10 +197,6 @@ wallos_test('a keypair that cannot be converted stops the migration instead of h
 });
 
 wallos_test('the migration can run twice', function () {
-    if (wallos_test_skip_unless_sqlite('replays a SQLite migration')) {
-        return;
-    }
-
     $db = wallos_test_open_database();
     wallos_test_create_user($db, 1, 'one');
     push_migration_old_shape($db, [1 => ['https://push.example/one', 1757894400]]);

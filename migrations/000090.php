@@ -72,8 +72,12 @@ if ($db->tableExists('push_subscriptions') && !$db->columnExists('push_subscript
             'ALTER TABLE "push_subscriptions" DROP CONSTRAINT IF EXISTS "push_subscriptions_pkey"',
             'ALTER TABLE "push_subscriptions" ADD COLUMN "id" SERIAL PRIMARY KEY',
             'ALTER TABLE "push_subscriptions" ALTER COLUMN "created_at" DROP DEFAULT',
+            // The same CASE the SQLite branch applies: a row that never had a
+            // date keeps having none rather than claiming the epoch.
             'ALTER TABLE "push_subscriptions" ALTER COLUMN "created_at" TYPE TEXT
-                USING to_char(to_timestamp("created_at"), \'YYYY-MM-DD HH24:MI:SS\')',
+                USING CASE WHEN COALESCE("created_at", 0) > 0
+                           THEN to_char(to_timestamp("created_at"), \'YYYY-MM-DD HH24:MI:SS\')
+                           ELSE \'\' END',
             'ALTER TABLE "push_subscriptions" ALTER COLUMN "created_at" SET DEFAULT \'\'',
         ];
 
