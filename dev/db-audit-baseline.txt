@@ -11,8 +11,8 @@
 #
 # Do not edit by hand — run dev/db-audit.sh --update and commit the diff.
 #
-# total: 1615 matches in 246 file(s)
-admin.php	5
+# total: 1633 matches in 248 file(s)
+admin.php	4
 api/admin/get_admin_settings.php	1
 api/admin/set_admin_settings.php	2
 api/admin/set_disable_password_login.php	1
@@ -208,6 +208,7 @@ migrations/000063.php	2
 migrations/000068.php	1
 migrations/000069.php	1
 migrations/000070.php	2
+migrations/000090.php	3
 passwordreset.php	14
 profile.php	5
 registration.php	25
@@ -244,6 +245,7 @@ tests/cases/oidc_provisioning_test.php	1
 tests/cases/performance_test.php	31
 tests/cases/pgsql_upgrade_test.php	4
 tests/cases/portable_sql_test.php	2
+tests/cases/push_migration_test.php	16
 tests/cases/rate_freshness_test.php	4
 tests/cases/session_retention_test.php	9
 tests/cases/session_tokens_test.php	6

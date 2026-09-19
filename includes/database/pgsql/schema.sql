@@ -20,7 +20,7 @@
 --   * Every identifier is quoted, because "user" and "order" are reserved words
 --     and a keyword list kept in the generator would be wrong eventually.
 
--- 45 tables, 88 migrations recorded as applied.
+-- 46 tables, 89 migrations recorded as applied.
 
 CREATE TABLE "admin" (
     "id" SERIAL PRIMARY KEY,
@@ -40,7 +40,9 @@ CREATE TABLE "admin" (
     "oidc_oauth_enabled" INTEGER DEFAULT 0,
     "local_webhook_notifications_allowlist" TEXT DEFAULT '',
     "smtp_from_name" TEXT DEFAULT '',
-    "allow_standard_users_local_webhooks" INTEGER DEFAULT 0
+    "allow_standard_users_local_webhooks" INTEGER DEFAULT 0,
+    "vapid_public_key" TEXT DEFAULT '',
+    "vapid_private_key" TEXT DEFAULT ''
 );
 
 CREATE TABLE "ai_recommendations" (
@@ -322,14 +324,19 @@ CREATE TABLE "payment_methods" (
     "user_id" INTEGER DEFAULT 1
 );
 
+CREATE TABLE "push_notifications" (
+    "enabled" INTEGER DEFAULT 0,
+    "user_id" INTEGER
+);
+
 CREATE TABLE "push_subscriptions" (
-    "endpoint" TEXT,
-    "user_id" INTEGER NOT NULL,
+    "id" SERIAL PRIMARY KEY,
+    "user_id" INTEGER,
+    "endpoint" TEXT NOT NULL,
     "p256dh" TEXT NOT NULL,
     "auth" TEXT NOT NULL,
-    "created_at" INTEGER DEFAULT 0 NOT NULL,
     "user_agent" TEXT DEFAULT '',
-    PRIMARY KEY ("endpoint")
+    "created_at" TEXT DEFAULT ''
 );
 
 CREATE TABLE "pushover_notifications" (
@@ -480,6 +487,8 @@ ALTER TABLE "ntfy_notifications" ADD CONSTRAINT "ntfy_notifications_user_id_fkey
     FOREIGN KEY ("user_id") REFERENCES "user" ("id");
 ALTER TABLE "oidc_sessions" ADD CONSTRAINT "oidc_sessions_user_id_fkey"
     FOREIGN KEY ("user_id") REFERENCES "user" ("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "push_notifications" ADD CONSTRAINT "push_notifications_user_id_fkey"
+    FOREIGN KEY ("user_id") REFERENCES "user" ("id");
 ALTER TABLE "push_subscriptions" ADD CONSTRAINT "push_subscriptions_user_id_fkey"
     FOREIGN KEY ("user_id") REFERENCES "user" ("id");
 ALTER TABLE "serverchan_notifications" ADD CONSTRAINT "serverchan_notifications_user_id_fkey"
@@ -511,7 +520,7 @@ CREATE UNIQUE INDEX "idx_ntfy_notifications_user" ON "ntfy_notifications" ("user
 CREATE INDEX "idx_oidc_sessions_session" ON "oidc_sessions" ("session_id");
 CREATE INDEX "idx_oidc_sessions_sid" ON "oidc_sessions" ("sid");
 CREATE INDEX "idx_oidc_sessions_user" ON "oidc_sessions" ("user_id");
-CREATE INDEX "idx_push_subscriptions_user" ON "push_subscriptions" ("user_id");
+CREATE UNIQUE INDEX "push_subscriptions_user_endpoint" ON "push_subscriptions" ("user_id", "endpoint");
 CREATE UNIQUE INDEX "idx_pushover_notifications_user" ON "pushover_notifications" ("user_id");
 CREATE INDEX "idx_subscriptions_user_inactive_next_payment" ON "subscriptions" ("user_id", "inactive", "next_payment");
 CREATE INDEX "idx_subscriptions_user_notify_inactive" ON "subscriptions" ("user_id", "notify", "inactive");
@@ -523,8 +532,8 @@ CREATE INDEX "idx_user_roles_user_role" ON "user_roles" ("user_id", "role");
 -- chain creates. Columns defaulting to CURRENT_TIMESTAMP are omitted so they
 -- record the moment of installation rather than the moment of generation.
 
-INSERT INTO "admin" ("id", "registrations_open", "max_users", "require_email_verification", "server_url", "smtp_address", "smtp_port", "smtp_username", "smtp_password", "from_email", "encryption", "login_disabled", "latest_version", "update_notification", "oidc_oauth_enabled", "local_webhook_notifications_allowlist", "smtp_from_name", "allow_standard_users_local_webhooks") VALUES
-    (1, 0, 0, 0, '', '', 587, '', '', '', 'tls', 0, 'v2.21.1', 0, 0, '', '', 0);
+INSERT INTO "admin" ("id", "registrations_open", "max_users", "require_email_verification", "server_url", "smtp_address", "smtp_port", "smtp_username", "smtp_password", "from_email", "encryption", "login_disabled", "latest_version", "update_notification", "oidc_oauth_enabled", "local_webhook_notifications_allowlist", "smtp_from_name", "allow_standard_users_local_webhooks", "vapid_public_key", "vapid_private_key") VALUES
+    (1, 0, 0, 0, '', '', 587, '', '', '', 'tls', 0, 'v2.21.1', 0, 0, '', '', 0, '', '');
 
 INSERT INTO "categories" ("id", "name", "order", "user_id") VALUES
     (1, 'No category', 1, 1),
@@ -709,7 +718,8 @@ INSERT INTO "migrations" ("id", "migration") VALUES
     (85, 'migrations/000086.php'),
     (86, 'migrations/000087.php'),
     (87, 'migrations/000088.php'),
-    (88, 'migrations/000089.php');
+    (88, 'migrations/000089.php'),
+    (89, 'migrations/000090.php');
 
 INSERT INTO "payment_methods" ("id", "name", "icon", "enabled", "order", "user_id") VALUES
     (1, 'PayPal', 'images/uploads/icons/paypal.png', 1, 1, 1),

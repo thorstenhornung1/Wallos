@@ -77,8 +77,9 @@ function deletion_fixture_rows($references, $currencyId)
         // currency id (which differs per account) the way subscriptions below
         // embeds its references, rather than a constant that would collide when
         // two accounts are seeded.
+        'push_notifications' => 'INSERT INTO push_notifications (enabled, user_id) VALUES (1, :u)',
         'push_subscriptions' => 'INSERT INTO push_subscriptions (user_id, endpoint, p256dh, auth, created_at)
-                                 VALUES (:u, \'https://push.example/device-' . (int) $currencyId . '\', \'p\', \'a\', 0)',
+                                 VALUES (:u, \'https://push.example/device-' . (int) $currencyId . '\', \'p\', \'a\', \'\')',
         'serverchan_notifications' => 'INSERT INTO serverchan_notifications (enabled, sendkey, user_id)
                                        VALUES (1, \'k\', :u)',
         'settings' => 'INSERT INTO settings (dark_theme, color_theme, user_id) VALUES (1, \'blue\', :u)',
