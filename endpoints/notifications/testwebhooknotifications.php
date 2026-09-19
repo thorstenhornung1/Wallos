@@ -58,7 +58,7 @@ if (
         $payload = str_replace($placeholder, $value, $payload);
     }
 
-    $customheaders = json_decode($data["customheaders"], true);
+    $customheaders = wallos_webhook_custom_headers($data["customheaders"]);
     $ignore_ssl = $data["ignore_ssl"];
 
     $ch = curl_init();

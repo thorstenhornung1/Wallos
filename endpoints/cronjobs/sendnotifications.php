@@ -869,14 +869,7 @@ while ($userToNotify = $usersToNotify->fetchArray(SQLITE3_ASSOC)) {
                             continue;
                         }
 
-                        $headers = json_decode($ntfy["headers"], true);
-                        $customheaders = [];
-
-                        if (is_array($headers)) {
-                            $customheaders = array_map(function ($key, $value) {
-                                return "$key: $value";
-                            }, array_keys($headers), $headers);
-                        }
+                        $customheaders = wallos_webhook_custom_headers($ntfy["headers"]);
 
                         $ch = curl_init();
 
@@ -1027,9 +1020,7 @@ while ($userToNotify = $usersToNotify->fetchArray(SQLITE3_ASSOC)) {
                             // Through the shared helper (#128): a JSON body
                             // announces itself unless a custom Content-Type
                             // already does.
-                            $customheaders = !empty($webhook['headers'])
-                                ? json_decode($webhook["headers"], true)
-                                : null;
+                            $customheaders = wallos_webhook_custom_headers($webhook['headers']);
                             $requestHeaders = wallos_webhook_headers($payload, $customheaders);
                             if (!empty($requestHeaders)) {
                                 curl_setopt($ch, CURLOPT_HTTPHEADER, $requestHeaders);

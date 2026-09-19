@@ -15,6 +15,7 @@ require_once __DIR__ . '/../../includes/notification_settings.php';
 wallos_cron_database($db);
 
 require 'settimezone.php';
+require_once __DIR__ . '/../../includes/webhook_headers.php';
 
 // Get all user ids
 $query = "SELECT id, username FROM \"user\"";
@@ -613,8 +614,12 @@ while ($userToNotify = $usersToNotify->fetchArray(SQLITE3_ASSOC)) {
                             curl_setopt($ch, CURLOPT_POSTFIELDS, $payload);
                 
                             // Add headers if they exist
-                            if (!empty($webhook['headers'])) {
-                                $customheaders = preg_split("/\r\n|\n|\r/", $webhook['headers']);
+                            // The same reading as every other job since
+                            // upstream #1212: this one used to split the field
+                            // into lines, so a value that worked here was a
+                            // value the notification run could not read.
+                            $customheaders = wallos_webhook_custom_headers($webhook['headers']);
+                            if (!empty($customheaders)) {
                                 curl_setopt($ch, CURLOPT_HTTPHEADER, $customheaders);
                             }
                 

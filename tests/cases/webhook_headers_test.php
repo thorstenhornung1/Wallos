@@ -87,3 +87,52 @@ wallos_test('the account the SSRF check is asked about is the account, not the l
             'the ' . $channel . ' check asks about $userId, the account');
     }
 });
+
+/* ---------------------------------------------------------------------------
+   What the field may hold at all (upstream #1212).
+
+   The same stored value used to mean four things: JSON to the notification
+   job, lines to the cancellation job, an object to map for ntfy, and
+   "only if usable" to the test button. Upstream's notification job ended its
+   whole run on a value the others ignored. One reader answers for all of them
+   now, here and in the pull request that carries it upstream.
+   --------------------------------------------------------------------------- */
+
+wallos_test('a headers value that is not JSON costs the headers, not the run', function () {
+    assert_same([], wallos_webhook_custom_headers('Content-Type: application/json'),
+        'a plain header line is not JSON, so it yields nothing');
+    assert_same([], wallos_webhook_custom_headers('{"Authorization": '), 'truncated JSON yields nothing');
+    assert_same([], wallos_webhook_custom_headers('null'), 'the literal null yields nothing');
+    assert_same([], wallos_webhook_custom_headers('"a string"'), 'a JSON string is not a header list');
+    assert_same([], wallos_webhook_custom_headers(''), 'an empty field yields nothing');
+    assert_same([], wallos_webhook_custom_headers(null), 'a column that is NULL yields nothing');
+});
+
+wallos_test('both shapes that were already in use produce header lines', function () {
+    assert_same(['Authorization: Bearer tk_123'],
+        wallos_webhook_custom_headers('{"Authorization": "Bearer tk_123"}'),
+        'an object becomes "Name: value"');
+    assert_same(['Content-Type: application/json', 'X-Wallos: 1'],
+        wallos_webhook_custom_headers('["Content-Type: application/json", "X-Wallos: 1"]'),
+        'a list is taken as complete header lines');
+    assert_same(['Ok: 1'], wallos_webhook_custom_headers('{"Ok": "1", "Nested": {"a": "b"}}'),
+        'an entry that cannot be one line is skipped rather than stringified');
+});
+
+wallos_test('every job reads the field through the one function', function () {
+    $readers = [
+        'endpoints/cronjobs/sendnotifications.php',
+        'endpoints/cronjobs/sendcancellationnotifications.php',
+        'endpoints/notifications/testwebhooknotifications.php',
+    ];
+
+    foreach ($readers as $path) {
+        $source = file_get_contents(WALLOS_ROOT . '/' . $path);
+
+        assert_contains('wallos_webhook_custom_headers(', $source, $path . ' uses the shared reader');
+        assert_not_contains('preg_split("/\r\n|\n|\r/", $webhook[\'headers\'])', $source,
+            $path . ' does not split the field into lines');
+        assert_not_contains('json_decode($webhook["headers"]', $source,
+            $path . ' does not decode the field on its own');
+    }
+});
