@@ -1081,6 +1081,8 @@ while ($userToNotify = $usersToNotify->fetchArray(SQLITE3_ASSOC)) {
                 }
             }
 
+            // Push notifications if enabled
+
         } else {
             if (php_sapi_name() !== 'cli') {
                 echo "Nothing to notify.<br />";

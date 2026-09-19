@@ -16,10 +16,12 @@ if ($isAdmin != 1) {
     exit;
 }
 
-// get admin settings from admin table
-$stmt = $db->prepare('SELECT * FROM admin');
-$result = $stmt->execute();
-$settings = $result->fetchArray(SQLITE3_ASSOC);
+// get admin settings from admin table, with anything the deployment owns
+// applied over them
+$adminConfiguration = wallos_get_effective_admin_configuration($db);
+$settings = $adminConfiguration['settings'];
+$instanceManagedFields = $adminConfiguration['managed_fields'];
+$instanceNotes = $adminConfiguration['notes'];
 
 $oidcConfiguration = wallos_get_effective_oidc_configuration($db);
 $oidcSettings = $oidcConfiguration['settings'];
@@ -897,23 +899,27 @@ $loginDisabledAllowed = $userCount == 1 && $settings['registrations_open'] == 0;
                 if ($hasUpdate) {
                     ?>
                     <div class="updates-list">
-                        <p><?= translate('new_version_available', $i18n) ?>.</p>
+                        <p class="updates-list-title">
+                            <i class="fa-solid fa-arrow-up"></i>
+                            <?= translate('new_version_available', $i18n) ?>.
+                        </p>
                         <p>
                             <?= translate('current_version', $i18n) ?>:
                             <span>
-                                <?= $version ?>
-                                <a href="https://github.com/ellite/Wallos/releases/tag/<?= $version ?>" target="_blank">
-                                    <i class="fa-solid fa-external-link"></i>
+                                <?= htmlspecialchars($version) ?>
+                                <a href="https://github.com/ellite/Wallos/releases/tag/<?= htmlspecialchars($version) ?>"
+                                    target="_blank" title="<?= translate('external_url', $i18n) ?>" rel="noreferrer">
+                                    <i class="fa-solid fa-arrow-up-right-from-square"></i>
                                 </a>
                             </span>
                         </p>
                         <p>
                             <?= translate('latest_version', $i18n) ?>:
-                            <span>
-                                <?= $latestVersion ?>
-                                <a href="https://github.com/ellite/Wallos/releases/tag/<?= $latestVersion ?>"
-                                    target="_blank">
-                                    <i class="fa-solid fa-external-link"></i>
+                            <span class="updates-list-latest">
+                                <?= htmlspecialchars($latestVersion) ?>
+                                <a href="https://github.com/ellite/Wallos/releases/tag/<?= htmlspecialchars($latestVersion) ?>"
+                                    target="_blank" title="<?= translate('external_url', $i18n) ?>" rel="noreferrer">
+                                    <i class="fa-solid fa-arrow-up-right-from-square"></i>
                                 </a>
                             </span>
                         </p>

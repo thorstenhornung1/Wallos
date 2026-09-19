@@ -60,6 +60,26 @@ function wallos_default_categories($language)
 }
 
 /**
+ * The seeded name of the placeholder category in one language.
+ *
+ * The display sites recognise the row Wallos seeds by its name, and since the
+ * seed is localised the English literal stopped matching: an account created
+ * in German holds "Keine Kategorie", and every site comparing against
+ * "No category" showed the seeded name instead of the translated label.
+ *
+ * Same lookup the seeding uses, so the two cannot drift apart.
+ *
+ * @param string $language
+ * @return string
+ */
+function wallos_default_no_category_name($language)
+{
+    $translations = wallos_translations($language);
+
+    return $translations['no_category'] ?? 'No category';
+}
+
+/**
  * Creates the default categories for a new account.
  *
  * @param SQLite3 $db

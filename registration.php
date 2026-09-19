@@ -318,6 +318,7 @@ if (isset($_POST['username'])) {
 
                     $requireValidation = true;
                 }
+            } else {
             }
 
             $db->close();

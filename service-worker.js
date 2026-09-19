@@ -1,4 +1,4 @@
-const STATIC_CACHE = 'static-cache-v7';
+const STATIC_CACHE = 'static-cache-v8';
 const PAGES_CACHE = 'pages-cache-v1';
 const LOGOS_CACHE = 'logos-cache-v2';
 
