@@ -6,6 +6,7 @@ require_once '../../includes/validate_endpoint.php';
 require_once '../../includes/oidc_settings.php';
 require_once '../../includes/oidc/oidc_profile_sync.php';
 require_once '../../includes/currency_provider.php';
+require_once '../../includes/user_provisioning.php';
 
 if (!file_exists('../../images/uploads/logos')) {
     mkdir('../../images/uploads/logos', 0777, true);
@@ -287,6 +288,13 @@ if (
     $result = $stmt->execute();
 
     if ($result) {
+        // The categories this account was seeded with follow the language it
+        // just chose, as far as they are still the seeded ones. Compared
+        // against the language on the row rather than the cookie below, which
+        // is the interface language and can differ.
+        wallos_localize_default_categories_on_language_change(
+            $db, $userId, (string) ($user['language'] ?? 'en'), $language);
+
         $cookieExpire = time() + (30 * 24 * 60 * 60);
         $oldLanguage = isset($_COOKIE['language']) ? $_COOKIE['language'] : "en";
         $root = str_replace('/endpoints/user', '', dirname($_SERVER['PHP_SELF']));

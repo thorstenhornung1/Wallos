@@ -623,6 +623,74 @@ function wallos_default_name_localization_candidates($db, $userId, $language)
 }
 
 /**
+ * Renames an account's still-default category names when it changes its
+ * language.
+ *
+ * The localizer page and its banner cover the currencies and payment methods
+ * an account was seeded with before the seeding spoke its language. Categories
+ * were not covered anywhere: an account that switches to German keeps
+ * "Entertainment" in every list it has, with no way back but renaming
+ * seventeen rows by hand.
+ *
+ * Renaming them needs no confirmation the way the page's candidates do,
+ * because the comparison is exact: only a row that still reads the English
+ * default is written, and only into the same list's entry for the new
+ * language. A category somebody named themselves matches nothing. Subscriptions
+ * reference a category by id, so nothing but the name column moves.
+ *
+ * The guard is here rather than at the call site so it can be tested: a save
+ * that does not touch the language must rename nothing.
+ *
+ * Sent upstream as #1231, where it also covers the payment methods this fork
+ * offers through the page.
+ *
+ * @param WallosDatabase $db
+ * @param int            $userId
+ * @param string         $before the language the account had
+ * @param string         $after  the language it has now
+ * @return int how many rows were renamed
+ */
+function wallos_localize_default_categories_on_language_change($db, $userId, $before, $after)
+{
+    $before = wallos_resolve_language($before);
+    $after = wallos_resolve_language($after);
+
+    if ($before === $after) {
+        return 0;
+    }
+
+    $english = wallos_default_categories($before);
+    $localized = wallos_default_categories($after);
+
+    $stmt = $db->prepare('UPDATE categories SET name = :name
+                          WHERE user_id = :userId AND name = :expected');
+    if ($stmt === false) {
+        return 0;
+    }
+
+    $renamed = 0;
+
+    foreach ($english as $index => $expected) {
+        if (!isset($localized[$index]) || $localized[$index] === $expected) {
+            continue;
+        }
+
+        $stmt->bindValue(':name', $localized[$index], SQLITE3_TEXT);
+        $stmt->bindValue(':userId', (int) $userId, SQLITE3_INTEGER);
+        $stmt->bindValue(':expected', $expected, SQLITE3_TEXT);
+
+        if ($stmt->execute() === false) {
+            return $renamed;
+        }
+
+        $renamed += $db->changes();
+        $stmt->reset();
+    }
+
+    return $renamed;
+}
+
+/**
  * Whether the dashboard should show the discovery banner that points an account
  * at the Settings localizer (issue #165).
  *

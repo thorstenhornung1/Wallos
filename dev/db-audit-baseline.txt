@@ -11,7 +11,7 @@
 #
 # Do not edit by hand — run dev/db-audit.sh --update and commit the diff.
 #
-# total: 1685 matches in 252 file(s)
+# total: 1691 matches in 253 file(s)
 admin.php	4
 api/admin/get_admin_settings.php	1
 api/admin/set_admin_settings.php	2
@@ -150,7 +150,7 @@ includes/ssrf_helper.php	6
 includes/stats_calculations.php	19
 includes/stats_extra_calculations.php	2
 includes/totp_state.php	13
-includes/user_provisioning.php	4
+includes/user_provisioning.php	7
 includes/user_roles.php	21
 includes/webpush_helper.php	34
 index.php	8
@@ -232,6 +232,7 @@ tests/cases/currency_scope_test.php	10
 tests/cases/currency_union_test.php	7
 tests/cases/currency_usage_test.php	4
 tests/cases/database_boundary_test.php	18
+tests/cases/default_language_test.php	3
 tests/cases/delete_before_replace_test.php	6
 tests/cases/id_reuse_test.php	5
 tests/cases/integration_config_test.php	1
