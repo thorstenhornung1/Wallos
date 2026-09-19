@@ -11,7 +11,7 @@
 #
 # Do not edit by hand — run dev/db-audit.sh --update and commit the diff.
 #
-# total: 1683 matches in 252 file(s)
+# total: 1685 matches in 252 file(s)
 admin.php	4
 api/admin/get_admin_settings.php	1
 api/admin/set_admin_settings.php	2
@@ -152,7 +152,7 @@ includes/stats_extra_calculations.php	2
 includes/totp_state.php	13
 includes/user_provisioning.php	4
 includes/user_roles.php	21
-includes/webpush_helper.php	33
+includes/webpush_helper.php	34
 index.php	8
 login.php	16
 logout.php	1
@@ -260,7 +260,7 @@ tests/cases/totp_enrolment_test.php	10
 tests/cases/totp_replay_test.php	6
 tests/cases/user_provisioning_test.php	2
 tests/cases/user_roles_test.php	5
-tests/cases/webpush_test.php	6
+tests/cases/webpush_test.php	7
 tests/fixtures/remember_me_original_upstream.php	7
 totp.php	6
 verifyemail.php	6
