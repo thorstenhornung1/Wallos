@@ -5,6 +5,7 @@ if (!isset($userData)) {
 }
 
 require_once __DIR__ . '/../auth_lifetime.php';
+require_once __DIR__ . '/transactions.php';
 
 $userId = $userData['id'];
 $username = $userData['username'];
@@ -23,7 +24,15 @@ if (isset($userInfo) && is_array($userInfo) && isset($oidcSettings)) {
 $language = wallos_resolve_language($userData['language'] ?? null);
 $main_currency = $userData['main_currency'];
 
-session_regenerate_id(true);
+// Regenerated without deleting the old session, which is then reduced to a
+// pointer at this one for two minutes: a browser whose connection dropped
+// before it received the new cookie retries with the id it has, and lands in
+// the session this login established instead of being asked to sign in again.
+// See wallos_oidc_leave_handover().
+$previousSessionId = session_id();
+session_regenerate_id(false);
+wallos_oidc_leave_handover($previousSessionId, session_id());
+
 $_SESSION['username'] = $username;
 $_SESSION['loggedin'] = true;
 $_SESSION['main_currency'] = $main_currency;

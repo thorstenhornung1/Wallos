@@ -51,6 +51,19 @@ if ($callbackState === '' || ($callbackCode === '' && $callbackError === '')) {
 // with hash_equals against one global state, now over the per-state map.
 $transaction = wallos_oidc_consume_transaction($callbackState);
 if ($transaction === null) {
+    // Before reporting a failure: this may be the second arrival of a callback
+    // whose first attempt succeeded and whose response the browser never
+    // received. The login left the old session pointing at the one it
+    // established, so following that pointer lands the person where the first
+    // attempt put them, instead of asking them to sign in again for a login
+    // that worked.
+    if (wallos_oidc_follow_handover() !== null) {
+        wallos_oidc_log_failure('oidc_handover_followed', ['outcome' => 'signed_in']);
+        $db->close();
+        header("Location: index.php");
+        exit();
+    }
+
     // No transaction for this state. A session that held none at all was most
     // likely dropped between starting and finishing (a cookie lost, a different
     // browser); one that held others but not this is a state that does not match.

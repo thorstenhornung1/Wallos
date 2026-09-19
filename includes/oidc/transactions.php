@@ -204,6 +204,46 @@ function wallos_oidc_bound_transactions()
 }
 
 /**
+ * Writes the session to disk now, and reopens it.
+ *
+ * The callback consumes a transaction and then spends a second or two talking
+ * to the identity provider. Until this existed, the consumption lived only in
+ * memory for that whole exchange: PHP writes the session at the end of the
+ * request, and the OIDC login regenerates the id before that, which deletes
+ * the file the consumption would have been written to.
+ *
+ * A second request carrying the same callback - a browser that retried after
+ * an aborted first attempt, which is what an unstable connection produces -
+ * waits on the session lock, is handed the pre-consumption state, and redeems
+ * the same authorization code a second time. The provider refuses it, because
+ * an authorization code is single-use, and the person is shown a failure for a
+ * login that had in fact succeeded.
+ *
+ * Measured on the production instance on 2026-09-17: two callbacks 61 ms
+ * apart, the first abandoned by the browser, the second answered
+ * invalid_grant.
+ *
+ * @return bool whether the session was written
+ */
+function wallos_oidc_persist_session()
+{
+    if (session_status() !== PHP_SESSION_ACTIVE) {
+        return false;
+    }
+
+    $id = session_id();
+
+    session_write_close();
+
+    // Same id, so the client keeps the session it already has. Reopened
+    // because everything after this point still writes to it.
+    session_id($id);
+    session_start();
+
+    return true;
+}
+
+/**
  * Locates and consumes the transaction for a state — single-use, so the same
  * callback cannot be replayed.
  *
@@ -232,6 +272,11 @@ function wallos_oidc_consume_transaction($state)
         }
     }
 
+    // On disk before the caller does anything slow with it. A transaction that
+    // is consumed in memory only is a transaction a concurrent callback still
+    // sees.
+    wallos_oidc_persist_session();
+
     if ($found === null) {
         return null;
     }
@@ -243,4 +288,126 @@ function wallos_oidc_consume_transaction($state)
     }
 
     return $found;
+}
+
+/**
+ * How long the old session may still point at the new one.
+ *
+ * Long enough for a browser that retried a callback to arrive with the cookie
+ * it had, short enough that a session id somebody else learned is of no use by
+ * the time they try it. The pointer carries no identity of its own: the old
+ * session is emptied down to this one value, so following it is the only thing
+ * it can do.
+ */
+const WALLOS_OIDC_HANDOVER_TTL = 120;
+
+/**
+ * Leaves the session the browser arrived with as a pointer to the one the
+ * login just established.
+ *
+ * session_regenerate_id(true) deletes the old session outright, which is the
+ * right thing when the response reaches the browser: it gets the new cookie
+ * and the old id is worthless. When the response does not reach it - the
+ * connection the first callback was abandoned on - the browser keeps sending
+ * the old id, the login it triggered succeeded under an id nobody told it
+ * about, and the person is asked to sign in again for no reason they can see.
+ *
+ * So the old session is kept for two minutes, emptied of everything except
+ * where to go. This is the pattern the PHP manual describes for
+ * session_regenerate_id() on unstable networks, with the timeout it suggests.
+ *
+ * @param string $previousId The session id before regeneration.
+ * @param string $newId      The session id after it.
+ * @return void
+ */
+function wallos_oidc_leave_handover($previousId, $newId)
+{
+    if ($previousId === '' || $newId === '' || $previousId === $newId) {
+        return;
+    }
+
+    if (session_status() !== PHP_SESSION_ACTIVE) {
+        return;
+    }
+
+    $current = $_SESSION;
+
+    session_write_close();
+
+    // The old session, reduced to the pointer. Nothing that was in it survives:
+    // not the login, not the transactions, not the identity. An id somebody
+    // planted before the login is worth no more afterwards than it was before.
+    session_id($previousId);
+    session_start();
+    $_SESSION = [
+        'oidc_handover' => [
+            'session_id' => $newId,
+            'at' => time(),
+        ],
+    ];
+    session_write_close();
+
+    // Back to the session the caller was writing.
+    session_id($newId);
+    session_start();
+    $_SESSION = $current;
+}
+
+/**
+ * Follows a handover left by a login whose response the browser never received.
+ *
+ * @return string|null the session id now in use, or null when there is nothing
+ *                     to follow
+ */
+function wallos_oidc_follow_handover()
+{
+    if (session_status() !== PHP_SESSION_ACTIVE) {
+        return null;
+    }
+
+    $handover = $_SESSION['oidc_handover'] ?? null;
+
+    if (!is_array($handover) || empty($handover['session_id']) || empty($handover['at'])) {
+        return null;
+    }
+
+    if ((int) $handover['at'] < time() - WALLOS_OIDC_HANDOVER_TTL) {
+        // Expired: the pointer is dropped rather than followed, so a stale id
+        // cannot be used later to reach a session it once named.
+        unset($_SESSION['oidc_handover']);
+        wallos_oidc_persist_session();
+
+        return null;
+    }
+
+    $target = (string) $handover['session_id'];
+
+    session_write_close();
+    session_id($target);
+    session_start();
+
+    if (empty($_SESSION['loggedin'])) {
+        // The session it named is gone or was never established. Nothing to
+        // follow, and nothing to report as a login.
+        return null;
+    }
+
+    // The browser is still sending the id it arrived with, so it is told the
+    // new one explicitly rather than left to PHP's own decision about when a
+    // session cookie is worth sending. Same parameters the session was opened
+    // with, so nothing about the cookie changes but its value.
+    if (!headers_sent()) {
+        $params = session_get_cookie_params();
+
+        setcookie(session_name(), $target, [
+            'expires' => $params['lifetime'] > 0 ? time() + $params['lifetime'] : 0,
+            'path' => $params['path'],
+            'domain' => $params['domain'],
+            'secure' => $params['secure'],
+            'httponly' => $params['httponly'],
+            'samesite' => $params['samesite'] ?: 'Lax',
+        ]);
+    }
+
+    return $target;
 }
