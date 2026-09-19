@@ -1,4 +1,5 @@
 <?php
+require_once 'includes/webpush_helper.php';
 require_once 'includes/header.php';
 require_once 'includes/integration_config.php';
 require_once 'includes/currency_rates.php';
@@ -441,6 +442,27 @@ $upcomingPaymentsLimit = normalize_upcoming_payments_limit($settings['upcoming_p
     $instanceNtfy = wallos_get_instance_ntfy_config($db);
     $instanceNtfyHeaders = wallos_secret_status($instanceNtfy, 'headers');
     $usesInstanceNtfy = $notificationsNtfy['server_mode'] === 'instance';
+
+    // Push notifications: the per-account switch, the devices as the page may
+    // show them, and the applicationServerKey the browser subscribes with.
+    $notificationsPush = ['enabled' => 0];
+    $sql = "SELECT enabled FROM push_notifications WHERE user_id = :userId LIMIT 1";
+    $stmt = $db->prepare($sql);
+    if ($stmt !== false) {
+        $stmt->bindValue(':userId', $userId, SQLITE3_INTEGER);
+        $result = $stmt->execute();
+        if ($result !== false && ($row = $result->fetchArray(SQLITE3_ASSOC))) {
+            $notificationsPush['enabled'] = $row['enabled'];
+        }
+    }
+
+    $pushDevices = webpush_user_devices($db, $userId);
+
+    $vapidPublicKey = '';
+    $vapidKeys = webpush_get_vapid_keys($db);
+    if ($vapidKeys !== false) {
+        $vapidPublicKey = $vapidKeys['public'];
+    }
 
     // Webhook notifications
     $sql = "SELECT * FROM webhook_notifications WHERE user_id = :userId LIMIT 1";
@@ -1055,13 +1077,17 @@ $upcomingPaymentsLimit = normalize_upcoming_payments_limit($settings['upcoming_p
             </section>
 
             <section class="account-notifications-section">
-                <header class="account-notification-section-header" onclick="openNotificationsSettings('webpush');">
+                <header class="account-notification-section-header" onclick="openNotificationsSettings('push');">
                     <h3>
                         <i class="fa-solid fa-bell"></i>
-                        <?= translate('web_push', $i18n) ?>
+                        <?= translate('push_notifications', $i18n) ?>
                     </h3>
                 </header>
-                <div class="account-notification-section-settings" data-type="webpush">
+                <div class="account-notification-section-settings" data-type="push">
+                    <div class="form-group-inline">
+                        <input type="checkbox" id="pushenabled" name="pushenabled" <?= $notificationsPush['enabled'] ? "checked" : "" ?>>
+                        <label for="pushenabled" class="capitalize"><?= translate('enabled', $i18n) ?></label>
+                    </div>
                     <div class="settings-notes">
                         <p>
                             <i class="fa-solid fa-circle-info"></i>
@@ -1069,15 +1095,49 @@ $upcomingPaymentsLimit = normalize_upcoming_payments_limit($settings['upcoming_p
                         </p>
                     </div>
                     <div class="settings-notes" id="webPushStatus"></div>
+                    <h4 class="webpush-devices-title"><?= translate('web_push_devices', $i18n) ?></h4>
+                    <div class="push-devices-list" id="pushDevicesList">
+                        <?php if (empty($pushDevices)): ?>
+                            <p id="noPushDevices" class="push-no-devices"><?= translate('no_devices_registered', $i18n) ?></p>
+                        <?php else: ?>
+                            <?php foreach ($pushDevices as $device): ?>
+                                <?php
+                                    // Words this server chose, never the user agent the browser
+                                    // sent, and the handle rather than the endpoint: the endpoint
+                                    // is the address that receives this account's notifications.
+                                    $deviceName = trim($device['browser'] . ' ' . $device['platform']);
+                                    if ($deviceName === '') {
+                                        $deviceName = translate('unknown_device', $i18n);
+                                    }
+                                ?>
+                                <div class="push-device-row" data-handle="<?= htmlspecialchars($device['handle']) ?>">
+                                    <span class="push-device-name">
+                                        <?= htmlspecialchars($deviceName) ?>
+                                        <?php if ($device['created_at'] !== ''): ?>
+                                            <small><?= htmlspecialchars(substr($device['created_at'], 0, 10)) ?></small>
+                                        <?php endif; ?>
+                                    </span>
+                                    <button type="button" class="secondary-button thin"
+                                        onclick="removePushSubscriptionButton('<?= htmlspecialchars($device['handle'], ENT_QUOTES) ?>')">
+                                        <?= translate('delete', $i18n) ?>
+                                    </button>
+                                </div>
+                            <?php endforeach; ?>
+                        <?php endif; ?>
+                    </div>
                     <div class="buttons">
-                        <input type="button" class="thin mobile-grow" id="webPushEnable"
-                            value="<?= translate('web_push_enable_device', $i18n) ?>" onClick="enableWebPush()" />
+                        <input type="button" class="secondary-button thin mobile-grow"
+                            value="<?= translate('test', $i18n) ?>" id="testNotificationsPush"
+                            onClick="testNotificationsPushButton()" />
+                        <input type="button" class="thin mobile-grow" id="subscribePushButton"
+                            value="<?= translate('enable_on_this_device', $i18n) ?>"
+                            onClick="subscribePushButtonClick()" />
                         <input type="button" class="secondary-button thin mobile-grow" id="webPushDisable"
                             style="display:none" value="<?= translate('web_push_disable_device', $i18n) ?>"
                             onClick="disableWebPush()" />
+                        <input type="submit" class="thin mobile-grow" value="<?= translate('save', $i18n) ?>"
+                            id="saveNotificationsPush" onClick="saveNotificationsPushButton()" />
                     </div>
-                    <h4 class="webpush-devices-title"><?= translate('web_push_devices', $i18n) ?></h4>
-                    <div id="webPushDevices" class="webpush-devices"></div>
                 </div>
             </section>
 
@@ -2181,10 +2241,14 @@ $upcomingPaymentsLimit = normalize_upcoming_payments_limit($settings['upcoming_p
     </section>
 
 </section>
+<script>
+    // The applicationServerKey the browser subscribes with. Public by
+    // definition: it is the half a push service checks a signature against.
+    window.vapidPublicKey = "<?= htmlspecialchars($vapidPublicKey, ENT_QUOTES, 'UTF-8') ?>";
+</script>
 <script src="scripts/settings.js?<?= $version ?>"></script>
 <script src="scripts/theme.js?<?= $version ?>"></script>
 <script src="scripts/notifications.js?<?= $version ?>"></script>
-<script src="scripts/webpush.js?<?= $version ?>"></script>
 
 <?php
 require_once 'includes/footer.php';

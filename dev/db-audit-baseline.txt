@@ -11,7 +11,7 @@
 #
 # Do not edit by hand — run dev/db-audit.sh --update and commit the diff.
 #
-# total: 1633 matches in 248 file(s)
+# total: 1683 matches in 252 file(s)
 admin.php	4
 api/admin/get_admin_settings.php	1
 api/admin/set_admin_settings.php	2
@@ -60,7 +60,7 @@ endpoints/categories/category.php	14
 endpoints/cronjobs/createdatabase.php	6
 endpoints/cronjobs/generaterecommendations.php	19
 endpoints/cronjobs/sendcancellationnotifications.php	14
-endpoints/cronjobs/sendnotifications.php	3
+endpoints/cronjobs/sendnotifications.php	7
 endpoints/cronjobs/sendresetpasswordemails.php	3
 endpoints/cronjobs/sendverificationemails.php	3
 endpoints/cronjobs/storetotalyearlycost.php	7
@@ -77,10 +77,12 @@ endpoints/notifications/savediscordnotifications.php	6
 endpoints/notifications/saveemailnotifications.php	11
 endpoints/notifications/savemattermostnotifications.php	6
 endpoints/notifications/savenotificationsettings.php	4
+endpoints/notifications/savenotificationspush.php	3
 endpoints/notifications/savepushplusnotifications.php	4
 endpoints/notifications/saveserverchannotifications.php	4
 endpoints/notifications/savewebhooknotifications.php	8
 endpoints/notifications/testemailnotifications.php	2
+endpoints/notifications/testpushnotifications.php	2
 endpoints/payments/add.php	6
 endpoints/payments/get.php	4
 endpoints/payments/rename.php	3
@@ -150,6 +152,7 @@ includes/stats_extra_calculations.php	2
 includes/totp_state.php	13
 includes/user_provisioning.php	4
 includes/user_roles.php	21
+includes/webpush_helper.php	33
 index.php	8
 login.php	16
 logout.php	1
@@ -212,7 +215,7 @@ migrations/000090.php	3
 passwordreset.php	14
 profile.php	5
 registration.php	25
-settings.php	46
+settings.php	48
 stats.php	2
 subscriptions.php	5
 tests/bootstrap.php	30
@@ -257,6 +260,7 @@ tests/cases/totp_enrolment_test.php	10
 tests/cases/totp_replay_test.php	6
 tests/cases/user_provisioning_test.php	2
 tests/cases/user_roles_test.php	5
+tests/cases/webpush_test.php	6
 tests/fixtures/remember_me_original_upstream.php	7
 totp.php	6
 verifyemail.php	6

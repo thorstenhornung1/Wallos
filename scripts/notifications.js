@@ -533,3 +533,284 @@ function saveNotificationsServerchanButton() {
 
   makeFetchCall('endpoints/notifications/saveserverchannotifications.php', data, button);
 }
+// Push notifications ---------------------------------------------------
+//
+// Unlike every other channel above, there is no host, token or key for the
+// user to type in: the "configuration" is the browser's own Push
+// subscription, created by subscribePushButtonClick() and handed straight to
+// the server. The enabled checkbox is the only thing
+// saveNotificationsPushButton() ever saves on its own.
+//
+// A device is named by its handle, never by its endpoint. The endpoint is the
+// address that receives this account's notifications, and the page has no use
+// for it beyond recognising which row is the browser looking at it - which the
+// same hash answers, computed here.
+
+// translate() has no cross-language fallback in the browser: it answers with
+// the key itself when a language file has not been updated yet, and a button
+// labelled "web_push_this_device" is worse than one labelled in English. Every
+// string this section adds therefore carries the English it falls back to.
+function pushText(key, english) {
+  const value = typeof translate === 'function' ? translate(key) : key;
+
+  return (!value || value === key) ? english : value;
+}
+
+// pushManager.subscribe() takes the VAPID public key as a Uint8Array, not the
+// base64url string the server hands over; this is the standard conversion.
+function urlBase64ToUint8Array(base64String) {
+  const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
+  const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+  const rawData = window.atob(base64);
+  const outputArray = new Uint8Array(rawData.length);
+
+  for (let i = 0; i < rawData.length; ++i) {
+    outputArray[i] = rawData.charCodeAt(i);
+  }
+
+  return outputArray;
+}
+
+// The same handle the server computes: the first sixteen hex characters of
+// the SHA-256 of the endpoint.
+async function pushDeviceHandle(endpoint) {
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(endpoint));
+
+  return Array.from(new Uint8Array(digest))
+    .map(byte => byte.toString(16).padStart(2, '0'))
+    .join('')
+    .slice(0, 16);
+}
+
+// Builds (or replaces) one device's row from what savepushsubscription.php
+// handed back, without touching anything else on the page - in particular
+// without a reload, which would collapse every notification section again.
+//
+// Every value goes in through textContent and addEventListener rather than
+// innerHTML, even though the label is now words the server chose rather than
+// the user agent the browser sent.
+function renderPushDeviceRow(subscription) {
+  const list = document.getElementById("pushDevicesList");
+  const existingRow = list.querySelector(`.push-device-row[data-handle="${subscription.handle}"]`);
+
+  const row = existingRow || document.createElement("div");
+  row.className = "push-device-row";
+  row.setAttribute("data-handle", subscription.handle);
+  row.innerHTML = "";
+
+  const name = document.createElement("span");
+  name.className = "push-device-name";
+  const label = [subscription.browser, subscription.platform].filter(Boolean).join(' ');
+  name.textContent = label !== '' ? label : pushText('unknown_device', 'Unknown device');
+  row.appendChild(name);
+
+  const deleteButton = document.createElement("button");
+  deleteButton.type = "button";
+  deleteButton.className = "secondary-button thin";
+  deleteButton.textContent = pushText('delete', 'Delete');
+  deleteButton.addEventListener('click', function () {
+    removePushSubscriptionButton(subscription.handle, row);
+  });
+  row.appendChild(deleteButton);
+
+  if (!existingRow) {
+    const noDevices = document.getElementById("noPushDevices");
+    if (noDevices) {
+      noDevices.remove();
+    }
+    list.appendChild(row);
+  }
+}
+
+function subscribePushButtonClick() {
+  const button = document.getElementById("subscribePushButton");
+
+  if (!('serviceWorker' in navigator) || !('PushManager' in window) || !('Notification' in window)) {
+    showErrorMessage(pushText('web_push_unsupported', 'Web Push is not supported in this browser.'));
+    return;
+  }
+
+  button.disabled = true;
+
+  Notification.requestPermission().then(function (permission) {
+    if (permission !== 'granted') {
+      showErrorMessage(pushText('web_push_permission_denied', 'Notification permission was denied.'));
+      button.disabled = false;
+      return;
+    }
+
+    navigator.serviceWorker.ready.then(function (registration) {
+      return registration.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlBase64ToUint8Array(window.vapidPublicKey),
+      });
+    }).then(function (subscription) {
+      return fetch('endpoints/notifications/savepushsubscription.php', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-CSRF-Token': window.csrfToken,
+        },
+        body: JSON.stringify(subscription.toJSON()),
+      });
+    }).then(function (response) {
+      return response.json();
+    }).then(function (data) {
+      if (data.success) {
+        renderPushDeviceRow(data.subscription);
+        markPushDeviceOfThisBrowser();
+        showSuccessMessage(data.message);
+      } else {
+        showErrorMessage(data.message);
+      }
+      button.disabled = false;
+    }).catch(function (error) {
+      showErrorMessage(error);
+      button.disabled = false;
+    });
+  });
+}
+
+function removePushSubscriptionButton(handle, row) {
+  row = row || document.querySelector(`.push-device-row[data-handle="${handle}"]`);
+
+  fetch('endpoints/notifications/removepushsubscription.php', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-CSRF-Token': window.csrfToken,
+    },
+    body: JSON.stringify({ handle: handle }),
+  })
+    .then(response => response.json())
+    .then(data => {
+      if (data.success) {
+        if (row) {
+          row.remove();
+        }
+
+        const list = document.getElementById("pushDevicesList");
+        if (list && !list.querySelector(".push-device-row")) {
+          const noDevices = document.createElement("p");
+          noDevices.id = "noPushDevices";
+          noDevices.className = "push-no-devices";
+          noDevices.textContent = pushText('no_devices_registered', 'No devices registered yet.');
+          list.appendChild(noDevices);
+        }
+
+        markPushDeviceOfThisBrowser();
+      } else {
+        showErrorMessage(data.message);
+      }
+    })
+    .catch(error => showErrorMessage(error));
+}
+
+// "Disable on this device": the browser unsubscribes its own registration and
+// tells the server which row that was. It knows its endpoint and nothing else,
+// so the endpoint is what it sends; the server turns it into the same handle.
+function disableWebPush() {
+  const button = document.getElementById("webPushDisable");
+  button.disabled = true;
+
+  navigator.serviceWorker.ready
+    .then(registration => registration.pushManager.getSubscription())
+    .then(function (subscription) {
+      if (!subscription) {
+        button.disabled = false;
+        return null;
+      }
+
+      const endpoint = subscription.endpoint;
+
+      return subscription.unsubscribe().then(function () {
+        return fetch('endpoints/notifications/removepushsubscription.php', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-CSRF-Token': window.csrfToken,
+          },
+          body: JSON.stringify({ endpoint: endpoint }),
+        });
+      }).then(response => response.json()).then(function (data) {
+        if (data.success) {
+          showSuccessMessage(pushText('web_push_disabled', 'Web Push disabled on this device.'));
+          markPushDeviceOfThisBrowser();
+        } else {
+          showErrorMessage(data.message);
+        }
+        button.disabled = false;
+      });
+    })
+    .catch(function (error) {
+      showErrorMessage(error);
+      button.disabled = false;
+    });
+}
+
+// Marks the row that belongs to this browser and offers the disable button
+// only when there is something to disable.
+function markPushDeviceOfThisBrowser() {
+  const disableButton = document.getElementById("webPushDisable");
+  const subscribeButton = document.getElementById("subscribePushButton");
+
+  if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
+    return;
+  }
+
+  navigator.serviceWorker.ready
+    .then(registration => registration.pushManager.getSubscription())
+    .then(async function (subscription) {
+      document.querySelectorAll('.push-device-row .push-device-this').forEach(marker => marker.remove());
+
+      if (!subscription) {
+        if (disableButton) {
+          disableButton.style.display = 'none';
+        }
+        if (subscribeButton) {
+          subscribeButton.style.display = '';
+        }
+        return;
+      }
+
+      const handle = await pushDeviceHandle(subscription.endpoint);
+      const row = document.querySelector(`.push-device-row[data-handle="${handle}"]`);
+
+      if (row) {
+        const marker = document.createElement('small');
+        marker.className = 'push-device-this';
+        marker.textContent = pushText('web_push_this_device', 'This device');
+        row.querySelector('.push-device-name').appendChild(marker);
+      }
+
+      if (disableButton) {
+        disableButton.style.display = row ? '' : 'none';
+      }
+      if (subscribeButton) {
+        subscribeButton.style.display = row ? 'none' : '';
+      }
+    })
+    .catch(() => {});
+}
+
+function testNotificationsPushButton() {
+  const button = document.getElementById("testNotificationsPush");
+  button.disabled = true;
+
+  makeFetchCall('endpoints/notifications/testpushnotifications.php', {}, button);
+}
+
+function saveNotificationsPushButton() {
+  const button = document.getElementById("saveNotificationsPush");
+  button.disabled = true;
+
+  const enabled = document.getElementById("pushenabled").checked ? 1 : 0;
+
+  makeFetchCall('endpoints/notifications/savenotificationspush.php', { enabled: enabled }, button);
+}
+
+document.addEventListener('DOMContentLoaded', function () {
+  if (document.getElementById("pushDevicesList")) {
+    markPushDeviceOfThisBrowser();
+  }
+});

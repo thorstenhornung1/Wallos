@@ -15,7 +15,7 @@
 #
 # Do not edit by hand — run dev/write-audit.php --update and commit the diff.
 #
-# 111 file(s), 10 discarded result(s), 282 unchecked prepare(s), 0 unreported write(s).
+# 111 file(s), 10 discarded result(s), 262 unchecked prepare(s), 0 unreported write(s).
 
 admin.php	0	3	0
 api/admin/get_admin_settings.php	0	1	0
@@ -124,7 +124,7 @@ migrations/000057.php	1	1	0
 migrations/000062.php	1	1	0
 profile.php	0	3	0
 registration.php	0	2	0
-settings.php	0	22	0
+settings.php	0	2	0
 stats.php	0	1	0
 subscriptions.php	0	2	0
 totp.php	0	3	0

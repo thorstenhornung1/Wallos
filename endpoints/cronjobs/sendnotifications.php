@@ -14,7 +14,7 @@ require_once __DIR__ . '/../../includes/webhook_headers.php';
 require_once __DIR__ . '/../../includes/mailer.php';
 require_once __DIR__ . '/../../includes/notification_settings.php';
 require_once __DIR__ . '/../../includes/notification_due.php';
-require_once __DIR__ . '/../../includes/webpush.php';
+require_once __DIR__ . '/../../includes/webpush_helper.php';
 require_once __DIR__ . '/../../includes/notification_message.php';
 wallos_cron_database($db);
 
@@ -275,9 +275,30 @@ while ($userToNotify = $usersToNotify->fetchArray(SQLITE3_ASSOC)) {
     // $userId is still the account id, because the send loops below reuse
     // $userId for the household payer.
     $webPush = ['account_user_id' => $userId, 'subscriptions' => []];
-    $webPushConfig = wallos_get_instance_webpush_config($db);
-    if (!empty($webPushConfig['values']['deliverable'])) {
-        $webPush['subscriptions'] = wallos_webpush_user_subscriptions($db, $userId);
+
+    // The account's own switch decides whether the channel is on at all, and
+    // the devices it has registered decide whether there is anywhere to send.
+    $stmt = $db->prepare('SELECT enabled FROM push_notifications WHERE user_id = :userId LIMIT 1');
+    $pushRow = $stmt === false ? false : $stmt->execute();
+    $pushEnabled = false;
+    if ($stmt !== false) {
+        $stmt->bindValue(':userId', $userId, SQLITE3_INTEGER);
+        $pushRow = $stmt->execute();
+        if ($pushRow !== false && ($row = $pushRow->fetchArray(SQLITE3_ASSOC))) {
+            $pushEnabled = (int) $row['enabled'] === 1;
+        }
+    }
+
+    if ($pushEnabled) {
+        $stmt = $db->prepare('SELECT id, endpoint, p256dh, auth FROM push_subscriptions WHERE user_id = :userId');
+        if ($stmt !== false) {
+            $stmt->bindValue(':userId', $userId, SQLITE3_INTEGER);
+            $result = $stmt->execute();
+            while ($result !== false && ($row = $result->fetchArray(SQLITE3_ASSOC))) {
+                $webPush['subscriptions'][] = $row;
+            }
+        }
+
         $webPushNotificationsEnabled = count($webPush['subscriptions']) > 0;
     }
 
@@ -897,6 +918,17 @@ while ($userToNotify = $usersToNotify->fetchArray(SQLITE3_ASSOC)) {
             if ($webPushNotificationsEnabled) {
                 $webPushUserId = $webPush['account_user_id'];
                 $webPushTitle = translate('wallos_notification', $userI18n);
+                $webPushVapidKeys = webpush_get_vapid_keys($db);
+                $webPushSubject = webpush_resolve_subject($db);
+            }
+
+            if ($webPushNotificationsEnabled && $webPushVapidKeys === false) {
+                wallos_cron_problem('this installation has no usable VAPID keypair, so no push was sent');
+                echo "Push Notifications not sent: could not load this installation's VAPID keys.<br />";
+                $webPushNotificationsEnabled = false;
+            }
+
+            if ($webPushNotificationsEnabled) {
 
                 foreach ($notify as $payerUserId => $perUser) {
                     $member = $household[$payerUserId] ?? [];
@@ -917,27 +949,38 @@ while ($userToNotify = $usersToNotify->fetchArray(SQLITE3_ASSOC)) {
                     // plus two days. The fixed four weeks it used to send was
                     // the ceiling — a reminder about a renewal three weeks past
                     // is not one worth waking somebody for.
-                    $webPushTtl = wallos_webpush_ttl_for_renewals($perUser);
+                    $webPushTtl = webpush_ttl_for_renewals($perUser);
 
                     // One message per subscribed device. The endpoint is
-                    // client-supplied, so wallos_webpush_deliver() routes it
-                    // through the SSRF allowlist before sending.
+                    // client-supplied, so every one of them goes through the
+                    // SSRF allowlist before anything is sent, and the send is
+                    // pinned to the address that check approved.
                     foreach ($webPush['subscriptions'] as $webPushSubscription) {
-                        $delivery = wallos_webpush_deliver($db, $webPushSubscription, $webPushPayload, $webPushUserId, $webPushTtl);
+                        $ssrf = is_url_safe_for_ssrf($webPushSubscription['endpoint'], $db, $webPushUserId);
 
-                        if ($delivery['sent']) {
+                        if (!$ssrf) {
+                            wallos_cron_problem('a push endpoint failed the SSRF check, so nothing was sent to it');
+                            echo "SSRF attempt detected for a push subscription endpoint. Notification not sent.<br />";
+                            continue;
+                        }
+
+                        $delivery = webpush_send($webPushSubscription, $webPushPayload, $webPushVapidKeys,
+                            $webPushSubject, $webPushTtl, $ssrf);
+
+                        if ($delivery['success']) {
                             wallos_cron_count('sent');
                             echo "Web Push Notifications sent<br />";
-                        } elseif ($delivery['expired']) {
-                            // 404/410 Gone: the browser dropped this
-                            // subscription, so it is removed and never tried
-                            // again.
-                            wallos_webpush_delete_by_endpoint($db, $webPushUserId, $webPushSubscription['endpoint']);
+                        } elseif ($delivery['prune']) {
+                            // 404/410 Gone: the push service has no record of
+                            // this subscription any more, so it is removed and
+                            // never tried again. Every other failure says
+                            // nothing about the subscription itself.
+                            webpush_prune_subscription($db, $webPushUserId, $webPushSubscription['id']);
                             echo "Web Push subscription expired and was removed<br />";
                         } else {
                             wallos_cron_problem('a web push notification was not delivered: '
-                                . $delivery['error']);
-                            echo "Error sending Web Push notification: " . $delivery['error'] . "<br />";
+                                . (string) $delivery['error']);
+                            echo "Error sending Web Push notification: " . (string) $delivery['error'] . "<br />";
                         }
                     }
                 }
